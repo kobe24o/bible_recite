@@ -1,5 +1,7 @@
 .superpowers/
 .worktrees/
+.toolchains/
+tool/scripture_pack/.cache/
 
 # Flutter/Dart
 .dart_tool/
