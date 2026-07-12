@@ -1,0 +1,31 @@
+{
+  "sources": [
+    {
+      "id": "cmn-cu89s",
+      "name": "新标点和合本（简体）",
+      "languageTag": "zh-Hans",
+      "detailsUrl": "https://ebible.org/details.php?id=cmn-cu89s",
+      "archiveUrl": "https://eBible.org/Scriptures/cmn-cu89s_vpl.zip",
+      "sha256": "22c3f71130742e7754e3870e55df6833406ab34a19abb891ac36443a14c13d13",
+      "licenseId": "public-domain"
+    },
+    {
+      "id": "cmn-cu89t",
+      "name": "新標點和合本（繁體）",
+      "languageTag": "zh-Hant",
+      "detailsUrl": "https://ebible.org/details.php?id=cmn-cu89t",
+      "archiveUrl": "https://eBible.org/Scriptures/cmn-cu89t_vpl.zip",
+      "sha256": "510e281306ddc499e83b50279a73758b33f376ed3a47baaa76081d10523a28ea",
+      "licenseId": "public-domain"
+    },
+    {
+      "id": "eng-web",
+      "name": "World English Bible",
+      "languageTag": "en",
+      "detailsUrl": "https://ebible.org/details.php?id=eng-web",
+      "archiveUrl": "https://eBible.org/Scriptures/eng-web_vpl.zip",
+      "sha256": "8e2a8bec53722b049c6a85bd7788fe638051a205bfddf73b03689edc6fa995cc",
+      "licenseId": "public-domain"
+    }
+  ]
+}
