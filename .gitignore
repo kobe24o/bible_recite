@@ -1,0 +1,24 @@
+.superpowers/
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local signing and secrets
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+.env
+.env.*
