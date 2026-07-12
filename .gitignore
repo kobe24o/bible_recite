@@ -1,4 +1,5 @@
 .superpowers/
+.worktrees/
 
 # Flutter/Dart
 .dart_tool/
