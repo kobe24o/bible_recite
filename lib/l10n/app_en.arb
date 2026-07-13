@@ -4,5 +4,15 @@
   "navToday": "Today",
   "navBible": "Bible",
   "navPlans": "Plans",
-  "navStatistics": "Statistics"
+  "navStatistics": "Statistics",
+  "bibleTitle": "Bible",
+  "translationLabel": "Translation",
+  "oldTestament": "Old Testament",
+  "newTestament": "New Testament",
+  "chapterLabel": "Chapter {chapter}",
+  "@chapterLabel": {"placeholders": {"chapter": {"type": "int"}}},
+  "unableLoadBible": "Unable to load the Bible",
+  "unableLoadPassage": "Unable to load the passage",
+  "omittedVerse": "This verse is omitted in this translation.",
+  "scriptureSources": "Scripture sources"
 }

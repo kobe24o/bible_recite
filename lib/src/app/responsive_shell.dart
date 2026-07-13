@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 
@@ -18,6 +19,15 @@ class ResponsiveShell extends StatelessWidget {
       plans: localizations?.navPlans ?? '计划',
       statistics: localizations?.navStatistics ?? '统计',
     );
+    final router = GoRouter.maybeOf(context);
+    final location =
+        router?.routerDelegate.currentConfiguration.uri.path ?? '/';
+    final selectedIndex = location.startsWith('/bible') ? 1 : 0;
+    void navigate(int index) {
+      if (router == null) return;
+      if (index == 0) context.go('/');
+      if (index == 1) context.go('/bible');
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -26,7 +36,8 @@ class ResponsiveShell extends StatelessWidget {
             body: Row(
               children: [
                 NavigationRail(
-                  selectedIndex: 0,
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: navigate,
                   destinations: [
                     NavigationRailDestination(
                       icon: const Icon(Icons.today_outlined),
@@ -56,7 +67,8 @@ class ResponsiveShell extends StatelessWidget {
         return Scaffold(
           body: child,
           bottomNavigationBar: NavigationBar(
-            selectedIndex: 0,
+            selectedIndex: selectedIndex,
+            onDestinationSelected: navigate,
             destinations: [
               NavigationDestination(
                 icon: const Icon(Icons.today_outlined),

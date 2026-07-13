@@ -4,5 +4,15 @@
   "navToday": "今日",
   "navBible": "圣经",
   "navPlans": "计划",
-  "navStatistics": "统计"
+  "navStatistics": "统计",
+  "bibleTitle": "圣经",
+  "translationLabel": "译本",
+  "oldTestament": "旧约",
+  "newTestament": "新约",
+  "chapterLabel": "第 {chapter} 章",
+  "@chapterLabel": {"placeholders": {"chapter": {"type": "int"}}},
+  "unableLoadBible": "无法载入圣经",
+  "unableLoadPassage": "无法载入经文",
+  "omittedVerse": "本译本省略此节。",
+  "scriptureSources": "经文来源"
 }

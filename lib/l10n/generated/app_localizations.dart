@@ -128,6 +128,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Statistics'**
   String get navStatistics;
+
+  /// No description provided for @bibleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bible'**
+  String get bibleTitle;
+
+  /// No description provided for @translationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get translationLabel;
+
+  /// No description provided for @oldTestament.
+  ///
+  /// In en, this message translates to:
+  /// **'Old Testament'**
+  String get oldTestament;
+
+  /// No description provided for @newTestament.
+  ///
+  /// In en, this message translates to:
+  /// **'New Testament'**
+  String get newTestament;
+
+  /// No description provided for @chapterLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {chapter}'**
+  String chapterLabel(int chapter);
+
+  /// No description provided for @unableLoadBible.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load the Bible'**
+  String get unableLoadBible;
+
+  /// No description provided for @unableLoadPassage.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load the passage'**
+  String get unableLoadPassage;
+
+  /// No description provided for @omittedVerse.
+  ///
+  /// In en, this message translates to:
+  /// **'This verse is omitted in this translation.'**
+  String get omittedVerse;
+
+  /// No description provided for @scriptureSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Scripture sources'**
+  String get scriptureSources;
 }
 
 class _AppLocalizationsDelegate

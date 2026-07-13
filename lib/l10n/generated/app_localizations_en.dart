@@ -22,4 +22,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get navStatistics => 'Statistics';
+
+  @override
+  String get bibleTitle => 'Bible';
+
+  @override
+  String get translationLabel => 'Translation';
+
+  @override
+  String get oldTestament => 'Old Testament';
+
+  @override
+  String get newTestament => 'New Testament';
+
+  @override
+  String chapterLabel(int chapter) {
+    return 'Chapter $chapter';
+  }
+
+  @override
+  String get unableLoadBible => 'Unable to load the Bible';
+
+  @override
+  String get unableLoadPassage => 'Unable to load the passage';
+
+  @override
+  String get omittedVerse => 'This verse is omitted in this translation.';
+
+  @override
+  String get scriptureSources => 'Scripture sources';
 }

@@ -4,5 +4,15 @@
   "navToday": "今日",
   "navBible": "聖經",
   "navPlans": "計劃",
-  "navStatistics": "統計"
+  "navStatistics": "統計",
+  "bibleTitle": "聖經",
+  "translationLabel": "譯本",
+  "oldTestament": "舊約",
+  "newTestament": "新約",
+  "chapterLabel": "第 {chapter} 章",
+  "@chapterLabel": {"placeholders": {"chapter": {"type": "int"}}},
+  "unableLoadBible": "無法載入聖經",
+  "unableLoadPassage": "無法載入經文",
+  "omittedVerse": "本譯本省略此節。",
+  "scriptureSources": "經文來源"
 }
