@@ -64,6 +64,12 @@ dev_dependencies:
 flutter:
   generate: true
 
+  assets:
+    - assets/scripture/index.json
+    - assets/scripture/cmn-cu89s/
+    - assets/scripture/cmn-cu89t/
+    - assets/scripture/eng-web/
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
