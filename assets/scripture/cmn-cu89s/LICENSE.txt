@@ -1,0 +1,7 @@
+Translation: 新标点和合本（简体）
+Translation ID: cmn-cu89s
+Source page: https://ebible.org/details.php?id=cmn-cu89s
+Source archive: https://ebible.org/Scriptures/cmn-cu89s_vpl.zip
+Archive SHA-256: 22c3f71130742e7754e3870e55df6833406ab34a19abb891ac36443a14c13d13
+Retrieval date: 2026-07-12
+License: public-domain

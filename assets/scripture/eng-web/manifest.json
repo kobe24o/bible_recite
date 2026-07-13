@@ -1,0 +1,41 @@
+{
+  "canonId": "protestant66",
+  "counts": {
+    "bridgeUnits": 0,
+    "omittedSlots": 5,
+    "slots": 31103,
+    "units": 31103
+  },
+  "mappingRevision": "parallel-v1",
+  "mappingSha256": "93c1e2e8f3b25166aef80156dcd78a42628b76de964c7c8b030702b8084cd4b6",
+  "mappingTargets": [
+    {
+      "semanticSha256": "79f59350deb4651b7a194c33b176b1a4cde35c0207e7c4f4d7a3e95b42acedb0",
+      "translationId": "cmn-cu89s"
+    },
+    {
+      "semanticSha256": "d20759ccea44f741a415a6ffb859055796d432271827d2fb6649d04d9d45a499",
+      "translationId": "cmn-cu89t"
+    }
+  ],
+  "packId": "eng-web-f76e1422302bf3e3d541092c057c3308bdba15e1459dda745a1ad7063e57fe7a",
+  "schemaVersion": 1,
+  "semanticSha256": "f76e1422302bf3e3d541092c057c3308bdba15e1459dda745a1ad7063e57fe7a",
+  "source": {
+    "aboutSha256": "ebfb5f733ac180453b7422512c38219d984986bd3de42f552535d06bd059baa2",
+    "archiveSha256": "8e2a8bec53722b049c6a85bd7788fe638051a205bfddf73b03689edc6fa995cc",
+    "archiveUrl": "https://ebible.org/Scriptures/eng-web_vpl.zip",
+    "detailsUrl": "https://ebible.org/details.php?id=eng-web",
+    "licenseId": "public-domain",
+    "licenseSha256": "82d43cee90f395d3bed2b4bb08f770a06ffa58a577a2b7d20b96d94dd1020aa3",
+    "retrievalDate": "2026-07-12",
+    "textSha256": "b4529aa33fe7f80ac29cae6c300a8bd7325ef1dc0555602e7b9f33bece16f747"
+  },
+  "sqliteSha256": "51db1e83867ffeb7d5a07a0a7d7f6a9f6e4b179cb8e4008a91a181ade02b5b2c",
+  "translation": {
+    "id": "eng-web",
+    "languageTag": "en",
+    "name": "World English Bible",
+    "versificationId": "eng-web-v1"
+  }
+}

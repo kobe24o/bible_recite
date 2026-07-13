@@ -1,0 +1,17 @@
+{
+  "packs": [
+    {
+      "manifestSha256": "8c26285d5e30fbc46929cbeac066cfbcb78eaf23b736f7ac8037a8dfa17654a1",
+      "translationId": "cmn-cu89s"
+    },
+    {
+      "manifestSha256": "3e73fd0f1e0b3c2e4d298c184479526c01e4e6c2051024a444168063b33d3c73",
+      "translationId": "cmn-cu89t"
+    },
+    {
+      "manifestSha256": "b3b3a3183b06774b5efd25db72102543ed187df6acfe9bf99fc9d023dd1e41d0",
+      "translationId": "eng-web"
+    }
+  ],
+  "schemaVersion": 1
+}

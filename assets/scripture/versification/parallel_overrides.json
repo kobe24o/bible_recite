@@ -1,0 +1,57 @@
+{
+  "revision": "parallel-v1",
+  "sets": [
+    {
+      "sourceTranslationId": "cmn-cu89s",
+      "sourceSemanticSha256": "79f59350deb4651b7a194c33b176b1a4cde35c0207e7c4f4d7a3e95b42acedb0",
+      "targetTranslationId": "eng-web",
+      "targetSemanticSha256": "f76e1422302bf3e3d541092c057c3308bdba15e1459dda745a1ad7063e57fe7a",
+      "overrides": [
+        {"sourceKeys": [], "targetKeys": ["ACT.8.37"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.15.34"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.24.7"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.28.29"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["JHN.5.4"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["JHN.7.53"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["LUK.17.36"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["LUK.23.17"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MAT.18.11"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MAT.23.14"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MRK.7.16"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MRK.15.28"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": ["3JN.1.14", "3JN.1.15"], "targetKeys": ["3JN.1.14"], "relation": "targetBridge", "evidence": "WEB combines the two CUV closing units.", "reviewState": "approved"},
+        {"sourceKeys": ["REV.12.18", "REV.13.1"], "targetKeys": ["REV.13.1"], "relation": "crossChapterTargetBridge", "evidence": "WEB places Revelation 12:18 at 13:1.", "reviewState": "approved"},
+        {"sourceKeys": ["ROM.16.25", "ROM.16.26", "ROM.16.27"], "targetKeys": ["ROM.14.24", "ROM.14.25", "ROM.14.26"], "relation": "relocated", "evidence": "The doxology is relocated across the pinned editions.", "reviewState": "approved"},
+        {"sourceKeys": ["ROM.16.23", "ROM.16.24"], "targetKeys": ["ROM.16.23"], "relation": "targetBridge", "evidence": "WEB combines the two CUV units at Romans 16:23.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ROM.16.24"], "relation": "sourceAbsent", "evidence": "WEB 16:24 is a separate unmatched textual unit.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ROM.16.25"], "relation": "sourceAbsent", "evidence": "WEB preserves Romans 16:25 as an omitted slot.", "reviewState": "approved"}
+      ]
+    },
+    {
+      "sourceTranslationId": "cmn-cu89t",
+      "sourceSemanticSha256": "d20759ccea44f741a415a6ffb859055796d432271827d2fb6649d04d9d45a499",
+      "targetTranslationId": "eng-web",
+      "targetSemanticSha256": "f76e1422302bf3e3d541092c057c3308bdba15e1459dda745a1ad7063e57fe7a",
+      "overrides": [
+        {"sourceKeys": [], "targetKeys": ["ACT.8.37"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.15.34"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.24.7"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ACT.28.29"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["JHN.5.4"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["JHN.7.53"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["LUK.17.36"], "relation": "sourceAbsent", "evidence": "WEB preserves an omitted slot absent from CUV.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["LUK.23.17"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MAT.18.11"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MAT.23.14"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MRK.7.16"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["MRK.15.28"], "relation": "sourceAbsent", "evidence": "The verse is present only in the pinned WEB source.", "reviewState": "approved"},
+        {"sourceKeys": ["3JN.1.14", "3JN.1.15"], "targetKeys": ["3JN.1.14"], "relation": "targetBridge", "evidence": "WEB combines the two CUV closing units.", "reviewState": "approved"},
+        {"sourceKeys": ["REV.12.18", "REV.13.1"], "targetKeys": ["REV.13.1"], "relation": "crossChapterTargetBridge", "evidence": "WEB places Revelation 12:18 at 13:1.", "reviewState": "approved"},
+        {"sourceKeys": ["ROM.16.25", "ROM.16.26", "ROM.16.27"], "targetKeys": ["ROM.14.24", "ROM.14.25", "ROM.14.26"], "relation": "relocated", "evidence": "The doxology is relocated across the pinned editions.", "reviewState": "approved"},
+        {"sourceKeys": ["ROM.16.23", "ROM.16.24"], "targetKeys": ["ROM.16.23"], "relation": "targetBridge", "evidence": "WEB combines the two CUV units at Romans 16:23.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ROM.16.24"], "relation": "sourceAbsent", "evidence": "WEB 16:24 is a separate unmatched textual unit.", "reviewState": "approved"},
+        {"sourceKeys": [], "targetKeys": ["ROM.16.25"], "relation": "sourceAbsent", "evidence": "WEB preserves Romans 16:25 as an omitted slot.", "reviewState": "approved"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "canonId": "protestant66",
+  "counts": {
+    "bridgeUnits": 70,
+    "omittedSlots": 0,
+    "slots": 31092,
+    "units": 31021
+  },
+  "mappingRevision": "parallel-v1",
+  "mappingSha256": "39f75d1d8f274dd509a658dde4df7d5cff6b9b18b9da2da009a150eb38db15d7",
+  "mappingTargets": [
+    {
+      "semanticSha256": "79f59350deb4651b7a194c33b176b1a4cde35c0207e7c4f4d7a3e95b42acedb0",
+      "translationId": "cmn-cu89s"
+    },
+    {
+      "semanticSha256": "f76e1422302bf3e3d541092c057c3308bdba15e1459dda745a1ad7063e57fe7a",
+      "translationId": "eng-web"
+    }
+  ],
+  "packId": "cmn-cu89t-d20759ccea44f741a415a6ffb859055796d432271827d2fb6649d04d9d45a499",
+  "schemaVersion": 1,
+  "semanticSha256": "d20759ccea44f741a415a6ffb859055796d432271827d2fb6649d04d9d45a499",
+  "source": {
+    "aboutSha256": "67b67cbbebad8b3d6d12182693a120468655c01e512db96239a6c2e84b200454",
+    "archiveSha256": "510e281306ddc499e83b50279a73758b33f376ed3a47baaa76081d10523a28ea",
+    "archiveUrl": "https://ebible.org/Scriptures/cmn-cu89t_vpl.zip",
+    "detailsUrl": "https://ebible.org/details.php?id=cmn-cu89t",
+    "licenseId": "public-domain",
+    "licenseSha256": "98320df86ddf1ac1c52bd7e3a2d48252d228a6e1335fd4d5971099f379a6a2ba",
+    "retrievalDate": "2026-07-12",
+    "textSha256": "61db81955db55845a2f3e44fbdfc59b96f92fa7502f507b1d21e5c56d3f1ccae"
+  },
+  "sqliteSha256": "efe0cdc408c48dbd3ac8b437990f5602bce78aa049a80e0d994f4bf09eec36b5",
+  "translation": {
+    "id": "cmn-cu89t",
+    "languageTag": "zh-Hant",
+    "name": "新標點和合本（繁體）",
+    "versificationId": "cmn-cu89t-v1"
+  }
+}

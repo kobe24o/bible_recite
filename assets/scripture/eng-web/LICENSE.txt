@@ -1,0 +1,8 @@
+Translation: World English Bible
+Translation ID: eng-web
+Source page: https://ebible.org/details.php?id=eng-web
+Source archive: https://ebible.org/Scriptures/eng-web_vpl.zip
+Archive SHA-256: 8e2a8bec53722b049c6a85bd7788fe638051a205bfddf73b03689edc6fa995cc
+Retrieval date: 2026-07-12
+License: public-domain
+The World English Bible is Public Domain. "World English Bible" is a trademark of eBible.org; modified text must not retain that name.
