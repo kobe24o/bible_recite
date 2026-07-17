@@ -225,6 +225,7 @@ jobs:
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           tag="build-${version}-${GITHUB_RUN_NUMBER}"
           gh release create "$tag" dist/* \
+            --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
             --notes "Validated Android APK with stable signing fingerprint. The iOS IPA is unsigned and requires Apple signing before installation."

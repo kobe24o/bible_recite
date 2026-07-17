@@ -54,5 +54,6 @@ void main() {
     expect(workflow, contains('apksigner verify --print-certs'));
     expect(workflow, contains(r'print tolower($NF)'));
     expect(workflow, contains('gh release create'));
+    expect(workflow, contains('--latest'));
   });
 }
