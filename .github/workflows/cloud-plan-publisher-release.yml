@@ -36,10 +36,20 @@ jobs:
         with:
           sdk: stable
       - name: Compile executable
-        shell: bash
-        run: >-
-          dart compile exe tool/cloud_plan/bin/publish_feishu_export.dart
-          -o "dist/${{ matrix.binary }}"
+        shell: pwsh
+        run: |
+          $sourceRoot = Join-Path $env:RUNNER_TEMP "cloud-plan-publisher"
+          $binRoot = Join-Path $sourceRoot "tool/cloud_plan/bin"
+          $libRoot = Join-Path $sourceRoot "tool/cloud_plan/lib"
+          New-Item -ItemType Directory -Path $binRoot -Force | Out-Null
+          New-Item -ItemType Directory -Path $libRoot -Force | Out-Null
+          New-Item -ItemType Directory -Path "$env:GITHUB_WORKSPACE/dist" -Force | Out-Null
+          Copy-Item "tool/cloud_plan/bin/publish_feishu_export.dart" $binRoot
+          Copy-Item "tool/cloud_plan/lib/feishu_export_json.dart" $libRoot
+          Push-Location $sourceRoot
+          dart compile exe "tool/cloud_plan/bin/publish_feishu_export.dart" `
+            -o "$env:GITHUB_WORKSPACE/dist/${{ matrix.binary }}"
+          Pop-Location
       - name: Archive Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
