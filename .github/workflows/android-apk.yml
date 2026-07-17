@@ -1,4 +1,4 @@
-name: Android APK
+name: Mobile releases
 
 on:
   workflow_dispatch:
@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-apk-${{ github.ref }}
+  group: mobile-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build versioned APK
+  android:
+    name: Build signed Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -67,7 +67,20 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode \
+            > "$RUNNER_TEMP/bible-recite.keystore"
+
       - name: Build release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/bible-recite.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release
 
       - name: Create versioned artifact
@@ -78,11 +91,22 @@ jobs:
           apk_name="BibleRecite-${version}.apk"
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk "dist/$apk_name"
-          sha256sum "dist/$apk_name" > "dist/$apk_name.sha256"
+          (cd dist && sha256sum "$apk_name" > "$apk_name.sha256")
           echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
 
+      - name: Verify APK signing certificate
+        env:
+          EXPECTED_CERT_SHA256: 4066fe3c0e57ec575e5d37b741d68d347f8af80b7cf9da4799636d7039b5a7e7
+        run: |
+          apksigner="$(find "$ANDROID_SDK_ROOT/build-tools" -type f \
+            -name apksigner | sort -V | tail -1)"
+          test -x "$apksigner"
+          actual="$($apksigner verify --print-certs "dist/$APK_NAME" | \
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          test "$actual" = "$EXPECTED_CERT_SHA256"
+
       - name: Upload APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.APK_NAME }}
           path: |
@@ -90,3 +114,110 @@ jobs:
             dist/${{ env.APK_NAME }}.sha256
           if-no-files-found: error
           retention-days: 30
+
+  ios:
+    name: Build unsigned iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - name: Download offline speech models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-models" assets/models
+          gh release download offline-models-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip \
+            --dir "$RUNNER_TEMP/offline-models"
+          unzip -oq "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
+            -d assets/models || {
+              status=$?
+              test "$status" -eq 1 || exit "$status"
+            }
+
+      - name: Verify offline speech models
+        run: |
+          for file in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do
+            test -s "assets/models/sherpa/$file" || {
+              echo "Missing assets/models/sherpa/$file" >&2
+              exit 1
+            }
+          done
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign
+
+      - name: Validate and package unsigned IPA
+        run: |
+          app="build/ios/iphoneos/Runner.app"
+          test -d "$app"
+          bundle_id="$(plutil -extract CFBundleIdentifier raw \
+            -o - "$app/Info.plist")"
+          test "$bundle_id" = "app.biblerecite"
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          ipa_name="BibleRecite-iOS-${version}-unsigned.ipa"
+          rm -rf Payload
+          mkdir -p Payload dist
+          cp -R "$app" Payload/Runner.app
+          ditto -c -k --keepParent Payload "dist/$ipa_name"
+          (cd dist && shasum -a 256 "$ipa_name" > "$ipa_name.sha256")
+          echo "IPA_NAME=$ipa_name" >> "$GITHUB_ENV"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.IPA_NAME }}
+          path: |
+            dist/${{ env.IPA_NAME }}
+            dist/${{ env.IPA_NAME }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish validated mobile release
+    needs:
+      - android
+      - ios
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Download validated artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify artifact checksums
+        run: |
+          cd dist
+          sha256sum -c BibleRecite-*.sha256
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          tag="build-${version}-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
+            --notes "Validated Android APK with stable signing fingerprint. The iOS IPA is unsigned and requires Apple signing before installation."

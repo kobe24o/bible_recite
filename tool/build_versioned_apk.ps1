@@ -33,6 +33,16 @@ if (-not $SkipVersionBump) {
 }
 
 $flutter = Join-Path $root '.toolchains\flutter\bin\flutter.bat'
+if (-not $env:ANDROID_KEYSTORE_PATH) {
+    $stableKeystore = Join-Path $env:USERPROFILE '.android\debug.keystore'
+    if (-not (Test-Path -LiteralPath $stableKeystore)) {
+        throw "Stable Android keystore not found: $stableKeystore"
+    }
+    $env:ANDROID_KEYSTORE_PATH = $stableKeystore
+    $env:ANDROID_KEYSTORE_PASSWORD = 'android'
+    $env:ANDROID_KEY_ALIAS = 'androiddebugkey'
+    $env:ANDROID_KEY_PASSWORD = 'android'
+}
 & $flutter build apk --release
 if ($LASTEXITCODE -ne 0) {
     throw "Flutter build failed with exit code $LASTEXITCODE"
