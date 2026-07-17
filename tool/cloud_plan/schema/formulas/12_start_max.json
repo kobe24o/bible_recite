@@ -1,0 +1,1 @@
+{"type":"formula","name":"起始最大节数","expression":"FIRST([起始章节].[发布最大节数])"}

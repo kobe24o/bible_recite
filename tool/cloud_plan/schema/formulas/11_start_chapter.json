@@ -1,0 +1,1 @@
+{"type":"formula","name":"起始章号","expression":"FIRST([起始章节].[章号])"}

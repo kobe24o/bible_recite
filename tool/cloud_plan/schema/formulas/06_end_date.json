@@ -1,0 +1,1 @@
+{"type":"formula","name":"默认结束日期","expression":"FIRST([所属计划].[默认结束日期])"}

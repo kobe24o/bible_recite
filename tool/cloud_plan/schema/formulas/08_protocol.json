@@ -1,0 +1,1 @@
+{"type":"formula","name":"协议版本","expression":"FIRST([所属计划].[协议版本])"}

@@ -1,0 +1,13 @@
+[
+  {"name":"计划 ID","type":"text"},
+  {"name":"计划名称","type":"text"},
+  {"name":"计划简介","type":"text"},
+  {"name":"是否推送","type":"select","multiple":false,"default_value":["是"],"options":[{"name":"是","hue":"Green"},{"name":"否","hue":"Gray"}]},
+  {"name":"修订号","type":"number","style":{"type":"plain","precision":0},"default_value":1},
+  {"name":"默认译本","type":"select","multiple":false,"default_value":["简体"],"options":[{"name":"简体","hue":"Blue"},{"name":"繁体","hue":"Purple"},{"name":"英文","hue":"Orange"}]},
+  {"name":"默认开始日期","type":"datetime","style":{"format":"yyyy-MM-dd"}},
+  {"name":"默认结束日期","type":"datetime","style":{"format":"yyyy-MM-dd"}},
+  {"name":"来源名称","type":"text","default_value":"背诵助手官方"},
+  {"name":"协议版本","type":"select","multiple":false,"default_value":["1"],"options":[{"name":"1","hue":"Blue"}]},
+  {"name":"标签","type":"text"}
+]

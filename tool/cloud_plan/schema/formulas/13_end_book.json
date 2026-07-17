@@ -1,0 +1,1 @@
+{"type":"formula","name":"终止经卷","expression":"FIRST([终止章节].[经卷 OSIS])"}

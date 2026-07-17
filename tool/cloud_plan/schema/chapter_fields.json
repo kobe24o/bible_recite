@@ -1,0 +1,13 @@
+[
+  {"name":"章节键","type":"text"},
+  {"name":"经卷 OSIS","type":"text"},
+  {"name":"简体卷名","type":"text"},
+  {"name":"繁体卷名","type":"text"},
+  {"name":"英文卷名","type":"text"},
+  {"name":"章号","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"简体最大节数","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"繁体最大节数","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"英文最大节数","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"发布最大节数","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"正典顺序","type":"number","style":{"type":"plain","precision":0}}
+]

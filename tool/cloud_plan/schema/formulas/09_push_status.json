@@ -1,0 +1,1 @@
+{"type":"formula","name":"推送状态","expression":"FIRST([所属计划].[是否推送])"}
