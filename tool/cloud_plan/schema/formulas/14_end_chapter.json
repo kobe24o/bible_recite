@@ -1,0 +1,1 @@
+{"type":"formula","name":"终止章号","expression":"FIRST([终止章节].[章号])"}

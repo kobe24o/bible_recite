@@ -1,0 +1,1 @@
+{"type":"formula","name":"计划名称","expression":"FIRST([所属计划].[计划名称])"}

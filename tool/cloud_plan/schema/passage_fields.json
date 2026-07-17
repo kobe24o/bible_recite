@@ -1,0 +1,9 @@
+[
+  {"name":"条目 ID","type":"text"},
+  {"name":"所属计划","type":"link","link_table":"背诵计划"},
+  {"name":"经文顺序","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"起始章节","type":"link","link_table":"章节目录"},
+  {"name":"起始节","type":"number","style":{"type":"plain","precision":0}},
+  {"name":"终止章节","type":"link","link_table":"章节目录"},
+  {"name":"终止节","type":"number","style":{"type":"plain","precision":0}}
+]

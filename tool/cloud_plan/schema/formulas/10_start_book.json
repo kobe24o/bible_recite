@@ -1,0 +1,1 @@
+{"type":"formula","name":"起始经卷","expression":"FIRST([起始章节].[经卷 OSIS])"}

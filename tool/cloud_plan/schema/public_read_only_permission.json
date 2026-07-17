@@ -1,0 +1,8 @@
+{
+  "external_access": true,
+  "link_share_entity": "anyone_readable",
+  "share_entity": "only_full_access",
+  "security_entity": "only_full_access",
+  "comment_entity": "anyone_can_edit",
+  "invite_external": false
+}

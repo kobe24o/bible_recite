@@ -1,0 +1,1 @@
+{"type":"formula","name":"修订号","expression":"FIRST([所属计划].[修订号])"}
