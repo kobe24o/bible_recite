@@ -12,7 +12,10 @@
 
 默认公开清单：
 
-`https://raw.githubusercontent.com/kobe24o/bible-recite-plans/main/cloud-plans.json`
+`https://cdn.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json`
+
+App 会在该 CDN 不可用时回退到同一仓库的 GitHub Raw 地址；旧版本中已保存的
+GitHub Raw 官方地址也会自动使用相同的回退顺序。
 
 JSON 协议示例和正式数据见 [assets/cloud_plans.json](assets/cloud_plans.json)。不同团队只要生成相同结构的 JSON，就能在 App 的“云端来源”中填写自己的地址。
 
@@ -37,6 +40,17 @@ dart run tool/cloud_plan/bin/generate_cloud_plan_json.dart `
   --key-verses "D:\Personal\Downloads\每卷书钥节.md" `
   --output assets\cloud_plans.json
 ```
+
+以后直接从飞书发布时，需要导出 `背诵计划` 表和 `计划经文 → 发布编辑` 视图两份 CSV：
+
+```powershell
+dart run tool/cloud_plan/bin/publish_feishu_export.dart `
+  --plans "背诵计划发布中心_背诵计划.csv" `
+  --passages "背诵计划发布中心_计划经文_发布编辑.csv" `
+  --output "cloud-plans.json"
+```
+
+发布器只输出 `是否推送=是` 且 `范围校验=通过` 的记录，并在任何校验失败时保留原输出文件。完整导出步骤和三平台下载包构建方式见 [tool/cloud_plan/README.md](tool/cloud_plan/README.md)。
 
 ## 本地开发
 
