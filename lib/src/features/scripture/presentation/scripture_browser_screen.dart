@@ -22,10 +22,13 @@ class _ScriptureBrowserScreenState
   String? _translationId;
   bool? _newTestament;
   BibleBook? _book;
+  int? _chapter;
 
   @override
   Widget build(BuildContext context) {
     final repository = ref.watch(scriptureRepositoryProvider);
+    final bookNames = ref.watch(bookNameCatalogProvider);
+    final locale = Localizations.localeOf(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(AppLocalizations.of(context)?.bibleTitle ?? 'Bible'),
@@ -47,7 +50,16 @@ class _ScriptureBrowserScreenState
                 if (!booksSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final allBooks = booksSnapshot.data!;
+                final allBooks = booksSnapshot.data!
+                    .map(
+                      (book) => BibleBook(
+                        osisId: book.osisId,
+                        ordinal: book.ordinal,
+                        name: bookNames.nameFor(book.osisId, locale),
+                        chapterCount: book.chapterCount,
+                      ),
+                    )
+                    .toList(growable: false);
                 final filtered = _newTestament == null
                     ? const <BibleBook>[]
                     : allBooks
@@ -66,6 +78,7 @@ class _ScriptureBrowserScreenState
                       onChanged: (value) => setState(() {
                         _translationId = value;
                         _book = null;
+                        _chapter = null;
                       }),
                     ),
                     const SizedBox(height: 16),
@@ -91,13 +104,18 @@ class _ScriptureBrowserScreenState
                       onSelectionChanged: (selection) => setState(() {
                         _newTestament = selection.firstOrNull;
                         _book = null;
+                        _chapter = null;
                       }),
                     ),
                     const SizedBox(height: 16),
                     if (_newTestament != null)
                       BookGrid(
                         books: filtered,
-                        onSelected: (book) => setState(() => _book = book),
+                        selectedBookId: _book?.osisId,
+                        onSelected: (book) => setState(() {
+                          _book = book;
+                          _chapter = null;
+                        }),
                       ),
                     if (_book != null) ...[
                       const SizedBox(height: 20),
@@ -108,9 +126,13 @@ class _ScriptureBrowserScreenState
                       const SizedBox(height: 8),
                       ChapterGrid(
                         chapterCount: _book!.chapterCount,
-                        onSelected: (chapter) => context.go(
-                          '/bible/$translationId/${_book!.osisId}/$chapter',
-                        ),
+                        selectedChapter: _chapter,
+                        onSelected: (chapter) {
+                          setState(() => _chapter = chapter);
+                          context.push(
+                            '/bible/$translationId/${_book!.osisId}/$chapter',
+                          );
+                        },
                       ),
                     ],
                   ],

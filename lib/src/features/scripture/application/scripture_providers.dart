@@ -3,8 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../data/scripture_pack_installer.dart';
+import '../data/asset_book_name_catalog.dart';
 import '../data/sqlite_scripture_repository.dart';
+import '../domain/book_name_catalog.dart';
 import '../domain/scripture_repository.dart';
+
+final bookNameCatalogProvider = Provider<BookNameCatalog>(
+  (ref) => const AssetBookNameCatalog.protestant66(),
+);
 
 final scripturePackRegistryProvider = FutureProvider<ScripturePackRegistry>((
   ref,

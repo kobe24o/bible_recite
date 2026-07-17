@@ -126,7 +126,7 @@ abstract class AppLocalizations {
   /// No description provided for @navStatistics.
   ///
   /// In en, this message translates to:
-  /// **'Statistics'**
+  /// **'My'**
   String get navStatistics;
 
   /// No description provided for @bibleTitle.
@@ -182,6 +182,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Scripture sources'**
   String get scriptureSources;
+
+  /// No description provided for @todayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s tasks'**
+  String get todayTitle;
+
+  /// No description provided for @todayEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no recitation tasks today. Browse the Bible to choose a passage to memorize.'**
+  String get todayEmpty;
+
+  /// No description provided for @plansTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recitation plans'**
+  String get plansTitle;
+
+  /// No description provided for @plansEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no recitation plans yet. Browse the Bible to choose what you want to memorize.'**
+  String get plansEmpty;
+
+  /// No description provided for @statisticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'My'**
+  String get statisticsTitle;
+
+  /// No description provided for @statisticsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no recitation records yet. Your progress will appear here after you practice.'**
+  String get statisticsEmpty;
+
+  /// No description provided for @browseBible.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse the Bible'**
+  String get browseBible;
+
+  /// No description provided for @startRecitation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start recitation'**
+  String get startRecitation;
+
+  /// No description provided for @addToPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to plan'**
+  String get addToPlan;
+
+  /// No description provided for @verseMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Verse by verse'**
+  String get verseMode;
+
+  /// No description provided for @continuousMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuous'**
+  String get continuousMode;
+
+  /// No description provided for @chooseRecitationMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose recitation mode'**
+  String get chooseRecitationMode;
+
+  /// No description provided for @presetPlans.
+  ///
+  /// In en, this message translates to:
+  /// **'Preset plans'**
+  String get presetPlans;
+
+  /// No description provided for @psalm23Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Psalm 23'**
+  String get psalm23Plan;
+
+  /// No description provided for @matthewSermonPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Matthew 5–7'**
+  String get matthewSermonPlan;
+
+  /// No description provided for @johnOpeningPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'John 1–3'**
+  String get johnOpeningPlan;
+
+  /// No description provided for @philippiansPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Philippians'**
+  String get philippiansPlan;
+
+  /// No description provided for @daysCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days'**
+  String daysCount(int days);
+
+  /// No description provided for @customPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom plan'**
+  String get customPlan;
 }
 
 class _AppLocalizationsDelegate

@@ -22,11 +22,25 @@ class ResponsiveShell extends StatelessWidget {
     final router = GoRouter.maybeOf(context);
     final location =
         router?.routerDelegate.currentConfiguration.uri.path ?? '/';
-    final selectedIndex = location.startsWith('/bible') ? 1 : 0;
+    final selectedIndex = switch (location) {
+      final value when value.startsWith('/bible') => 1,
+      '/about/scripture-sources' => 1,
+      final value when value.startsWith('/plans') => 2,
+      final value when value.startsWith('/statistics') => 3,
+      _ => 0,
+    };
     void navigate(int index) {
       if (router == null) return;
-      if (index == 0) context.go('/');
-      if (index == 1) context.go('/bible');
+      switch (index) {
+        case 0:
+          context.go('/');
+        case 1:
+          context.go('/bible');
+        case 2:
+          context.go('/plans');
+        case 3:
+          context.go('/statistics');
+      }
     }
 
     return LayoutBuilder(
@@ -52,7 +66,7 @@ class ResponsiveShell extends StatelessWidget {
                       label: Text(labels.plans),
                     ),
                     NavigationRailDestination(
-                      icon: const Icon(Icons.insights_outlined),
+                      icon: const Icon(Icons.person_outline_rounded),
                       label: Text(labels.statistics),
                     ),
                   ],
@@ -83,7 +97,7 @@ class ResponsiveShell extends StatelessWidget {
                 label: labels.plans,
               ),
               NavigationDestination(
-                icon: const Icon(Icons.insights_outlined),
+                icon: const Icon(Icons.person_outline_rounded),
                 label: labels.statistics,
               ),
             ],

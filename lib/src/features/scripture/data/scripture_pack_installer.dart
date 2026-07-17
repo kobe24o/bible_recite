@@ -74,7 +74,8 @@ final class ScripturePackInstaller {
         final manifestFile = File(
           '${directory.path}${Platform.pathSeparator}manifest.json',
         );
-        if (await _sha256(manifestFile) != expectedManifestHash) {
+        if (await canonicalManifestSha256(await manifestFile.readAsBytes()) !=
+            expectedManifestHash) {
           throw ScripturePackIntegrityException(
             'Manifest digest differs from asset index: $id',
           );
@@ -123,13 +124,13 @@ final class ScripturePackInstaller {
   }
 }
 
-Future<String> _sha256(File file) async {
-  final sink = Sha256().newHashSink();
-  await for (final chunk in file.openRead()) {
-    sink.add(chunk);
-  }
-  sink.close();
-  return (await sink.hash()).bytes
+Future<String> canonicalManifestSha256(List<int> bytes) async {
+  final text = utf8.decode(bytes);
+  final canonicalBytes = utf8.encode(
+    text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+  );
+  final hash = await Sha256().hash(canonicalBytes);
+  return hash.bytes
       .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
       .join();
 }

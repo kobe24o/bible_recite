@@ -1,0 +1,722 @@
+{
+  "protocolVersion": 1,
+  "publisher": "背诵助手官方",
+  "plans": [
+    {
+      "id": "classic-passages",
+      "title": "圣经经典篇章",
+      "description": "20 段跨卷经典经文背诵计划",
+      "push": true,
+      "revision": 1,
+      "defaultTranslationId": "cmn-cu89s",
+      "defaultStartDate": null,
+      "defaultEndDate": null,
+      "sourceName": "背诵助手官方",
+      "tag": "经典篇章",
+      "passages": [
+        {
+          "order": 1,
+          "bookId": "PSA",
+          "startChapter": 1,
+          "startVerse": 1,
+          "endChapter": 1,
+          "endVerse": 6
+        },
+        {
+          "order": 2,
+          "bookId": "PSA",
+          "startChapter": 23,
+          "startVerse": 1,
+          "endChapter": 23,
+          "endVerse": 6
+        },
+        {
+          "order": 3,
+          "bookId": "PSA",
+          "startChapter": 91,
+          "startVerse": 1,
+          "endChapter": 91,
+          "endVerse": 16
+        },
+        {
+          "order": 4,
+          "bookId": "PSA",
+          "startChapter": 100,
+          "startVerse": 1,
+          "endChapter": 100,
+          "endVerse": 5
+        },
+        {
+          "order": 5,
+          "bookId": "PSA",
+          "startChapter": 103,
+          "startVerse": 1,
+          "endChapter": 103,
+          "endVerse": 22
+        },
+        {
+          "order": 6,
+          "bookId": "PSA",
+          "startChapter": 121,
+          "startVerse": 1,
+          "endChapter": 121,
+          "endVerse": 8
+        },
+        {
+          "order": 7,
+          "bookId": "PSA",
+          "startChapter": 150,
+          "startVerse": 1,
+          "endChapter": 150,
+          "endVerse": 6
+        },
+        {
+          "order": 8,
+          "bookId": "LUK",
+          "startChapter": 1,
+          "startVerse": 46,
+          "endChapter": 1,
+          "endVerse": 56
+        },
+        {
+          "order": 9,
+          "bookId": "PSA",
+          "startChapter": 19,
+          "startVerse": 1,
+          "endChapter": 19,
+          "endVerse": 14
+        },
+        {
+          "order": 10,
+          "bookId": "PSA",
+          "startChapter": 139,
+          "startVerse": 1,
+          "endChapter": 139,
+          "endVerse": 12
+        },
+        {
+          "order": 11,
+          "bookId": "MAT",
+          "startChapter": 6,
+          "startVerse": 25,
+          "endChapter": 6,
+          "endVerse": 34
+        },
+        {
+          "order": 12,
+          "bookId": "MAT",
+          "startChapter": 5,
+          "startVerse": 3,
+          "endChapter": 5,
+          "endVerse": 12
+        },
+        {
+          "order": 13,
+          "bookId": "PRO",
+          "startChapter": 3,
+          "startVerse": 1,
+          "endChapter": 3,
+          "endVerse": 10
+        },
+        {
+          "order": 14,
+          "bookId": "PRO",
+          "startChapter": 4,
+          "startVerse": 20,
+          "endChapter": 4,
+          "endVerse": 27
+        },
+        {
+          "order": 15,
+          "bookId": "1CO",
+          "startChapter": 13,
+          "startVerse": 4,
+          "endChapter": 13,
+          "endVerse": 8
+        },
+        {
+          "order": 16,
+          "bookId": "PHP",
+          "startChapter": 2,
+          "startVerse": 5,
+          "endChapter": 2,
+          "endVerse": 11
+        },
+        {
+          "order": 17,
+          "bookId": "COL",
+          "startChapter": 3,
+          "startVerse": 12,
+          "endChapter": 3,
+          "endVerse": 17
+        },
+        {
+          "order": 18,
+          "bookId": "ROM",
+          "startChapter": 8,
+          "startVerse": 31,
+          "endChapter": 8,
+          "endVerse": 39
+        },
+        {
+          "order": 19,
+          "bookId": "EPH",
+          "startChapter": 6,
+          "startVerse": 13,
+          "endChapter": 6,
+          "endVerse": 17
+        },
+        {
+          "order": 20,
+          "bookId": "HEB",
+          "startChapter": 11,
+          "startVerse": 1,
+          "endChapter": 11,
+          "endVerse": 6
+        }
+      ]
+    },
+    {
+      "id": "key-verses-66",
+      "title": "每卷书钥节",
+      "description": "66 卷圣经每卷一处钥节背诵计划",
+      "push": true,
+      "revision": 1,
+      "defaultTranslationId": "cmn-cu89s",
+      "defaultStartDate": null,
+      "defaultEndDate": null,
+      "sourceName": "背诵助手官方",
+      "tag": "每卷钥节",
+      "passages": [
+        {
+          "order": 1,
+          "bookId": "GEN",
+          "startChapter": 1,
+          "startVerse": 1,
+          "endChapter": 1,
+          "endVerse": 1
+        },
+        {
+          "order": 2,
+          "bookId": "EXO",
+          "startChapter": 19,
+          "startVerse": 5,
+          "endChapter": 19,
+          "endVerse": 5
+        },
+        {
+          "order": 3,
+          "bookId": "LEV",
+          "startChapter": 19,
+          "startVerse": 2,
+          "endChapter": 19,
+          "endVerse": 2
+        },
+        {
+          "order": 4,
+          "bookId": "NUM",
+          "startChapter": 14,
+          "startVerse": 22,
+          "endChapter": 14,
+          "endVerse": 23
+        },
+        {
+          "order": 5,
+          "bookId": "DEU",
+          "startChapter": 6,
+          "startVerse": 4,
+          "endChapter": 6,
+          "endVerse": 5
+        },
+        {
+          "order": 6,
+          "bookId": "JOS",
+          "startChapter": 1,
+          "startVerse": 8,
+          "endChapter": 1,
+          "endVerse": 8
+        },
+        {
+          "order": 7,
+          "bookId": "JDG",
+          "startChapter": 21,
+          "startVerse": 25,
+          "endChapter": 21,
+          "endVerse": 25
+        },
+        {
+          "order": 8,
+          "bookId": "RUT",
+          "startChapter": 1,
+          "startVerse": 16,
+          "endChapter": 1,
+          "endVerse": 16
+        },
+        {
+          "order": 9,
+          "bookId": "1SA",
+          "startChapter": 15,
+          "startVerse": 22,
+          "endChapter": 15,
+          "endVerse": 22
+        },
+        {
+          "order": 10,
+          "bookId": "2SA",
+          "startChapter": 7,
+          "startVerse": 16,
+          "endChapter": 7,
+          "endVerse": 16
+        },
+        {
+          "order": 11,
+          "bookId": "1KI",
+          "startChapter": 9,
+          "startVerse": 4,
+          "endChapter": 9,
+          "endVerse": 4
+        },
+        {
+          "order": 12,
+          "bookId": "2KI",
+          "startChapter": 17,
+          "startVerse": 13,
+          "endChapter": 17,
+          "endVerse": 13
+        },
+        {
+          "order": 13,
+          "bookId": "1CH",
+          "startChapter": 29,
+          "startVerse": 11,
+          "endChapter": 29,
+          "endVerse": 11
+        },
+        {
+          "order": 14,
+          "bookId": "2CH",
+          "startChapter": 7,
+          "startVerse": 14,
+          "endChapter": 7,
+          "endVerse": 14
+        },
+        {
+          "order": 15,
+          "bookId": "EZR",
+          "startChapter": 7,
+          "startVerse": 10,
+          "endChapter": 7,
+          "endVerse": 10
+        },
+        {
+          "order": 16,
+          "bookId": "NEH",
+          "startChapter": 8,
+          "startVerse": 10,
+          "endChapter": 8,
+          "endVerse": 10
+        },
+        {
+          "order": 17,
+          "bookId": "EST",
+          "startChapter": 4,
+          "startVerse": 14,
+          "endChapter": 4,
+          "endVerse": 14
+        },
+        {
+          "order": 18,
+          "bookId": "JOB",
+          "startChapter": 42,
+          "startVerse": 5,
+          "endChapter": 42,
+          "endVerse": 5
+        },
+        {
+          "order": 19,
+          "bookId": "PSA",
+          "startChapter": 19,
+          "startVerse": 14,
+          "endChapter": 19,
+          "endVerse": 14
+        },
+        {
+          "order": 20,
+          "bookId": "PRO",
+          "startChapter": 1,
+          "startVerse": 7,
+          "endChapter": 1,
+          "endVerse": 7
+        },
+        {
+          "order": 21,
+          "bookId": "ECC",
+          "startChapter": 12,
+          "startVerse": 13,
+          "endChapter": 12,
+          "endVerse": 13
+        },
+        {
+          "order": 22,
+          "bookId": "SNG",
+          "startChapter": 6,
+          "startVerse": 3,
+          "endChapter": 6,
+          "endVerse": 3
+        },
+        {
+          "order": 23,
+          "bookId": "ISA",
+          "startChapter": 53,
+          "startVerse": 5,
+          "endChapter": 53,
+          "endVerse": 5
+        },
+        {
+          "order": 24,
+          "bookId": "JER",
+          "startChapter": 29,
+          "startVerse": 11,
+          "endChapter": 29,
+          "endVerse": 11
+        },
+        {
+          "order": 25,
+          "bookId": "LAM",
+          "startChapter": 3,
+          "startVerse": 22,
+          "endChapter": 3,
+          "endVerse": 23
+        },
+        {
+          "order": 26,
+          "bookId": "EZK",
+          "startChapter": 36,
+          "startVerse": 26,
+          "endChapter": 36,
+          "endVerse": 26
+        },
+        {
+          "order": 27,
+          "bookId": "DAN",
+          "startChapter": 2,
+          "startVerse": 44,
+          "endChapter": 2,
+          "endVerse": 44
+        },
+        {
+          "order": 28,
+          "bookId": "HOS",
+          "startChapter": 6,
+          "startVerse": 6,
+          "endChapter": 6,
+          "endVerse": 6
+        },
+        {
+          "order": 29,
+          "bookId": "JOL",
+          "startChapter": 2,
+          "startVerse": 13,
+          "endChapter": 2,
+          "endVerse": 13
+        },
+        {
+          "order": 30,
+          "bookId": "AMO",
+          "startChapter": 5,
+          "startVerse": 24,
+          "endChapter": 5,
+          "endVerse": 24
+        },
+        {
+          "order": 31,
+          "bookId": "OBA",
+          "startChapter": 1,
+          "startVerse": 15,
+          "endChapter": 1,
+          "endVerse": 15
+        },
+        {
+          "order": 32,
+          "bookId": "JON",
+          "startChapter": 2,
+          "startVerse": 9,
+          "endChapter": 2,
+          "endVerse": 9
+        },
+        {
+          "order": 33,
+          "bookId": "MIC",
+          "startChapter": 6,
+          "startVerse": 8,
+          "endChapter": 6,
+          "endVerse": 8
+        },
+        {
+          "order": 34,
+          "bookId": "NAM",
+          "startChapter": 1,
+          "startVerse": 7,
+          "endChapter": 1,
+          "endVerse": 7
+        },
+        {
+          "order": 35,
+          "bookId": "HAB",
+          "startChapter": 2,
+          "startVerse": 4,
+          "endChapter": 2,
+          "endVerse": 4
+        },
+        {
+          "order": 36,
+          "bookId": "ZEP",
+          "startChapter": 3,
+          "startVerse": 17,
+          "endChapter": 3,
+          "endVerse": 17
+        },
+        {
+          "order": 37,
+          "bookId": "HAG",
+          "startChapter": 1,
+          "startVerse": 8,
+          "endChapter": 1,
+          "endVerse": 8
+        },
+        {
+          "order": 38,
+          "bookId": "ZEC",
+          "startChapter": 4,
+          "startVerse": 6,
+          "endChapter": 4,
+          "endVerse": 6
+        },
+        {
+          "order": 39,
+          "bookId": "MAL",
+          "startChapter": 3,
+          "startVerse": 10,
+          "endChapter": 3,
+          "endVerse": 10
+        },
+        {
+          "order": 40,
+          "bookId": "MAT",
+          "startChapter": 16,
+          "startVerse": 16,
+          "endChapter": 16,
+          "endVerse": 16
+        },
+        {
+          "order": 41,
+          "bookId": "MRK",
+          "startChapter": 10,
+          "startVerse": 45,
+          "endChapter": 10,
+          "endVerse": 45
+        },
+        {
+          "order": 42,
+          "bookId": "LUK",
+          "startChapter": 19,
+          "startVerse": 10,
+          "endChapter": 19,
+          "endVerse": 10
+        },
+        {
+          "order": 43,
+          "bookId": "JHN",
+          "startChapter": 20,
+          "startVerse": 31,
+          "endChapter": 20,
+          "endVerse": 31
+        },
+        {
+          "order": 44,
+          "bookId": "ACT",
+          "startChapter": 1,
+          "startVerse": 8,
+          "endChapter": 1,
+          "endVerse": 8
+        },
+        {
+          "order": 45,
+          "bookId": "ROM",
+          "startChapter": 1,
+          "startVerse": 16,
+          "endChapter": 1,
+          "endVerse": 16
+        },
+        {
+          "order": 46,
+          "bookId": "1CO",
+          "startChapter": 1,
+          "startVerse": 18,
+          "endChapter": 1,
+          "endVerse": 18
+        },
+        {
+          "order": 47,
+          "bookId": "2CO",
+          "startChapter": 5,
+          "startVerse": 17,
+          "endChapter": 5,
+          "endVerse": 17
+        },
+        {
+          "order": 48,
+          "bookId": "GAL",
+          "startChapter": 2,
+          "startVerse": 20,
+          "endChapter": 2,
+          "endVerse": 20
+        },
+        {
+          "order": 49,
+          "bookId": "EPH",
+          "startChapter": 2,
+          "startVerse": 8,
+          "endChapter": 2,
+          "endVerse": 9
+        },
+        {
+          "order": 50,
+          "bookId": "PHP",
+          "startChapter": 4,
+          "startVerse": 4,
+          "endChapter": 4,
+          "endVerse": 4
+        },
+        {
+          "order": 51,
+          "bookId": "COL",
+          "startChapter": 2,
+          "startVerse": 9,
+          "endChapter": 2,
+          "endVerse": 9
+        },
+        {
+          "order": 52,
+          "bookId": "1TH",
+          "startChapter": 5,
+          "startVerse": 16,
+          "endChapter": 5,
+          "endVerse": 18
+        },
+        {
+          "order": 53,
+          "bookId": "2TH",
+          "startChapter": 3,
+          "startVerse": 3,
+          "endChapter": 3,
+          "endVerse": 3
+        },
+        {
+          "order": 54,
+          "bookId": "1TI",
+          "startChapter": 3,
+          "startVerse": 15,
+          "endChapter": 3,
+          "endVerse": 15
+        },
+        {
+          "order": 55,
+          "bookId": "2TI",
+          "startChapter": 3,
+          "startVerse": 16,
+          "endChapter": 3,
+          "endVerse": 16
+        },
+        {
+          "order": 56,
+          "bookId": "TIT",
+          "startChapter": 3,
+          "startVerse": 5,
+          "endChapter": 3,
+          "endVerse": 5
+        },
+        {
+          "order": 57,
+          "bookId": "PHM",
+          "startChapter": 1,
+          "startVerse": 16,
+          "endChapter": 1,
+          "endVerse": 16
+        },
+        {
+          "order": 58,
+          "bookId": "HEB",
+          "startChapter": 12,
+          "startVerse": 1,
+          "endChapter": 12,
+          "endVerse": 2
+        },
+        {
+          "order": 59,
+          "bookId": "JAS",
+          "startChapter": 2,
+          "startVerse": 26,
+          "endChapter": 2,
+          "endVerse": 26
+        },
+        {
+          "order": 60,
+          "bookId": "1PE",
+          "startChapter": 2,
+          "startVerse": 9,
+          "endChapter": 2,
+          "endVerse": 9
+        },
+        {
+          "order": 61,
+          "bookId": "2PE",
+          "startChapter": 3,
+          "startVerse": 18,
+          "endChapter": 3,
+          "endVerse": 18
+        },
+        {
+          "order": 62,
+          "bookId": "1JN",
+          "startChapter": 5,
+          "startVerse": 13,
+          "endChapter": 5,
+          "endVerse": 13
+        },
+        {
+          "order": 63,
+          "bookId": "2JN",
+          "startChapter": 1,
+          "startVerse": 6,
+          "endChapter": 1,
+          "endVerse": 6
+        },
+        {
+          "order": 64,
+          "bookId": "3JN",
+          "startChapter": 1,
+          "startVerse": 2,
+          "endChapter": 1,
+          "endVerse": 2
+        },
+        {
+          "order": 65,
+          "bookId": "JUD",
+          "startChapter": 1,
+          "startVerse": 20,
+          "endChapter": 1,
+          "endVerse": 21
+        },
+        {
+          "order": 66,
+          "bookId": "REV",
+          "startChapter": 17,
+          "startVerse": 14,
+          "endChapter": 17,
+          "endVerse": 14
+        }
+      ]
+    }
+  ]
+}

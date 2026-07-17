@@ -1,9 +1,13 @@
+import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:bible_recite/src/features/scripture/presentation/scripture_browser_screen.dart';
+import 'package:bible_recite/src/features/scripture/presentation/book_grid.dart';
+import 'package:bible_recite/src/features/scripture/presentation/chapter_grid.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -17,18 +21,63 @@ void main() {
             (ref) async => FakeRepositoryForPassage(),
           ),
         ],
-        child: const MaterialApp(home: ScriptureBrowserScreen()),
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: [Locale('zh'), Locale('en')],
+          home: ScriptureBrowserScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('World English Bible'), findsOneWidget);
-    await tester.tap(find.text('New Testament'));
+    await tester.tap(find.text('新约'));
     await tester.pumpAndSettle();
-    expect(find.text('JHN'), findsOneWidget);
-    await tester.tap(find.text('JHN'));
+    expect(find.text('约翰福音'), findsOneWidget);
+    expect(find.text('JHN'), findsNothing);
+    await tester.tap(find.text('约翰福音'));
     await tester.pumpAndSettle();
-    expect(find.text('Chapter 3'), findsOneWidget);
+    expect(find.byKey(const Key('selected-book-JHN')), findsOneWidget);
+    expect(find.text('第 3 章'), findsOneWidget);
+  });
+
+  testWidgets('book and chapter grids expose selected states', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              BookGrid(
+                books: [
+                  BibleBook(
+                    osisId: 'JHN',
+                    ordinal: 43,
+                    name: '约翰福音',
+                    chapterCount: 21,
+                  ),
+                ],
+                selectedBookId: 'JHN',
+                onSelected: (_) {},
+              ),
+              ChapterGrid(
+                chapterCount: 3,
+                selectedChapter: 2,
+                onSelected: (_) {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('selected-book-JHN')), findsOneWidget);
+    expect(find.byKey(const Key('selected-chapter-2')), findsOneWidget);
   });
 }
 

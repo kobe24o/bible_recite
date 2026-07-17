@@ -2,6 +2,7 @@
 .worktrees/
 .toolchains/
 tool/scripture_pack/.cache/
+.publish/
 
 # Flutter/Dart
 .dart_tool/
@@ -10,6 +11,7 @@ tool/scripture_pack/.cache/
 .packages
 build/
 coverage/
+android/.kotlin/
 
 # Editors and operating systems
 .idea/
@@ -25,3 +27,7 @@ Thumbs.db
 *.mobileprovision
 .env
 .env.*
+
+# Offline speech models are distributed as a GitHub Release asset because the
+# encoder exceeds GitHub's regular 100 MB file limit.
+assets/models/sherpa/*.onnx
