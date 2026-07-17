@@ -24,6 +24,19 @@ final class CloudPlanFeedClient {
   final int maxBytes;
   final Duration timeout;
 
+  Future<CloudPlanManifest> fetchFirst(Iterable<Uri> uris) async {
+    CloudPlanFeedException? lastError;
+    for (final uri in uris) {
+      try {
+        return await fetch(uri);
+      } on CloudPlanFeedException catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ??
+        const CloudPlanFeedException('No cloud plan URL provided');
+  }
+
   Future<CloudPlanManifest> fetch(Uri uri) async {
     if (uri.scheme != 'https' || uri.host.isEmpty) {
       throw ArgumentError.value(uri, 'uri', 'Cloud plan URL must use HTTPS');

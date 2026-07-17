@@ -413,7 +413,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         defaultCloudPlanSourceUrl,
       );
       final uri = Uri.parse(source);
-      final manifest = await ref.read(cloudPlanFeedClientProvider).fetch(uri);
+      final manifest = await ref
+          .read(cloudPlanFeedClientProvider)
+          .fetchFirst(cloudPlanSourceCandidates(source));
       final result = await ref
           .read(cloudPlanImporterProvider)
           .importPushed(

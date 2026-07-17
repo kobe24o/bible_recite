@@ -8,8 +8,21 @@ import '../data/cloud_plan_feed_client.dart';
 import '../domain/cloud_plan_importer.dart';
 import '../domain/cloud_plan_manifest.dart';
 
-const defaultCloudPlanSourceUrl =
+const officialCloudPlanCdnUrl =
+    'https://cdn.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json';
+const officialCloudPlanRawUrl =
     'https://raw.githubusercontent.com/kobe24o/bible-recite-plans/main/cloud-plans.json';
+const defaultCloudPlanSourceUrl = officialCloudPlanCdnUrl;
+
+List<Uri> cloudPlanSourceCandidates(String source) {
+  if (source == officialCloudPlanCdnUrl || source == officialCloudPlanRawUrl) {
+    return [
+      Uri.parse(officialCloudPlanCdnUrl),
+      Uri.parse(officialCloudPlanRawUrl),
+    ];
+  }
+  return [Uri.parse(source)];
+}
 
 final bundledCloudPlanManifestProvider = FutureProvider<CloudPlanManifest>((
   ref,

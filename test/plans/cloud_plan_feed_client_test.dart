@@ -28,4 +28,28 @@ void main() {
       throwsA(isA<CloudPlanFeedException>()),
     );
   });
+
+  test('tries the next HTTPS source when a download fails', () async {
+    final attempts = <Uri>[];
+    final client = CloudPlanFeedClient(
+      loader: (uri) async {
+        attempts.add(uri);
+        if (uri.host == 'raw.githubusercontent.com') {
+          throw const CloudPlanFeedException('DNS lookup failed');
+        }
+        return '{"protocolVersion":1,"plans":[]}';
+      },
+    );
+    final mirror = Uri.parse(
+      'https://cdn.jsdelivr.net/gh/example/plans@main/cloud-plans.json',
+    );
+    final raw = Uri.parse(
+      'https://raw.githubusercontent.com/example/plans/main/cloud-plans.json',
+    );
+
+    final manifest = await client.fetchFirst([raw, mirror]);
+
+    expect(manifest.protocolVersion, 1);
+    expect(attempts, [raw, mirror]);
+  });
 }
