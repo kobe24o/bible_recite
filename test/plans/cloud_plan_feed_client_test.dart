@@ -52,4 +52,27 @@ void main() {
     expect(manifest.protocolVersion, 1);
     expect(attempts, [raw, mirror]);
   });
+
+  test('reports every attempted host when all sources fail', () async {
+    final client = CloudPlanFeedClient(
+      loader: (uri) async => throw CloudPlanFeedException('${uri.host} DNS'),
+    );
+
+    await expectLater(
+      client.fetchFirst([
+        Uri.parse('https://gcore.jsdelivr.net/plans.json'),
+        Uri.parse('https://raw.githubusercontent.com/plans.json'),
+      ]),
+      throwsA(
+        isA<CloudPlanFeedException>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('gcore.jsdelivr.net'),
+            contains('raw.githubusercontent.com'),
+          ),
+        ),
+      ),
+    );
+  });
 }

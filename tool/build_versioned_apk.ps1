@@ -6,7 +6,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $pubspecPath = Join-Path $root 'pubspec.yaml'
 $pubspec = Get-Content $pubspecPath -Raw -Encoding UTF8
-$match = [regex]::Match($pubspec, '(?m)^version:\s+(\d+)\.(\d+)\.(\d+)\+(\d+)\s*$')
+$match = [regex]::Match(
+    $pubspec,
+    '(?m)^version:\s+(\d+)\.(\d+)\.(\d+)\+(\d+)[ \t]*$'
+)
 if (-not $match.Success) {
     throw 'Unable to read version from pubspec.yaml'
 }
@@ -23,7 +26,8 @@ if (-not $SkipVersionBump) {
         $match.Index,
         "version: $version"
     )
-    Set-Content $pubspecPath $pubspec -Encoding UTF8 -NoNewline
+    $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($pubspecPath, $pubspec, $utf8WithoutBom)
 } else {
     $version = "$major.$minor.$patch+$build"
 }

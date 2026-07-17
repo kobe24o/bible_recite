@@ -25,16 +25,20 @@ final class CloudPlanFeedClient {
   final Duration timeout;
 
   Future<CloudPlanManifest> fetchFirst(Iterable<Uri> uris) async {
-    CloudPlanFeedException? lastError;
+    final errors = <String>[];
     for (final uri in uris) {
       try {
         return await fetch(uri);
       } on CloudPlanFeedException catch (error) {
-        lastError = error;
+        errors.add('${uri.host}: ${error.message}');
       }
     }
-    throw lastError ??
-        const CloudPlanFeedException('No cloud plan URL provided');
+    if (errors.isEmpty) {
+      throw const CloudPlanFeedException('No cloud plan URL provided');
+    }
+    throw CloudPlanFeedException(
+      'All cloud plan sources failed: ${errors.join('; ')}',
+    );
   }
 
   Future<CloudPlanManifest> fetch(Uri uri) async {

@@ -8,15 +8,27 @@ import '../data/cloud_plan_feed_client.dart';
 import '../domain/cloud_plan_importer.dart';
 import '../domain/cloud_plan_manifest.dart';
 
+const officialCloudPlanGcoreUrl =
+    'https://gcore.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json';
+const officialCloudPlanFastlyUrl =
+    'https://fastly.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json';
 const officialCloudPlanCdnUrl =
     'https://cdn.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json';
 const officialCloudPlanRawUrl =
     'https://raw.githubusercontent.com/kobe24o/bible-recite-plans/main/cloud-plans.json';
-const defaultCloudPlanSourceUrl = officialCloudPlanCdnUrl;
+const defaultCloudPlanSourceUrl = officialCloudPlanGcoreUrl;
 
 List<Uri> cloudPlanSourceCandidates(String source) {
-  if (source == officialCloudPlanCdnUrl || source == officialCloudPlanRawUrl) {
+  const officialSources = {
+    officialCloudPlanGcoreUrl,
+    officialCloudPlanFastlyUrl,
+    officialCloudPlanCdnUrl,
+    officialCloudPlanRawUrl,
+  };
+  if (officialSources.contains(source)) {
     return [
+      Uri.parse(officialCloudPlanGcoreUrl),
+      Uri.parse(officialCloudPlanFastlyUrl),
       Uri.parse(officialCloudPlanCdnUrl),
       Uri.parse(officialCloudPlanRawUrl),
     ];

@@ -1,0 +1,89 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build versioned APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - name: Download offline speech models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-models" assets/models
+          gh release download offline-models-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip \
+            --dir "$RUNNER_TEMP/offline-models"
+          unzip -q "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
+            -d assets/models
+
+      - name: Verify offline speech models
+        run: |
+          for file in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do
+            test -s "assets/models/sherpa/$file" || {
+              echo "Missing assets/models/sherpa/$file" >&2
+              exit 1
+            }
+          done
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Create versioned artifact
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          test -n "$version"
+          apk_name="BibleRecite-${version}.apk"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/$apk_name"
+          sha256sum "dist/$apk_name" > "dist/$apk_name.sha256"
+          echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: |
+            dist/${{ env.APK_NAME }}
+            dist/${{ env.APK_NAME }}.sha256
+          if-no-files-found: error
+          retention-days: 30

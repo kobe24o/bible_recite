@@ -2,9 +2,11 @@ import 'package:bible_recite/src/features/plans/application/plan_providers.dart'
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('official source uses the CDN before the GitHub Raw fallback', () {
-    expect(defaultCloudPlanSourceUrl, officialCloudPlanCdnUrl);
+  test('official source uses independent CDNs before GitHub Raw', () {
+    expect(defaultCloudPlanSourceUrl, officialCloudPlanGcoreUrl);
     expect(cloudPlanSourceCandidates(officialCloudPlanRawUrl), [
+      Uri.parse(officialCloudPlanGcoreUrl),
+      Uri.parse(officialCloudPlanFastlyUrl),
       Uri.parse(officialCloudPlanCdnUrl),
       Uri.parse(officialCloudPlanRawUrl),
     ]);

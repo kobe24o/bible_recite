@@ -11,6 +11,14 @@ void main() {
     expect(manifest, contains('android.permission.MODIFY_AUDIO_SETTINGS'));
   });
 
+  test('release Android manifest allows cloud plan downloads', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+
+    expect(manifest, contains('android.permission.INTERNET'));
+  });
+
   test('release identity changes when launcher artwork changes', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
@@ -18,6 +26,6 @@ void main() {
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
     expect(manifest, contains('@mipmap/ic_launcher_bible'));
-    expect(pubspec, contains('version: 1.0.2+3'));
+    expect(pubspec, contains('version: 1.0.3+4'));
   });
 }

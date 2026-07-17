@@ -12,10 +12,10 @@
 
 默认公开清单：
 
-`https://cdn.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json`
+`https://gcore.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/cloud-plans.json`
 
-App 会在该 CDN 不可用时回退到同一仓库的 GitHub Raw 地址；旧版本中已保存的
-GitHub Raw 官方地址也会自动使用相同的回退顺序。
+App 会在该 CDN 不可用时依次回退到 Fastly、jsDelivr CDN 和同一仓库的
+GitHub Raw 地址；旧版本中已保存的官方地址也会自动使用相同的回退顺序。
 
 JSON 协议示例和正式数据见 [assets/cloud_plans.json](assets/cloud_plans.json)。不同团队只要生成相同结构的 JSON，就能在 App 的“云端来源”中填写自己的地址。
 
