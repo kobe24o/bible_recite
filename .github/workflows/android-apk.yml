@@ -98,12 +98,19 @@ jobs:
         env:
           EXPECTED_CERT_SHA256: 4066fe3c0e57ec575e5d37b741d68d347f8af80b7cf9da4799636d7039b5a7e7
         run: |
+          set -euo pipefail
           apksigner="$(find "$ANDROID_SDK_ROOT/build-tools" -type f \
             -name apksigner | sort -V | tail -1)"
           test -x "$apksigner"
           actual="$($apksigner verify --print-certs "dist/$APK_NAME" | \
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-          test "$actual" = "$EXPECTED_CERT_SHA256"
+            awk -F': ' '/certificate SHA-256 digest:/ {print tolower($2); exit}' | \
+            tr -d '\r[:space:]')"
+          echo "Expected certificate SHA-256: $EXPECTED_CERT_SHA256"
+          echo "Actual certificate SHA-256:   $actual"
+          if [[ -z "$actual" || "$actual" != "$EXPECTED_CERT_SHA256" ]]; then
+            echo "APK signing certificate does not match the permanent release key." >&2
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
