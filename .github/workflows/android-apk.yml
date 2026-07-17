@@ -47,7 +47,10 @@ jobs:
             --pattern sherpa-models.zip \
             --dir "$RUNNER_TEMP/offline-models"
           unzip -oq "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
-            -d assets/models
+            -d assets/models || {
+              status=$?
+              test "$status" -eq 1 || exit "$status"
+            }
 
       - name: Verify offline speech models
         run: |
