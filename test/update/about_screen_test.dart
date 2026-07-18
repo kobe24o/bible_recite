@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -155,6 +156,81 @@ void main() {
     expect(find.byKey(const Key('about-update')), findsNothing);
     expect(find.byKey(const Key('about-install')), findsNothing);
   });
+
+  testWidgets('non-Android pending Android states expose only a release link', (
+    tester,
+  ) async {
+    final manifest = _manifest();
+    final states = <UpdateStatus>[
+      AwaitingCellularConfirmation(manifest: manifest),
+      UpdateDownloading(
+        manifest: manifest,
+        receivedBytes: 1,
+        totalBytes: 2,
+        bytesPerSecond: 1,
+      ),
+      ReadyToInstall(manifest: manifest, file: File('verified.apk')),
+      PermissionRequired(manifest: manifest, file: File('verified.apk')),
+      UpdateInstalling(manifest: manifest, file: File('verified.apk')),
+    ];
+    for (final state in states) {
+      await _pumpAbout(tester, status: state);
+      expect(find.byKey(const Key('about-release-link')), findsOneWidget);
+      expect(find.byKey(const Key('about-update')), findsNothing);
+      expect(find.byKey(const Key('about-cancel')), findsNothing);
+      expect(find.byKey(const Key('about-install')), findsNothing);
+    }
+  });
+
+  testWidgets('release launcher suppresses duplicates and hides raw failures', (
+    tester,
+  ) async {
+    final gate = Completer<bool>();
+    var calls = 0;
+    await _pumpAbout(
+      tester,
+      status: UpdateAvailable(
+        manifest: _manifest(),
+        supportsDirectInstall: false,
+      ),
+      launcher: (_) {
+        calls++;
+        return gate.future;
+      },
+    );
+    await tester.tap(find.byKey(const Key('about-release-link')));
+    await tester.tap(find.byKey(const Key('about-release-link')));
+    expect(calls, 1);
+    gate.complete(true);
+    await tester.pumpAndSettle();
+
+    await _pumpAbout(
+      tester,
+      status: UpdateAvailable(
+        manifest: _manifest(),
+        supportsDirectInstall: false,
+      ),
+      launcher: (_) async => false,
+    );
+    await tester.tap(find.byKey(const Key('about-release-link')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Unable to open the release page. Please try again.'),
+      findsOneWidget,
+    );
+
+    await _pumpAbout(
+      tester,
+      status: UpdateAvailable(
+        manifest: _manifest(),
+        supportsDirectInstall: false,
+      ),
+      launcher: (_) async => throw StateError('private launcher failure'),
+    );
+    await tester.tap(find.byKey(const Key('about-release-link')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('private launcher failure'), findsNothing);
+  });
 }
 
 Future<void> _pumpAbout(
@@ -162,6 +238,7 @@ Future<void> _pumpAbout(
   UpdateRuntimePlatform platform = UpdateRuntimePlatform.other,
   required UpdateStatus status,
   _Actions? actions,
+  UpdateReleaseLauncher? launcher,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -179,6 +256,8 @@ Future<void> _pumpAbout(
         ),
         aboutUpdateStatusProvider.overrideWith((ref) => status),
         aboutUpdateActionsProvider.overrideWith((ref) => actions ?? _Actions()),
+        if (launcher != null)
+          updateReleaseLauncherProvider.overrideWith((ref) => launcher),
       ],
       child: const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
