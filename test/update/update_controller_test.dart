@@ -320,7 +320,38 @@ void main() {
         file,
         asset,
         directory,
-        afterCopy: (reserved) => reserved.writeAsBytes([9, 9, 9], flush: true),
+        afterFinalCopy: (reserved) =>
+            reserved.writeAsBytes([9, 9, 9], flush: true),
+      ),
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.stagingFailed);
+    expect(harness.events, isNot(contains('permission-check')));
+    expect(harness.events, isNot(contains('install')));
+    harness.dispose();
+  });
+
+  test('final-copy failure never reaches permission or installer', () async {
+    final manifest = _manifest(
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+    );
+    final harness = _Harness(
+      root: root,
+      manifest: manifest,
+      writeDownloadedBytes: true,
+      stagingOperation: (file, asset, directory) => stageVerifiedUpdateApk(
+        file,
+        asset,
+        directory,
+        copyPendingToFinal: (pending, output) async {
+          await output.writeFrom([1]);
+          throw const FileSystemException('injected final-copy failure');
+        },
       ),
     );
     await harness.controller.check();
@@ -542,53 +573,64 @@ void main() {
     );
   });
 
-  test('staging preserves unrelated collisions and owns unique paths', () async {
-    final bytes = [1, 2, 3];
-    final digest = await Sha256().hash(bytes);
-    final sha = digest.bytes
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join();
-    final manifest = _manifest(sha256: sha);
-    final source = File('${root.path}${Platform.pathSeparator}source.apk');
-    await source.writeAsBytes(bytes);
-    final staging = Directory(
-      '${root.path}${Platform.pathSeparator}cache${Platform.pathSeparator}updates',
-    );
-    await staging.create(recursive: true);
-    final collision = File(
-      '${staging.path}${Platform.pathSeparator}${manifest.android.fileName}',
-    );
-    await collision.writeAsBytes([9, 9, 9]);
-    final fixedTemporary = File('${collision.path}.staging');
-    await fixedTemporary.writeAsBytes([8, 8, 8]);
+  test(
+    'staging preserves unrelated collisions and owns unique paths',
+    () async {
+      final bytes = [1, 2, 3];
+      final digest = await Sha256().hash(bytes);
+      final sha = digest.bytes
+          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+          .join();
+      final manifest = _manifest(sha256: sha);
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes(bytes);
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final staging = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
+      await staging.create(recursive: true);
+      final collision = File(
+        '${staging.path}${Platform.pathSeparator}${manifest.android.fileName}',
+      );
+      await collision.writeAsBytes([9, 9, 9]);
+      final fixedTemporary = File('${collision.path}.staging');
+      await fixedTemporary.writeAsBytes([8, 8, 8]);
 
-    final staged = await stageVerifiedUpdateApk(
-      source,
-      manifest.android,
-      staging,
-    );
+      final staged = await stageVerifiedUpdateApk(
+        source,
+        manifest.android,
+        temporaryRoot,
+      );
 
-    expect(await staged.readAsBytes(), bytes);
-    expect(
-      await staged.parent.resolveSymbolicLinks(),
-      await staging.resolveSymbolicLinks(),
-    );
-    expect(staged.path, isNot(collision.path));
-    expect(staged.path, endsWith('.apk'));
-    expect(await collision.readAsBytes(), [9, 9, 9]);
-    expect(await fixedTemporary.readAsBytes(), [8, 8, 8]);
-  });
+      expect(await staged.readAsBytes(), bytes);
+      expect(
+        await staged.parent.resolveSymbolicLinks(),
+        await staging.resolveSymbolicLinks(),
+      );
+      expect(staged.path, isNot(collision.path));
+      expect(staged.path, endsWith('.apk'));
+      expect(await collision.readAsBytes(), [9, 9, 9]);
+      expect(await fixedTemporary.readAsBytes(), [8, 8, 8]);
+    },
+  );
 
   test(
     'staging rejects a manifest filename that is not one path segment',
     () async {
       final source = File('${root.path}${Platform.pathSeparator}source.apk');
       await source.writeAsBytes([1, 2, 3]);
-      final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final staging = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
       final manifest = _manifest(fileName: 'BibleRecite-nested/evil.apk');
 
       await expectLater(
-        stageVerifiedUpdateApk(source, manifest.android, staging),
+        stageVerifiedUpdateApk(source, manifest.android, temporaryRoot),
         throwsA(isA<UpdateStagingException>()),
       );
       expect(await staging.exists(), isFalse);
@@ -600,10 +642,15 @@ void main() {
     () async {
       final source = File('${root.path}${Platform.pathSeparator}source.apk');
       await source.writeAsBytes([1, 2, 3]);
-      final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final staging = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
 
       await expectLater(
-        stageVerifiedUpdateApk(source, _manifest().android, staging),
+        stageVerifiedUpdateApk(source, _manifest().android, temporaryRoot),
         throwsA(isA<UpdateStagingException>()),
       );
 
@@ -616,8 +663,13 @@ void main() {
     () async {
       final source = File('${root.path}${Platform.pathSeparator}source.apk');
       await source.writeAsBytes([1, 2, 3]);
-      final staging = Directory('${root.path}${Platform.pathSeparator}updates');
-      await staging.create();
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final staging = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
+      await staging.create(recursive: true);
       final unrelated = File(
         '${staging.path}${Platform.pathSeparator}unrelated.apk',
       );
@@ -635,7 +687,7 @@ void main() {
         stageVerifiedUpdateApk(
           source,
           manifest.android,
-          staging,
+          temporaryRoot,
           copyToReservedFile: (source, output) async {
             await output.writeFrom([1]);
             throw const FileSystemException('injected output failure');
@@ -662,7 +714,12 @@ void main() {
   test('reopened staged-byte corruption is rejected before install', () async {
     final source = File('${root.path}${Platform.pathSeparator}source.apk');
     await source.writeAsBytes([1, 2, 3]);
-    final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+    final temporaryRoot = Directory(
+      '${root.path}${Platform.pathSeparator}cache',
+    );
+    final staging = Directory(
+      '${temporaryRoot.path}${Platform.pathSeparator}updates',
+    );
     final manifest = _manifest(
       sha256:
           '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
@@ -672,7 +729,7 @@ void main() {
       stageVerifiedUpdateApk(
         source,
         manifest.android,
-        staging,
+        temporaryRoot,
         afterCopy: (reserved) => reserved.writeAsBytes([9, 9, 9], flush: true),
       ),
       throwsA(
@@ -686,6 +743,215 @@ void main() {
 
     expect(await staging.list().toList(), isEmpty);
   });
+
+  test(
+    'exclusive final reservation retries without mutating a collision',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final updates = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
+      await updates.create(recursive: true);
+      final collision = File(
+        '${updates.path}${Platform.pathSeparator}collision.apk',
+      );
+      await collision.writeAsBytes([7, 7, 7]);
+      final manifest = _manifest(
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      );
+      final attempts = <int>[];
+
+      final staged = await stageVerifiedUpdateApk(
+        source,
+        manifest.android,
+        temporaryRoot,
+        finalFileNameForAttempt: (stem, token, attempt) {
+          attempts.add(attempt);
+          return attempt == 0 ? 'collision.apk' : 'owned.apk';
+        },
+      );
+
+      expect(attempts, [0, 1]);
+      expect(await collision.readAsBytes(), [7, 7, 7]);
+      expect(staged.path, '${updates.path}${Platform.pathSeparator}owned.apk');
+      expect(await staged.readAsBytes(), [1, 2, 3]);
+    },
+  );
+
+  test(
+    'final-copy failure removes only the exclusively owned partial',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final updates = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
+      await updates.create(recursive: true);
+      final unrelated = File(
+        '${updates.path}${Platform.pathSeparator}unrelated.apk',
+      );
+      await unrelated.writeAsBytes([8]);
+      final manifest = _manifest(
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      );
+
+      await expectLater(
+        stageVerifiedUpdateApk(
+          source,
+          manifest.android,
+          temporaryRoot,
+          finalFileNameForAttempt: (stem, token, attempt) => 'owned.apk',
+          copyPendingToFinal: (pending, output) async {
+            await output.writeFrom([1]);
+            throw const FileSystemException('injected final-copy failure');
+          },
+        ),
+        throwsA(
+          isA<FileSystemException>().having(
+            (error) => error.message,
+            'message',
+            'injected final-copy failure',
+          ),
+        ),
+      );
+
+      expect(await unrelated.readAsBytes(), [8]);
+      expect(await updates.list().map((entry) => entry.path).toList(), [
+        unrelated.path,
+      ]);
+      expect(
+        await temporaryRoot
+            .list()
+            .where((entry) => entry.path.contains('.update-stage-'))
+            .toList(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'final-copy corruption is rejected and the owned APK is removed',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final updates = Directory(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      );
+      final manifest = _manifest(
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      );
+
+      await expectLater(
+        stageVerifiedUpdateApk(
+          source,
+          manifest.android,
+          temporaryRoot,
+          afterFinalCopy: (finalFile) =>
+              finalFile.writeAsBytes([9, 9, 9], flush: true),
+        ),
+        throwsA(
+          isA<UpdateStagingException>().having(
+            (error) => error.reasonCode,
+            'reasonCode',
+            'final_hash_mismatch',
+          ),
+        ),
+      );
+
+      expect(await updates.list().toList(), isEmpty);
+    },
+  );
+
+  test('rejects an updates symlink without touching its target', () async {
+    final source = File('${root.path}${Platform.pathSeparator}source.apk');
+    await source.writeAsBytes([1, 2, 3]);
+    final temporaryRoot = Directory(
+      '${root.path}${Platform.pathSeparator}cache',
+    );
+    final outside = Directory('${root.path}${Platform.pathSeparator}outside');
+    await temporaryRoot.create();
+    await outside.create();
+    final unrelated = File(
+      '${outside.path}${Platform.pathSeparator}unrelated.apk',
+    );
+    await unrelated.writeAsBytes([6]);
+    try {
+      await Link(
+        '${temporaryRoot.path}${Platform.pathSeparator}updates',
+      ).create(outside.path);
+    } on FileSystemException {
+      return;
+    }
+    final manifest = _manifest(
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+    );
+
+    await expectLater(
+      stageVerifiedUpdateApk(source, manifest.android, temporaryRoot),
+      throwsA(
+        isA<UpdateStagingException>().having(
+          (error) => error.reasonCode,
+          'reasonCode',
+          'invalid_staging_root',
+        ),
+      ),
+    );
+    expect(await unrelated.readAsBytes(), [6]);
+  });
+
+  test(
+    'owned pending directory is cleaned after canonicalization failure',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final temporaryRoot = Directory(
+        '${root.path}${Platform.pathSeparator}cache',
+      );
+      final manifest = _manifest(
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      );
+
+      await expectLater(
+        stageVerifiedUpdateApk(
+          source,
+          manifest.android,
+          temporaryRoot,
+          canonicalizeOwnedDirectory: (directory) =>
+              throw const FileSystemException('injected canonical failure'),
+        ),
+        throwsA(
+          isA<FileSystemException>().having(
+            (error) => error.message,
+            'message',
+            'injected canonical failure',
+          ),
+        ),
+      );
+
+      expect(
+        await temporaryRoot
+            .list()
+            .where((entry) => entry.path.contains('.update-stage-'))
+            .toList(),
+        isEmpty,
+      );
+    },
+  );
 }
 
 final class _Harness {
@@ -729,10 +995,9 @@ final class _Harness {
             '${root.path}${Platform.pathSeparator}support${Platform.pathSeparator}updates',
           ),
         ),
-        updateStagingDirectoryProvider.overrideWith(
-          (ref) async => Directory(
-            '${root.path}${Platform.pathSeparator}cache${Platform.pathSeparator}updates',
-          ),
+        updateTemporaryDirectoryProvider.overrideWith(
+          (ref) async =>
+              Directory('${root.path}${Platform.pathSeparator}cache'),
         ),
         updateDownloadOperationProvider.overrideWith((ref) => _download),
         updateFileVerificationProvider.overrideWith((ref) => _verifyFile),
@@ -866,13 +1131,16 @@ final class _Harness {
   Future<File> _stage(
     File file,
     AndroidUpdateAsset asset,
-    Directory directory,
+    Directory temporaryRoot,
   ) async {
     events.add('stage');
     if (stagingError case final error?) {
       throw error;
     }
-    return File('${directory.path}${Platform.pathSeparator}${asset.fileName}');
+    return File(
+      '${temporaryRoot.path}${Platform.pathSeparator}updates'
+      '${Platform.pathSeparator}${asset.fileName}',
+    );
   }
 
   Future<void> _cleanup(File file) async {

@@ -48,6 +48,10 @@ typedef UpdateCompletedDownloadCleanup = Future<void> Function(File file);
 typedef UpdateStagingCopy =
     Future<void> Function(File source, RandomAccessFile output);
 typedef UpdateStagingAfterCopy = Future<void> Function(File reserved);
+typedef UpdateFinalFileNameForAttempt =
+    String Function(String stem, String token, int attempt);
+typedef UpdateDirectoryCanonicalizer =
+    Future<Directory> Function(Directory directory);
 
 final class UpdateConfigurationException implements Exception {
   const UpdateConfigurationException(this.reasonCode);
@@ -130,8 +134,12 @@ final updateDownloadDirectoryProvider = FutureProvider<Directory>((ref) async {
   return Directory('${support.path}${Platform.pathSeparator}updates');
 });
 
+final updateTemporaryDirectoryProvider = FutureProvider<Directory>(
+  (ref) => getTemporaryDirectory(),
+);
+
 final updateStagingDirectoryProvider = FutureProvider<Directory>((ref) async {
-  final temporary = await getTemporaryDirectory();
+  final temporary = await ref.watch(updateTemporaryDirectoryProvider.future);
   return Directory('${temporary.path}${Platform.pathSeparator}updates');
 });
 
@@ -197,9 +205,15 @@ final updateCompletedDownloadCleanupProvider =
 Future<File> stageVerifiedUpdateApk(
   File source,
   AndroidUpdateAsset asset,
-  Directory stagingDirectory, {
+  Directory temporaryDirectory, {
   UpdateStagingCopy copyToReservedFile = _copyToReservedFile,
   UpdateStagingAfterCopy? afterCopy,
+  UpdateFinalFileNameForAttempt finalFileNameForAttempt =
+      _finalFileNameForAttempt,
+  UpdateStagingCopy copyPendingToFinal = _copyToReservedFile,
+  UpdateStagingAfterCopy? afterFinalCopy,
+  UpdateDirectoryCanonicalizer canonicalizeOwnedDirectory =
+      _canonicalizeDirectory,
 }) async {
   if (!_isSinglePathSegment(asset.fileName)) {
     throw const UpdateStagingException('invalid_staging_filename');
@@ -208,73 +222,113 @@ Future<File> stageVerifiedUpdateApk(
     throw const UpdateStagingException('invalid_staging_source');
   }
 
-  await stagingDirectory.create(recursive: true);
-  final canonicalDirectory = Directory(
-    await stagingDirectory.resolveSymbolicLinks(),
+  await temporaryDirectory.create(recursive: true);
+  final temporaryType = await FileSystemEntity.type(
+    temporaryDirectory.path,
+    followLinks: false,
   );
-  final ownedDirectory = await canonicalDirectory.createTemp('.update-stage-');
-  final canonicalOwnedDirectory = Directory(
-    await ownedDirectory.resolveSymbolicLinks(),
-  );
-  if (await canonicalOwnedDirectory.parent.resolveSymbolicLinks() !=
-      canonicalDirectory.path) {
-    await _bestEffortDeleteOwnedDirectory(ownedDirectory);
-    throw const UpdateStagingException('invalid_staging_destination');
+  if (temporaryType != FileSystemEntityType.directory) {
+    throw const UpdateStagingException('invalid_temporary_root');
   }
-  final reserved = File(
-    '${canonicalOwnedDirectory.path}${Platform.pathSeparator}candidate.pending',
+  final canonicalTemporary = await _canonicalizeDirectory(temporaryDirectory);
+  final updates = Directory(
+    '${canonicalTemporary.path}${Platform.pathSeparator}updates',
   );
-  File? promoted;
-  try {
-    final output = await reserved.open(mode: FileMode.writeOnly);
-    Object? writeFailure;
-    StackTrace? writeStackTrace;
-    try {
-      await copyToReservedFile(source, output);
-      await output.flush();
-    } catch (error, stackTrace) {
-      writeFailure = error;
-      writeStackTrace = stackTrace;
-    }
-    try {
-      await output.close();
-    } catch (error, stackTrace) {
-      writeFailure ??= error;
-      writeStackTrace ??= stackTrace;
-    }
-    if (writeFailure != null) {
-      Error.throwWithStackTrace(writeFailure, writeStackTrace!);
-    }
+  var updatesType = await FileSystemEntity.type(
+    updates.path,
+    followLinks: false,
+  );
+  if (updatesType == FileSystemEntityType.notFound) {
+    await updates.create();
+    updatesType = await FileSystemEntity.type(updates.path, followLinks: false);
+  }
+  if (updatesType != FileSystemEntityType.directory) {
+    throw const UpdateStagingException('invalid_staging_root');
+  }
+  final canonicalUpdates = await _canonicalizeDirectory(updates);
+  final expectedUpdatesPath =
+      '${canonicalTemporary.path}${Platform.pathSeparator}updates';
+  if (canonicalUpdates.path != expectedUpdatesPath ||
+      await canonicalUpdates.parent.resolveSymbolicLinks() !=
+          canonicalTemporary.path) {
+    throw const UpdateStagingException('invalid_staging_root');
+  }
 
-    await afterCopy?.call(reserved);
-    final stagedDigest = await _hashFile(reserved);
-    if (stagedDigest.$1 != asset.size || stagedDigest.$2 != asset.sha256) {
+  final ownedDirectory = await canonicalTemporary.createTemp('.update-stage-');
+  File? ownedFinal;
+  var succeeded = false;
+  try {
+    final canonicalOwnedDirectory = await canonicalizeOwnedDirectory(
+      ownedDirectory,
+    );
+    if (await canonicalOwnedDirectory.parent.resolveSymbolicLinks() !=
+        canonicalTemporary.path) {
+      throw const UpdateStagingException('invalid_staging_destination');
+    }
+    final pending = File(
+      '${canonicalOwnedDirectory.path}${Platform.pathSeparator}candidate.pending',
+    );
+    await _copyAndFlush(
+      source: source,
+      destination: pending,
+      copy: copyToReservedFile,
+    );
+    await afterCopy?.call(pending);
+    final pendingDigest = await _hashFile(pending);
+    if (pendingDigest.$1 != asset.size || pendingDigest.$2 != asset.sha256) {
       throw const UpdateStagingException('staged_hash_mismatch');
     }
 
     final token = _lastPathSegment(canonicalOwnedDirectory.path);
     final stem = asset.fileName.substring(0, asset.fileName.length - 4);
-    final destination = File(
-      '${canonicalDirectory.path}${Platform.pathSeparator}$stem-$token.apk',
-    );
-    if (await FileSystemEntity.type(destination.path, followLinks: false) !=
-        FileSystemEntityType.notFound) {
-      throw const UpdateStagingException('staging_destination_collision');
+    for (var attempt = 0; attempt < 32; attempt++) {
+      final fileName = finalFileNameForAttempt(stem, token, attempt);
+      if (!_isSinglePathSegment(fileName) || !fileName.endsWith('.apk')) {
+        throw const UpdateStagingException('invalid_final_filename');
+      }
+      final candidate = File(
+        '${canonicalUpdates.path}${Platform.pathSeparator}$fileName',
+      );
+      try {
+        ownedFinal = await candidate.create(exclusive: true);
+        break;
+      } on FileSystemException {
+        if (await FileSystemEntity.type(candidate.path, followLinks: false) ==
+            FileSystemEntityType.notFound) {
+          rethrow;
+        }
+      }
     }
-    promoted = await reserved.rename(destination.path);
-    final canonicalStaged = File(await promoted.resolveSymbolicLinks());
-    final canonicalParent = await canonicalStaged.parent.resolveSymbolicLinks();
-    if (canonicalParent != canonicalDirectory.path ||
-        canonicalStaged.path != destination.path) {
+    final finalFile = ownedFinal;
+    if (finalFile == null) {
+      throw const UpdateStagingException('final_reservation_failed');
+    }
+    await _copyAndFlush(
+      source: pending,
+      destination: finalFile,
+      copy: copyPendingToFinal,
+    );
+    await afterFinalCopy?.call(finalFile);
+    final finalDigest = await _hashFile(finalFile);
+    if (finalDigest.$1 != asset.size || finalDigest.$2 != asset.sha256) {
+      throw const UpdateStagingException('final_hash_mismatch');
+    }
+    if (await FileSystemEntity.type(finalFile.path, followLinks: false) !=
+        FileSystemEntityType.file) {
       throw const UpdateStagingException('invalid_staging_destination');
     }
-    return promoted;
-  } catch (_) {
-    if (promoted != null) {
-      await _bestEffortDeleteOwnedFile(promoted);
+    final canonicalStaged = File(await finalFile.resolveSymbolicLinks());
+    final canonicalParent = await canonicalStaged.parent.resolveSymbolicLinks();
+    if (canonicalParent != canonicalUpdates.path ||
+        canonicalStaged.path != finalFile.path) {
+      throw const UpdateStagingException('invalid_staging_destination');
     }
-    rethrow;
+    succeeded = true;
+    return finalFile;
   } finally {
+    if (!succeeded && ownedFinal != null) {
+      await _bestEffortDeleteOwnedFile(ownedFinal);
+    }
     await _bestEffortDeleteOwnedDirectory(ownedDirectory);
   }
 }
@@ -295,6 +349,32 @@ Future<void> _copyToReservedFile(File source, RandomAccessFile output) async {
   }
 }
 
+Future<void> _copyAndFlush({
+  required File source,
+  required File destination,
+  required UpdateStagingCopy copy,
+}) async {
+  final output = await destination.open(mode: FileMode.writeOnly);
+  Object? writeFailure;
+  StackTrace? writeStackTrace;
+  try {
+    await copy(source, output);
+    await output.flush();
+  } catch (error, stackTrace) {
+    writeFailure = error;
+    writeStackTrace = stackTrace;
+  }
+  try {
+    await output.close();
+  } catch (error, stackTrace) {
+    writeFailure ??= error;
+    writeStackTrace ??= stackTrace;
+  }
+  if (writeFailure != null) {
+    Error.throwWithStackTrace(writeFailure, writeStackTrace!);
+  }
+}
+
 Future<(int, String)> _hashFile(File file) async {
   var size = 0;
   final sink = Sha256().newHashSink();
@@ -311,6 +391,12 @@ String _lastPathSegment(String path) {
   final separator = path.lastIndexOf(Platform.pathSeparator);
   return separator < 0 ? path : path.substring(separator + 1);
 }
+
+String _finalFileNameForAttempt(String stem, String token, int attempt) =>
+    '$stem-$token${attempt == 0 ? '' : '-$attempt'}.apk';
+
+Future<Directory> _canonicalizeDirectory(Directory directory) async =>
+    Directory(await directory.resolveSymbolicLinks());
 
 Future<void> _deleteCompletedDownload(File file) async {
   if (await file.exists()) {

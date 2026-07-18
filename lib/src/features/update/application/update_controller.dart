@@ -303,8 +303,8 @@ final class UpdateController extends Notifier<UpdateStatus> {
       cancellation.throwIfCancelled();
 
       failureReason = UpdateFailureReason.stagingFailed;
-      final stagingFuture = ref.read(updateStagingDirectoryProvider.future);
-      final stagingDirectory = await stagingFuture;
+      final temporaryFuture = ref.read(updateTemporaryDirectoryProvider.future);
+      final temporaryDirectory = await temporaryFuture;
       if (!_mounted) {
         await _bestEffortCleanup(cleanup, downloadedFile);
         return;
@@ -313,7 +313,7 @@ final class UpdateController extends Notifier<UpdateStatus> {
       final staged = await stage(
         downloaded.file,
         manifest.android,
-        stagingDirectory,
+        temporaryDirectory,
       );
       if (!_mounted) {
         await _bestEffortCleanup(cleanup, downloadedFile);
