@@ -296,6 +296,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Custom plan'**
   String get customPlan;
+
+  /// No description provided for @aboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get aboutTitle;
+
+  /// No description provided for @updateInstalledVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} (build {buildNumber})'**
+  String updateInstalledVersion(Object version, Object buildNumber);
+
+  /// No description provided for @updateCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get updateCheck;
+
+  /// No description provided for @updateChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for updates…'**
+  String get updateChecking;
+
+  /// No description provided for @updateCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re up to date'**
+  String get updateCurrent;
+
+  /// No description provided for @updateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} is available'**
+  String updateAvailable(Object version);
+
+  /// No description provided for @updateSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Download size: {size}'**
+  String updateSize(Object size);
+
+  /// No description provided for @updateDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download update'**
+  String get updateDownload;
+
+  /// No description provided for @updateViewRelease.
+  ///
+  /// In en, this message translates to:
+  /// **'View release'**
+  String get updateViewRelease;
+
+  /// No description provided for @updateCellularTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use cellular data?'**
+  String get updateCellularTitle;
+
+  /// No description provided for @updateCellularMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This update is {size}. Your mobile carrier may charge for data.'**
+  String updateCellularMessage(Object size);
+
+  /// No description provided for @updateNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get updateNotNow;
+
+  /// No description provided for @updateDownloadPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Download confirmation needed'**
+  String get updateDownloadPending;
+
+  /// No description provided for @updateDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading update'**
+  String get updateDownloading;
+
+  /// No description provided for @updateProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{received} of {total} · {speed}/s'**
+  String updateProgress(Object received, Object total, Object speed);
+
+  /// No description provided for @updateProgressUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {received}'**
+  String updateProgressUnknown(Object received);
+
+  /// No description provided for @updateCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get updateCancel;
+
+  /// No description provided for @updateReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Update ready'**
+  String get updateReady;
+
+  /// No description provided for @updateReadyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The update has been verified and is ready to install.'**
+  String get updateReadyMessage;
+
+  /// No description provided for @updateInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install update'**
+  String get updateInstall;
+
+  /// No description provided for @updatePermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow installs from this app'**
+  String get updatePermissionTitle;
+
+  /// No description provided for @updatePermissionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow this app in the Android settings, then return here to continue installation.'**
+  String get updatePermissionMessage;
+
+  /// No description provided for @updatePermissionRetryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission is still not allowed. Tap install to open Android settings again.'**
+  String get updatePermissionRetryMessage;
+
+  /// No description provided for @updateInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening Android installer…'**
+  String get updateInstalling;
+
+  /// No description provided for @updateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to update'**
+  String get updateFailed;
+
+  /// No description provided for @updateFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Please check your connection and try again.'**
+  String get updateFailedMessage;
 }
 
 class _AppLocalizationsDelegate

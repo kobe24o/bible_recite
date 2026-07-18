@@ -110,6 +110,96 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get customPlan => '自定义计划';
+
+  @override
+  String get aboutTitle => '关于';
+
+  @override
+  String updateInstalledVersion(Object version, Object buildNumber) {
+    return '版本 $version（构建 $buildNumber）';
+  }
+
+  @override
+  String get updateCheck => '检查更新';
+
+  @override
+  String get updateChecking => '正在检查更新…';
+
+  @override
+  String get updateCurrent => '已是最新版本';
+
+  @override
+  String updateAvailable(Object version) {
+    return '发现新版本 $version';
+  }
+
+  @override
+  String updateSize(Object size) {
+    return '下载大小：$size';
+  }
+
+  @override
+  String get updateDownload => '下载更新';
+
+  @override
+  String get updateViewRelease => '查看发行版本';
+
+  @override
+  String get updateCellularTitle => '使用移动数据？';
+
+  @override
+  String updateCellularMessage(Object size) {
+    return '此更新大小为 $size，移动运营商可能会收取流量费用。';
+  }
+
+  @override
+  String get updateNotNow => '暂不';
+
+  @override
+  String get updateDownloadPending => '等待下载确认';
+
+  @override
+  String get updateDownloading => '正在下载更新';
+
+  @override
+  String updateProgress(Object received, Object total, Object speed) {
+    return '$received / $total · $speed/秒';
+  }
+
+  @override
+  String updateProgressUnknown(Object received) {
+    return '已下载 $received';
+  }
+
+  @override
+  String get updateCancel => '取消';
+
+  @override
+  String get updateReady => '更新已准备好';
+
+  @override
+  String get updateReadyMessage => '更新已经验证完成，可以安装。';
+
+  @override
+  String get updateInstall => '安装更新';
+
+  @override
+  String get updatePermissionTitle => '允许此应用安装';
+
+  @override
+  String get updatePermissionMessage => '请在 Android 设置中允许此应用安装，然后返回这里继续。';
+
+  @override
+  String get updatePermissionRetryMessage => '仍未获得许可。点击安装可再次打开 Android 设置。';
+
+  @override
+  String get updateInstalling => '正在打开 Android 安装程序…';
+
+  @override
+  String get updateFailed => '无法更新';
+
+  @override
+  String get updateFailedMessage => '请检查网络后重试。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -218,4 +308,94 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get customPlan => '自訂計劃';
+
+  @override
+  String get aboutTitle => '關於';
+
+  @override
+  String updateInstalledVersion(Object version, Object buildNumber) {
+    return '版本 $version（建置 $buildNumber）';
+  }
+
+  @override
+  String get updateCheck => '檢查更新';
+
+  @override
+  String get updateChecking => '正在檢查更新…';
+
+  @override
+  String get updateCurrent => '已是最新版本';
+
+  @override
+  String updateAvailable(Object version) {
+    return '發現新版本 $version';
+  }
+
+  @override
+  String updateSize(Object size) {
+    return '下載大小：$size';
+  }
+
+  @override
+  String get updateDownload => '下載更新';
+
+  @override
+  String get updateViewRelease => '查看發行版本';
+
+  @override
+  String get updateCellularTitle => '使用行動數據？';
+
+  @override
+  String updateCellularMessage(Object size) {
+    return '此更新大小為 $size，行動電信商可能會收取流量費用。';
+  }
+
+  @override
+  String get updateNotNow => '暫不';
+
+  @override
+  String get updateDownloadPending => '等待下載確認';
+
+  @override
+  String get updateDownloading => '正在下載更新';
+
+  @override
+  String updateProgress(Object received, Object total, Object speed) {
+    return '$received / $total · $speed/秒';
+  }
+
+  @override
+  String updateProgressUnknown(Object received) {
+    return '已下載 $received';
+  }
+
+  @override
+  String get updateCancel => '取消';
+
+  @override
+  String get updateReady => '更新已準備好';
+
+  @override
+  String get updateReadyMessage => '更新已驗證完成，可以安裝。';
+
+  @override
+  String get updateInstall => '安裝更新';
+
+  @override
+  String get updatePermissionTitle => '允許此應用程式安裝';
+
+  @override
+  String get updatePermissionMessage => '請在 Android 設定中允許此應用程式安裝，然後返回這裡繼續。';
+
+  @override
+  String get updatePermissionRetryMessage => '仍未獲得許可。點選安裝可再次開啟 Android 設定。';
+
+  @override
+  String get updateInstalling => '正在開啟 Android 安裝程式…';
+
+  @override
+  String get updateFailed => '無法更新';
+
+  @override
+  String get updateFailedMessage => '請檢查網路後重試。';
 }

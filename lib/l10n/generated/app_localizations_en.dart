@@ -113,4 +113,98 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get customPlan => 'Custom plan';
+
+  @override
+  String get aboutTitle => 'About';
+
+  @override
+  String updateInstalledVersion(Object version, Object buildNumber) {
+    return 'Version $version (build $buildNumber)';
+  }
+
+  @override
+  String get updateCheck => 'Check for updates';
+
+  @override
+  String get updateChecking => 'Checking for updates…';
+
+  @override
+  String get updateCurrent => 'You\'re up to date';
+
+  @override
+  String updateAvailable(Object version) {
+    return 'Version $version is available';
+  }
+
+  @override
+  String updateSize(Object size) {
+    return 'Download size: $size';
+  }
+
+  @override
+  String get updateDownload => 'Download update';
+
+  @override
+  String get updateViewRelease => 'View release';
+
+  @override
+  String get updateCellularTitle => 'Use cellular data?';
+
+  @override
+  String updateCellularMessage(Object size) {
+    return 'This update is $size. Your mobile carrier may charge for data.';
+  }
+
+  @override
+  String get updateNotNow => 'Not now';
+
+  @override
+  String get updateDownloadPending => 'Download confirmation needed';
+
+  @override
+  String get updateDownloading => 'Downloading update';
+
+  @override
+  String updateProgress(Object received, Object total, Object speed) {
+    return '$received of $total · $speed/s';
+  }
+
+  @override
+  String updateProgressUnknown(Object received) {
+    return 'Downloaded $received';
+  }
+
+  @override
+  String get updateCancel => 'Cancel';
+
+  @override
+  String get updateReady => 'Update ready';
+
+  @override
+  String get updateReadyMessage =>
+      'The update has been verified and is ready to install.';
+
+  @override
+  String get updateInstall => 'Install update';
+
+  @override
+  String get updatePermissionTitle => 'Allow installs from this app';
+
+  @override
+  String get updatePermissionMessage =>
+      'Allow this app in the Android settings, then return here to continue installation.';
+
+  @override
+  String get updatePermissionRetryMessage =>
+      'Permission is still not allowed. Tap install to open Android settings again.';
+
+  @override
+  String get updateInstalling => 'Opening Android installer…';
+
+  @override
+  String get updateFailed => 'Unable to update';
+
+  @override
+  String get updateFailedMessage =>
+      'Please check your connection and try again.';
 }

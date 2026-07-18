@@ -46,6 +46,15 @@ class StatisticsScreen extends ConsumerWidget {
                     repository: repository,
                     initial: data.settings,
                   ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      key: const Key('about-open'),
+                      leading: const Icon(Icons.info_outline_rounded),
+                      title: Text(localizations.aboutTitle),
+                      onTap: () => context.go('/about'),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   if (!hasStatistics)
                     _StatisticsEmptySection(
