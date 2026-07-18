@@ -26,11 +26,40 @@ final class DownloadedUpdate {
 
 final class DownloadCancellation {
   bool _isCancelled = false;
+  final Set<void Function()> _listeners = <void Function()>{};
 
   bool get isCancelled => _isCancelled;
 
   void cancel() {
+    if (_isCancelled) {
+      return;
+    }
     _isCancelled = true;
+    final listeners = List<void Function()>.from(_listeners);
+    _listeners.clear();
+    for (final listener in listeners) {
+      listener();
+    }
+  }
+
+  /// Registers a resource-release callback and returns its idempotent remover.
+  ///
+  /// A callback registered after cancellation is invoked synchronously and is
+  /// not retained.
+  void Function() register(void Function() listener) {
+    if (_isCancelled) {
+      listener();
+      return _noOp;
+    }
+    _listeners.add(listener);
+    var isRemoved = false;
+    return () {
+      if (isRemoved) {
+        return;
+      }
+      isRemoved = true;
+      _listeners.remove(listener);
+    };
   }
 
   void throwIfCancelled() {
@@ -76,7 +105,16 @@ final class ResumableDownloader {
     final partFile = File(_partPath(directory, asset));
     final sidecarFile = File(_sidecarPath(directory, asset));
     final completedFile = File(_completedPath(directory, asset));
+    if (await completedFile.exists()) {
+      throw StateError('Completed update file already exists');
+    }
     final resume = await _readResumeState(partFile, sidecarFile, asset);
+    if (resume != null && resume.receivedBytes == asset.size) {
+      cancellation.throwIfCancelled();
+      await partFile.rename(completedFile.path);
+      await _deleteIfExists(sidecarFile);
+      return DownloadedUpdate(file: completedFile);
+    }
     final failures = <String>[];
 
     for (final source in asset.urls) {
@@ -106,7 +144,21 @@ final class ResumableDownloader {
         return DownloadedUpdate(file: completedFile);
       } on DownloadCancelled {
         rethrow;
-      } catch (error) {
+      } on _ProgressCallbackFailure catch (failure) {
+        Error.throwWithStackTrace(failure.error, failure.stackTrace);
+      } on FileSystemException {
+        rethrow;
+      } on StateError {
+        rethrow;
+      } on HttpException catch (error) {
+        failures.add('${source.host}: $error');
+      } on SocketException catch (error) {
+        failures.add('${source.host}: $error');
+      } on HandshakeException catch (error) {
+        failures.add('${source.host}: $error');
+      } on TimeoutException catch (error) {
+        failures.add('${source.host}: $error');
+      } on FormatException catch (error) {
         failures.add('${source.host}: $error');
       }
     }
@@ -127,7 +179,11 @@ final class ResumableDownloader {
     while (true) {
       cancellation.throwIfCancelled();
       final opened = await _open(source, activeResume, cancellation);
+      final removeCancellationListener = cancellation.register(
+        () => opened.client.close(force: true),
+      );
       try {
+        cancellation.throwIfCancelled();
         final response = opened.response;
         if (response.statusCode == HttpStatus.partialContent) {
           if (activeResume == null) {
@@ -180,7 +236,11 @@ final class ResumableDownloader {
           cancellation: cancellation,
         );
         return;
+      } catch (_) {
+        cancellation.throwIfCancelled();
+        rethrow;
       } finally {
+        removeCancellationListener();
         opened.client.close(force: true);
       }
     }
@@ -192,6 +252,10 @@ final class ResumableDownloader {
     DownloadCancellation cancellation,
   ) async {
     final client = _httpClientFactory()..connectionTimeout = _connectTimeout;
+    final removeCancellationListener = cancellation.register(
+      () => client.close(force: true),
+    );
+    var responseWasReturned = false;
     try {
       cancellation.throwIfCancelled();
       final request = await client.getUrl(_requestUriResolver(source));
@@ -203,10 +267,18 @@ final class ResumableDownloader {
         request.headers.set(HttpHeaders.ifRangeHeader, resume.etag);
       }
       cancellation.throwIfCancelled();
-      return _OpenedResponse(client, await request.close());
+      final response = await request.close();
+      cancellation.throwIfCancelled();
+      responseWasReturned = true;
+      return _OpenedResponse(client, response);
     } catch (_) {
-      client.close(force: true);
+      cancellation.throwIfCancelled();
       rethrow;
+    } finally {
+      removeCancellationListener();
+      if (!responseWasReturned) {
+        client.close(force: true);
+      }
     }
   }
 
@@ -253,14 +325,19 @@ final class ResumableDownloader {
             receivedBytes: receivedBytes,
           ),
         );
-        onProgress(
-          DownloadProgress(
-            receivedBytes: receivedBytes,
-            totalBytes: asset.size,
-          ),
-        );
+        try {
+          onProgress(
+            DownloadProgress(
+              receivedBytes: receivedBytes,
+              totalBytes: asset.size,
+            ),
+          );
+        } catch (error, stackTrace) {
+          throw _ProgressCallbackFailure(error, stackTrace);
+        }
         cancellation.throwIfCancelled();
       }
+      cancellation.throwIfCancelled();
       if (receivedBytes != asset.size) {
         throw const FormatException('Update response had an unexpected size');
       }
@@ -287,8 +364,8 @@ Future<_ResumeState?> _readResumeState(
     }
     final state = _ResumeState.fromJson(Map<Object?, Object?>.from(decoded));
     if (state.expectedSize != asset.size ||
-        state.receivedBytes <= 0 ||
-        state.receivedBytes >= asset.size ||
+        state.receivedBytes < 0 ||
+        state.receivedBytes > asset.size ||
         !asset.urls.map((url) => url.toString()).contains(state.url) ||
         await partFile.length() != state.receivedBytes) {
       throw const FormatException('Invalid download sidecar state');
@@ -359,6 +436,8 @@ String _sidecarPath(Directory directory, AndroidUpdateAsset asset) =>
 
 Uri _identityUri(Uri uri) => uri;
 
+void _noOp() {}
+
 final class _OpenedResponse {
   const _OpenedResponse(this.client, this.response);
 
@@ -405,4 +484,11 @@ final class _ResumeState {
     'expectedSize': expectedSize,
     'receivedBytes': receivedBytes,
   };
+}
+
+final class _ProgressCallbackFailure implements Exception {
+  const _ProgressCallbackFailure(this.error, this.stackTrace);
+
+  final Object error;
+  final StackTrace stackTrace;
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -197,6 +198,169 @@ void main() {
         ).exists(),
         isFalse,
       );
+    },
+  );
+
+  test('cancels promptly while response headers are stalled', () async {
+    final payload = utf8.encode('stalled response payload');
+    final asset = await _asset(payload, const [
+      '/stalled-headers',
+      '/fallback',
+    ]);
+    final requestStarted = Completer<void>();
+    final releaseServer = Completer<void>();
+    handler.routes['/stalled-headers'] = (request) async {
+      requestStarted.complete();
+      await releaseServer.future;
+      await request.response.close();
+    };
+    handler.routes['/fallback'] = (request) async {
+      _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
+    };
+    final cancellation = DownloadCancellation();
+    final pending = downloader().download(
+      asset,
+      directory,
+      onProgress: (_) {},
+      cancellation: cancellation,
+    );
+
+    await requestStarted.future.timeout(const Duration(seconds: 1));
+    cancellation.cancel();
+
+    await expectLater(
+      pending.timeout(const Duration(seconds: 1)),
+      throwsA(isA<DownloadCancelled>()),
+    );
+    expect(handler.paths, ['/stalled-headers']);
+    releaseServer.complete();
+  });
+
+  test(
+    'cancels promptly while an otherwise idle body stream is open',
+    () async {
+      final payload = utf8.encode('stalled body payload');
+      final asset = await _asset(payload, const ['/stalled-body', '/fallback']);
+      final bodyIsIdle = Completer<void>();
+      final releaseServer = Completer<void>();
+      handler.routes['/stalled-body'] = (request) async {
+        request.response.statusCode = HttpStatus.ok;
+        request.response.headers
+          ..set(HttpHeaders.etagHeader, '"v1"')
+          ..contentLength = payload.length;
+        await request.response.flush();
+        bodyIsIdle.complete();
+        await releaseServer.future;
+        request.response.add(payload);
+        await request.response.close();
+      };
+      handler.routes['/fallback'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
+      };
+      final cancellation = DownloadCancellation();
+      final pending = downloader().download(
+        asset,
+        directory,
+        onProgress: (_) {},
+        cancellation: cancellation,
+      );
+
+      await bodyIsIdle.future.timeout(const Duration(seconds: 1));
+      cancellation.cancel();
+
+      await expectLater(
+        pending.timeout(const Duration(seconds: 1)),
+        throwsA(isA<DownloadCancelled>()),
+      );
+      expect(handler.paths, ['/stalled-body']);
+      releaseServer.complete();
+    },
+  );
+
+  test(
+    'promotes a complete cancelled part without another network request',
+    () async {
+      final payload = utf8.encode('complete retained part');
+      final asset = await _asset(payload, const ['/complete-retained']);
+      final cancellation = DownloadCancellation();
+      handler.routes['/complete-retained'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"v1"');
+      };
+
+      await expectLater(
+        downloader().download(
+          asset,
+          directory,
+          onProgress: (_) => cancellation.cancel(),
+          cancellation: cancellation,
+        ),
+        throwsA(isA<DownloadCancelled>()),
+      );
+      expect(await _partFile(directory, asset).length(), payload.length);
+
+      final promoted = await downloader().download(
+        asset,
+        directory,
+        onProgress: (_) {},
+        cancellation: DownloadCancellation(),
+      );
+
+      expect(await promoted.file.readAsBytes(), payload);
+      expect(handler.paths, ['/complete-retained']);
+    },
+  );
+
+  test(
+    'propagates progress callback errors without trying a fallback source',
+    () async {
+      final payload = utf8.encode('callback failure payload');
+      final asset = await _asset(payload, const ['/callback', '/fallback']);
+      handler.routes['/callback'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"v1"');
+      };
+      handler.routes['/fallback'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
+      };
+
+      await expectLater(
+        downloader().download(
+          asset,
+          directory,
+          onProgress: (_) => throw StateError('progress callback failed'),
+          cancellation: DownloadCancellation(),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(handler.paths, ['/callback']);
+    },
+  );
+
+  test(
+    'propagates final APK collisions before making a source request',
+    () async {
+      final payload = utf8.encode('final collision payload');
+      final asset = await _asset(payload, const ['/collision', '/fallback']);
+      final finalFile = File(
+        '${directory.path}${Platform.pathSeparator}${asset.fileName}',
+      );
+      await finalFile.writeAsBytes(payload);
+      handler.routes['/collision'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"v1"');
+      };
+      handler.routes['/fallback'] = (request) async {
+        _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
+      };
+
+      await expectLater(
+        downloader().download(
+          asset,
+          directory,
+          onProgress: (_) {},
+          cancellation: DownloadCancellation(),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(handler.paths, isEmpty);
     },
   );
 
