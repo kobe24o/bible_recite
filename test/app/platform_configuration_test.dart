@@ -19,6 +19,24 @@ void main() {
     expect(manifest, contains('android.permission.INTERNET'));
   });
 
+  test('Android update installation uses a private FileProvider path', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    final paths = File(
+      'android/app/src/main/res/xml/update_file_paths.xml',
+    ).readAsStringSync();
+
+    expect(manifest, contains('android.permission.REQUEST_INSTALL_PACKAGES'));
+    expect(manifest, contains('androidx.core.content.FileProvider'));
+    expect(manifest, contains('android:exported="false"'));
+    expect(manifest, contains(r'${applicationId}.update-files'));
+    expect(manifest, contains('@xml/update_file_paths'));
+    expect(paths, contains('<cache-path'));
+    expect(paths, contains('path="updates/"'));
+    expect(paths, isNot(contains('path="."')));
+  });
+
   test('release identity changes when launcher artwork changes', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',

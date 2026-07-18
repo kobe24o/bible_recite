@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 
 import '../domain/update_manifest.dart';
+import '../domain/app_version.dart';
+import '../platform/android_update_bridge.dart';
 
 final class UpdateVerificationException implements Exception {
   const UpdateVerificationException(this.reason);
@@ -29,6 +31,29 @@ final class UpdateVerifier {
     } on UpdateVerificationException {
       await _deleteFailedDownload(file);
       rethrow;
+    }
+  }
+
+  Future<void> verifyAndroidPackage({
+    required AndroidApkInfo apk,
+    required UpdateManifest manifest,
+    required AppVersion installedVersion,
+  }) async {
+    if (apk.packageName != manifest.android.packageName) {
+      throw const UpdateVerificationException('package_name_mismatch');
+    }
+    if (apk.certificateSha256 != manifest.android.signingCertificateSha256) {
+      throw const UpdateVerificationException('certificate_mismatch');
+    }
+
+    final signedVersionName =
+        '${manifest.version.major}.${manifest.version.minor}.${manifest.version.patch}';
+    if (apk.versionName != signedVersionName ||
+        apk.versionCode != manifest.version.buildNumber) {
+      throw const UpdateVerificationException('version_mismatch');
+    }
+    if (!manifest.version.isNewerThan(installedVersion)) {
+      throw const UpdateVerificationException('not_newer');
     }
   }
 }
