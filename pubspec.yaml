@@ -40,6 +40,8 @@ dependencies:
   sqlite3: 3.3.4
   path_provider: 2.1.6
   cryptography: 2.9.0
+  package_info_plus: 9.0.1
+  url_launcher: 6.3.2
   archive: 4.0.9
   record: 7.1.1
   sherpa_onnx: 1.13.4
