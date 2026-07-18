@@ -1,14 +1,19 @@
 import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/app/router.dart';
+import 'package:bible_recite/src/features/update/application/update_providers.dart';
 import 'package:bible_recite/src/features/update/presentation/about_screen.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  setUp(() => appRouter.go('/'));
+  tearDown(() => appRouter.go('/'));
+
   testWidgets('all four Chinese navigation tabs open localized pages', (
     tester,
   ) async {
@@ -71,6 +76,64 @@ void main() {
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       3,
+    );
+  });
+
+  testWidgets('My About entry and scripture sources select real destinations', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final actions = _CountingUpdateActions();
+    appRouter.go('/statistics');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          aboutUpdateActionsProvider.overrideWith((ref) => actions),
+          installedPackageInfoProvider.overrideWith(
+            (ref) async => PackageInfo(
+              appName: 'Bible Recite',
+              packageName: 'app.biblerecite',
+              version: '1.0.4',
+              buildNumber: '7',
+              buildSignature: '',
+            ),
+          ),
+        ],
+        child: const BibleReciteApp(locale: Locale('en')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
+    await tester.tap(find.byKey(const Key('about-open')));
+    await tester.pumpAndSettle();
+
+    expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
+    expect(find.widgetWithText(AppBar, 'About'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
+
+    appRouter.go('/about/scripture-sources');
+    await tester.pumpAndSettle();
+
+    expect(
+      appRouter.routerDelegate.currentConfiguration.uri.path,
+      '/about/scripture-sources',
+    );
+    expect(find.widgetWithText(AppBar, 'Scripture sources'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
     );
   });
 }

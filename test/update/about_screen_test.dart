@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bible_recite/src/features/update/application/update_controller.dart';
 import 'package:bible_recite/src/features/update/application/update_providers.dart';
+import 'package:bible_recite/src/features/update/data/resumable_downloader.dart';
 import 'package:bible_recite/src/features/update/domain/app_version.dart';
 import 'package:bible_recite/src/features/update/domain/update_manifest.dart';
 import 'package:bible_recite/src/features/update/domain/update_status.dart';
+import 'package:bible_recite/src/features/update/platform/android_update_bridge.dart';
 import 'package:bible_recite/src/features/update/presentation/about_screen.dart';
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -231,6 +234,172 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('private launcher failure'), findsNothing);
   });
+
+  testWidgets(
+    'real controller preserves a staged update when About is remounted',
+    (tester) async {
+      final harness = _RealControllerHarness.create();
+      addTearDown(harness.dispose);
+
+      await _pumpRealAbout(tester, harness.container);
+      await _pumpUntilControllerState<UpdateAvailable>(
+        tester,
+        harness.container,
+      );
+      expect(harness.feedChecks, 1);
+      expect(
+        harness.container.read(updateControllerProvider),
+        isA<UpdateAvailable>(),
+      );
+
+      await tester.tap(find.byKey(const Key('about-update')));
+      await _pumpUntilControllerState<ReadyToInstall>(
+        tester,
+        harness.container,
+      );
+      final staged = harness.container.read(updateControllerProvider);
+      expect(staged, isA<ReadyToInstall>());
+      expect(find.byKey(const Key('about-install')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpRealAbout(tester, harness.container);
+
+      expect(harness.feedChecks, 1);
+      expect(harness.container.read(updateControllerProvider), same(staged));
+      expect(find.byKey(const Key('about-install')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'real controller handles permission lifecycle and explicit retry once each',
+    (tester) async {
+      final harness = _RealControllerHarness.create(
+        permissionResults: [false, false, false, true],
+      );
+      addTearDown(harness.dispose);
+
+      await _pumpRealAbout(tester, harness.container);
+      await _pumpUntilControllerState<UpdateAvailable>(
+        tester,
+        harness.container,
+      );
+      await tester.tap(find.byKey(const Key('about-update')));
+      await _pumpUntilControllerState<ReadyToInstall>(
+        tester,
+        harness.container,
+      );
+      await tester.tap(find.byKey(const Key('about-install')));
+      await _pumpUntilControllerState<PermissionRequired>(
+        tester,
+        harness.container,
+      );
+
+      final pending = harness.container.read(updateControllerProvider);
+      expect(
+        pending,
+        isA<PermissionRequired>().having(
+          (state) => state.retryPhase,
+          'retryPhase',
+          PermissionRetryPhase.awaitingResume,
+        ),
+      );
+      expect(harness.permissionChecks, 1);
+      expect(harness.settingsOpens, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpRealAbout(tester, harness.container);
+      expect(harness.feedChecks, 1);
+      expect(harness.container.read(updateControllerProvider), same(pending));
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _pumpUntilControllerState<PermissionRequired>(
+        tester,
+        harness.container,
+        where: (state) =>
+            state.retryPhase == PermissionRetryPhase.explicitRetry,
+      );
+
+      expect(harness.permissionChecks, 2);
+      expect(harness.settingsOpens, 1);
+      expect(harness.installerLaunches, 0);
+      expect(
+        harness.container.read(updateControllerProvider),
+        isA<PermissionRequired>().having(
+          (state) => state.retryPhase,
+          'retryPhase',
+          PermissionRetryPhase.explicitRetry,
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('about-install')));
+      await _pumpUntilControllerState<PermissionRequired>(
+        tester,
+        harness.container,
+        where: (state) =>
+            state.retryPhase == PermissionRetryPhase.awaitingResume,
+      );
+      expect(harness.permissionChecks, 3);
+      expect(harness.settingsOpens, 2);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _pumpUntilControllerState<ReadyToInstall>(
+        tester,
+        harness.container,
+      );
+
+      expect(harness.permissionChecks, 4);
+      expect(harness.settingsOpens, 2);
+      expect(harness.installerLaunches, 1);
+      expect(
+        harness.container.read(updateControllerProvider),
+        isA<ReadyToInstall>(),
+      );
+    },
+  );
+}
+
+Future<void> _pumpRealAbout(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AboutScreen(),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump();
+}
+
+Future<void> _pumpUntilControllerState<T extends UpdateStatus>(
+  WidgetTester tester,
+  ProviderContainer container, {
+  bool Function(T state)? where,
+}) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    await tester.pump(const Duration(milliseconds: 10));
+    final state = container.read(updateControllerProvider);
+    if (state is T && (where == null || where(state))) {
+      return;
+    }
+  }
+  fail(
+    'UpdateController did not reach $T; '
+    'last state: ${container.read(updateControllerProvider)}',
+  );
 }
 
 Future<void> _pumpAbout(
@@ -293,6 +462,139 @@ final class _Actions implements AboutUpdateActions {
 
   @override
   Future<void> startDownload() async => downloads++;
+}
+
+final class _RealControllerHarness {
+  _RealControllerHarness._({
+    required this.root,
+    required this.container,
+    required this._permissionResults,
+  });
+
+  static _RealControllerHarness create({
+    List<bool> permissionResults = const [true],
+  }) {
+    final root = Directory(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'about-real-controller',
+    );
+    late _RealControllerHarness harness;
+    final container = ProviderContainer(
+      overrides: [
+        updateRuntimePlatformProvider.overrideWith(
+          (ref) => UpdateRuntimePlatform.android,
+        ),
+        installedPackageInfoProvider.overrideWith(
+          (ref) async => PackageInfo(
+            appName: 'Bible Recite',
+            packageName: 'app.biblerecite',
+            version: '1.0.4',
+            buildNumber: '7',
+            buildSignature: '',
+          ),
+        ),
+        updateManifestLoaderProvider.overrideWith(
+          (ref) => () async {
+            harness.feedChecks++;
+            return _manifest();
+          },
+        ),
+        updateNetworkTransportProvider.overrideWith(
+          (ref) =>
+              () async => 'wifi',
+        ),
+        updateDownloadDirectoryProvider.overrideWith(
+          (ref) async =>
+              Directory('${root.path}${Platform.pathSeparator}download'),
+        ),
+        updateTemporaryDirectoryProvider.overrideWith(
+          (ref) async =>
+              Directory('${root.path}${Platform.pathSeparator}cache'),
+        ),
+        updateDownloadOperationProvider.overrideWith(
+          (ref) =>
+              (
+                asset,
+                directory, {
+                required onProgress,
+                required cancellation,
+              }) async {
+                onProgress(
+                  DownloadProgress(
+                    receivedBytes: asset.size,
+                    totalBytes: asset.size,
+                  ),
+                );
+                return DownloadedUpdate(
+                  file: File(
+                    '${directory.path}${Platform.pathSeparator}${asset.fileName}',
+                  ),
+                );
+              },
+        ),
+        updateFileVerificationProvider.overrideWith(
+          (ref) => (file, asset) async {},
+        ),
+        updateApkInspectionProvider.overrideWith(
+          (ref) =>
+              (file) async => const AndroidApkInfo(
+                packageName: 'app.biblerecite',
+                versionName: '1.0.5',
+                versionCode: 8,
+                certificateSha256:
+                    '4066fe3c0e57ec575e5d37b741d68d347f8af80b7cf9da4799636d7039b5a7e7',
+              ),
+        ),
+        updatePackageVerificationProvider.overrideWith(
+          (ref) => (apk, manifest, installedVersion) async {},
+        ),
+        updateApkStagingProvider.overrideWith(
+          (ref) =>
+              (file, asset, directory) async => File(
+                '${directory.path}${Platform.pathSeparator}updates'
+                '${Platform.pathSeparator}${asset.fileName}',
+              ),
+        ),
+        updateCompletedDownloadCleanupProvider.overrideWith(
+          (ref) => (file) async {},
+        ),
+        updateInstallPermissionProvider.overrideWith(
+          (ref) => () async {
+            harness.permissionChecks++;
+            return harness._permissionResults.length == 1
+                ? harness._permissionResults.single
+                : harness._permissionResults.removeAt(0);
+          },
+        ),
+        updateOpenInstallPermissionProvider.overrideWith(
+          (ref) =>
+              () async => harness.settingsOpens++,
+        ),
+        updateApkInstallProvider.overrideWith(
+          (ref) =>
+              (file) async => harness.installerLaunches++,
+        ),
+      ],
+    );
+    harness = _RealControllerHarness._(
+      root: root,
+      container: container,
+      permissionResults: [...permissionResults],
+    );
+    return harness;
+  }
+
+  final Directory root;
+  final ProviderContainer container;
+  final List<bool> _permissionResults;
+  var feedChecks = 0;
+  var permissionChecks = 0;
+  var settingsOpens = 0;
+  var installerLaunches = 0;
+
+  void dispose() {
+    container.dispose();
+  }
 }
 
 UpdateManifest _manifest() => UpdateManifest.fromPayloadBytes(
