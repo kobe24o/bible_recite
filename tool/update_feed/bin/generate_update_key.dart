@@ -18,22 +18,11 @@ Future<GeneratedUpdateKeyFiles> generateUpdateKey({
   required File privateOutput,
   required File publicOutput,
 }) async {
-  if (privateOutput.absolute.path == publicOutput.absolute.path) {
+  if (_normalizedOutputPath(privateOutput) ==
+      _normalizedOutputPath(publicOutput)) {
     throw FileSystemException(
       'Private and public key output paths must be different.',
       privateOutput.path,
-    );
-  }
-  if (await privateOutput.exists()) {
-    throw FileSystemException(
-      'Refusing to overwrite an existing private key file.',
-      privateOutput.path,
-    );
-  }
-  if (await publicOutput.exists()) {
-    throw FileSystemException(
-      'Refusing to overwrite an existing public key file.',
-      publicOutput.path,
     );
   }
 
@@ -45,17 +34,64 @@ Future<GeneratedUpdateKeyFiles> generateUpdateKey({
     );
   }
 
-  final random = Random.secure();
-  final seed = List<int>.generate(32, (_) => random.nextInt(256));
-  final keyPair = await Ed25519().newKeyPairFromSeed(seed);
-  final publicKey = await keyPair.extractPublicKey();
+  RandomAccessFile? privateFile;
+  RandomAccessFile? publicFile;
+  var privateCreated = false;
+  var publicCreated = false;
+  try {
+    await privateOutput.create(exclusive: true);
+    privateCreated = true;
+    await publicOutput.create(exclusive: true);
+    publicCreated = true;
+    privateFile = await privateOutput.open(mode: FileMode.append);
+    publicFile = await publicOutput.open(mode: FileMode.append);
 
-  await privateOutput.writeAsString(base64Encode(seed), flush: true);
-  await publicOutput.writeAsString(base64Encode(publicKey.bytes), flush: true);
-  return GeneratedUpdateKeyFiles(
-    privateOutput: privateOutput,
-    publicOutput: publicOutput,
+    final random = Random.secure();
+    final seed = List<int>.generate(32, (_) => random.nextInt(256));
+    final keyPair = await Ed25519().newKeyPairFromSeed(seed);
+    final publicKey = await keyPair.extractPublicKey();
+
+    await privateFile.writeString(base64Encode(seed));
+    await privateFile.flush();
+    await publicFile.writeString(base64Encode(publicKey.bytes));
+    await publicFile.flush();
+    await privateFile.close();
+    privateFile = null;
+    await publicFile.close();
+    publicFile = null;
+    return GeneratedUpdateKeyFiles(
+      privateOutput: privateOutput,
+      publicOutput: publicOutput,
+    );
+  } catch (_) {
+    await _closeQuietly(publicFile);
+    await _closeQuietly(privateFile);
+    if (privateCreated) {
+      await privateOutput.delete();
+    }
+    if (publicCreated) {
+      await publicOutput.delete();
+    }
+    rethrow;
+  }
+}
+
+String _normalizedOutputPath(File file) {
+  final path = file.absolute.uri.normalizePath().toFilePath(
+    windows: Platform.isWindows,
   );
+  return Platform.isWindows ? path.toLowerCase() : path;
+}
+
+Future<void> _closeQuietly(RandomAccessFile? file) async {
+  if (file == null) {
+    return;
+  }
+  try {
+    await file.close();
+  } on FileSystemException {
+    // Continue cleanup for files exclusively created by this invocation.
+  }
 }
 
 Future<void> main(List<String> arguments) async {

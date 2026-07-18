@@ -63,6 +63,27 @@ void main() {
     expect(await publicOutput.exists(), isFalse);
   });
 
+  test('refuses to overwrite an existing public key output', () async {
+    final privateOutput = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}private.txt',
+    );
+    final publicOutput = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}public.txt',
+    );
+    await publicOutput.writeAsString('existing-public');
+
+    await expectLater(
+      generateUpdateKey(
+        privateOutput: privateOutput,
+        publicOutput: publicOutput,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(await privateOutput.exists(), isFalse);
+    expect(await publicOutput.readAsString(), 'existing-public');
+  });
+
   test('refuses to use the same path for the private and public key', () async {
     final output = File(
       '${temporaryDirectory.path}${Platform.pathSeparator}key.txt',
@@ -75,4 +96,50 @@ void main() {
 
     expect(await output.exists(), isFalse);
   });
+
+  test('rejects Windows case-variant aliases before creating a key', () async {
+    if (!Platform.isWindows) {
+      return;
+    }
+    final privateOutput = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}key.txt',
+    );
+    final publicOutput = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}KEY.TXT',
+    );
+
+    await expectLater(
+      generateUpdateKey(
+        privateOutput: privateOutput,
+        publicOutput: publicOutput,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(await privateOutput.exists(), isFalse);
+  });
+
+  test(
+    'removes a newly reserved private file if public output creation fails',
+    () async {
+      final privateOutput = File(
+        '${temporaryDirectory.path}${Platform.pathSeparator}private.txt',
+      );
+      final publicDirectory = Directory(
+        '${temporaryDirectory.path}${Platform.pathSeparator}public-output',
+      );
+      await publicDirectory.create();
+
+      await expectLater(
+        generateUpdateKey(
+          privateOutput: privateOutput,
+          publicOutput: File(publicDirectory.path),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await privateOutput.exists(), isFalse);
+      expect(await publicDirectory.exists(), isTrue);
+    },
+  );
 }
