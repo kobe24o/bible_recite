@@ -56,7 +56,13 @@ void main() {
         privateOutput: privateOutput,
         publicOutput: publicOutput,
       ),
-      throwsA(isA<FileSystemException>()),
+      throwsA(
+        isA<FileSystemException>().having(
+          (error) => error.message,
+          'message',
+          contains('no key material was written'),
+        ),
+      ),
     );
 
     expect(await privateOutput.readAsString(), 'existing-private');
@@ -80,7 +86,8 @@ void main() {
       throwsA(isA<FileSystemException>()),
     );
 
-    expect(await privateOutput.exists(), isFalse);
+    expect(await privateOutput.exists(), isTrue);
+    expect(await privateOutput.readAsString(), isEmpty);
     expect(await publicOutput.readAsString(), 'existing-public');
   });
 
@@ -120,7 +127,7 @@ void main() {
   });
 
   test(
-    'removes a newly reserved private file if public output creation fails',
+    'leaves only an empty private placeholder if public reservation fails',
     () async {
       final privateOutput = File(
         '${temporaryDirectory.path}${Platform.pathSeparator}private.txt',
@@ -138,7 +145,8 @@ void main() {
         throwsA(isA<FileSystemException>()),
       );
 
-      expect(await privateOutput.exists(), isFalse);
+      expect(await privateOutput.exists(), isTrue);
+      expect(await privateOutput.readAsString(), isEmpty);
       expect(await publicDirectory.exists(), isTrue);
     },
   );

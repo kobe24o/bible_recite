@@ -34,45 +34,43 @@ Future<GeneratedUpdateKeyFiles> generateUpdateKey({
     );
   }
 
+  // Exclusive creation prevents ordinary accidental overwrites. This one-time
+  // CLI assumes its output directory is not concurrently mutated by the same
+  // user while it is running.
   RandomAccessFile? privateFile;
   RandomAccessFile? publicFile;
-  var privateCreated = false;
-  var publicCreated = false;
   try {
     await privateOutput.create(exclusive: true);
-    privateCreated = true;
-    await publicOutput.create(exclusive: true);
-    publicCreated = true;
     privateFile = await privateOutput.open(mode: FileMode.append);
+    await publicOutput.create(exclusive: true);
     publicFile = await publicOutput.open(mode: FileMode.append);
+  } on FileSystemException catch (error) {
+    await _closeQuietly(publicFile);
+    await _closeQuietly(privateFile);
+    throw FileSystemException(
+      'Unable to reserve both update key outputs; no key material was written.',
+      error.path,
+      error.osError,
+    );
+  }
 
+  try {
     final random = Random.secure();
     final seed = List<int>.generate(32, (_) => random.nextInt(256));
     final keyPair = await Ed25519().newKeyPairFromSeed(seed);
     final publicKey = await keyPair.extractPublicKey();
 
-    await privateFile.writeString(base64Encode(seed));
-    await privateFile.flush();
     await publicFile.writeString(base64Encode(publicKey.bytes));
     await publicFile.flush();
-    await privateFile.close();
-    privateFile = null;
-    await publicFile.close();
-    publicFile = null;
+    await privateFile.writeString(base64Encode(seed));
+    await privateFile.flush();
     return GeneratedUpdateKeyFiles(
       privateOutput: privateOutput,
       publicOutput: publicOutput,
     );
-  } catch (_) {
+  } finally {
     await _closeQuietly(publicFile);
     await _closeQuietly(privateFile);
-    if (privateCreated) {
-      await privateOutput.delete();
-    }
-    if (publicCreated) {
-      await publicOutput.delete();
-    }
-    rethrow;
   }
 }
 
