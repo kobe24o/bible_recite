@@ -81,6 +81,60 @@ void main() {
     );
   });
 
+  test('rejects malformed Base64 payload data', () {
+    expect(
+      () => SignedUpdateEnvelope.decode(
+        _envelopeBytes(
+          payload: '*',
+          signature: base64Encode(List<int>.filled(64, 1)),
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Invalid Base64 update envelope field',
+        ),
+      ),
+    );
+  });
+
+  test('rejects an empty decoded payload', () {
+    expect(
+      () => SignedUpdateEnvelope.decode(
+        _envelopeBytes(
+          payload: base64Encode(const []),
+          signature: base64Encode(List<int>.filled(64, 1)),
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Invalid update manifest field: payload',
+        ),
+      ),
+    );
+  });
+
+  test('rejects a signature with the wrong decoded length', () {
+    expect(
+      () => SignedUpdateEnvelope.decode(
+        _envelopeBytes(
+          payload: base64Encode(payloadBytes),
+          signature: base64Encode(List<int>.filled(63, 1)),
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Invalid signed update envelope',
+        ),
+      ),
+    );
+  });
+
   test('rejects malformed Android update assets', () {
     for (final invalidPayload in [
       _withAndroidField('packageName', 'com.example.other'),
@@ -100,6 +154,36 @@ void main() {
           utf8.encode(jsonEncode(invalidPayload)),
         ),
         throwsFormatException,
+      );
+    }
+  });
+
+  test('rejects missing Android asset fields and malformed URL shapes', () {
+    final invalidAssets = <String, Map<String, Object?>>{
+      for (final field in [
+        'packageName',
+        'fileName',
+        'size',
+        'sha256',
+        'signingCertificateSha256',
+        'urls',
+      ])
+        'missing $field': _withoutAndroidField(field),
+      'empty urls': _withAndroidField('urls', []),
+      'non-list urls': _withAndroidField(
+        'urls',
+        'https://downloads.example.com/update.apk',
+      ),
+      'non-string URL entry': _withAndroidField('urls', [42]),
+    };
+
+    for (final entry in invalidAssets.entries) {
+      expect(
+        () => UpdateManifest.fromPayloadBytes(
+          utf8.encode(jsonEncode(entry.value)),
+        ),
+        throwsFormatException,
+        reason: entry.key,
       );
     }
   });
@@ -149,3 +233,18 @@ Map<String, Object?> _withAndroidField(String field, Object? value) {
   result['android'] = android;
   return result;
 }
+
+Map<String, Object?> _withoutAndroidField(String field) {
+  final result = _validPayload();
+  final android = Map<String, Object?>.from(result['android']! as Map)
+    ..remove(field);
+  result['android'] = android;
+  return result;
+}
+
+List<int> _envelopeBytes({
+  required String payload,
+  required String signature,
+}) => utf8.encode(
+  jsonEncode({'protocol': 1, 'payload': payload, 'signature': signature}),
+);
