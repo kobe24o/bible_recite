@@ -13,12 +13,14 @@ final class AppVersion implements Comparable<AppVersion> {
       throw const FormatException('Invalid application version');
     }
 
-    return AppVersion._(
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-      parsedBuild,
-    );
+    final major = int.parse(match.group(1)!);
+    final minor = int.parse(match.group(2)!);
+    final patch = int.parse(match.group(3)!);
+    if (name != '$major.$minor.$patch') {
+      throw const FormatException('Invalid application version');
+    }
+
+    return AppVersion._(major, minor, patch, parsedBuild);
   }
 
   bool isNewerThan(AppVersion other) => compareTo(other) > 0;

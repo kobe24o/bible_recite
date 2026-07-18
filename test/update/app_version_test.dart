@@ -15,4 +15,9 @@ void main() {
     expect(() => AppVersion.parse('1.0-beta', '2'), throwsFormatException);
     expect(() => AppVersion.parse('1.0.0', '2a'), throwsFormatException);
   });
+
+  test('rejects noncanonical signed semantic versions', () {
+    expect(() => AppVersion.parse('1.00.5', '6'), throwsFormatException);
+    expect(() => AppVersion.parse('01.0.5', '6'), throwsFormatException);
+  });
 }
