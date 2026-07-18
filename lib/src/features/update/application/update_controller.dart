@@ -14,32 +14,49 @@ final updateControllerProvider =
 
 final class UpdateController extends Notifier<UpdateStatus> {
   bool _operationActive = false;
+  bool _disposed = false;
   DownloadCancellation? _downloadCancellation;
   AppVersion? _installedVersion;
 
   @override
-  UpdateStatus build() => const UpdateIdle();
+  UpdateStatus build() {
+    ref.onDispose(() {
+      _disposed = true;
+      _downloadCancellation?.cancel();
+    });
+    return const UpdateIdle();
+  }
 
   Future<void> check() async {
-    if (_operationActive) {
+    if (_operationActive || !_mounted) {
       return;
     }
     _operationActive = true;
-    state = const UpdateChecking();
+    _emit(const UpdateChecking());
     try {
-      final manifest = await ref.read(updateManifestLoaderProvider)();
-      final installed = await ref.read(installedAppVersionProvider.future);
+      final loader = ref.read(updateManifestLoaderProvider);
+      final manifest = await loader();
+      if (!_mounted) {
+        return;
+      }
+      final installedFuture = ref.read(installedAppVersionProvider.future);
+      final installed = await installedFuture;
+      if (!_mounted) {
+        return;
+      }
       _installedVersion = installed;
-      state = manifest.version.isNewerThan(installed)
-          ? UpdateAvailable(
-              manifest: manifest,
-              supportsDirectInstall: _isAndroid,
-            )
-          : UpdateCurrent(installedVersion: installed);
+      _emit(
+        manifest.version.isNewerThan(installed)
+            ? UpdateAvailable(
+                manifest: manifest,
+                supportsDirectInstall: _isAndroid,
+              )
+            : UpdateCurrent(installedVersion: installed),
+      );
     } on UpdateConfigurationException catch (error) {
-      state = UpdateFailed(reasonCode: error.reasonCode);
+      _emit(UpdateFailed(reasonCode: error.reasonCode));
     } catch (_) {
-      state = const UpdateFailed(reasonCode: UpdateFailureReason.checkFailed);
+      _emit(const UpdateFailed(reasonCode: UpdateFailureReason.checkFailed));
     } finally {
       _operationActive = false;
     }
@@ -56,17 +73,27 @@ final class UpdateController extends Notifier<UpdateStatus> {
 
     _operationActive = true;
     try {
-      final transport = await ref.read(updateNetworkTransportProvider)();
+      late final String transport;
+      try {
+        final readTransport = ref.read(updateNetworkTransportProvider);
+        transport = await readTransport();
+      } catch (_) {
+        _emit(
+          UpdateFailed(
+            reasonCode: UpdateFailureReason.networkCheckFailed,
+            manifest: current.manifest,
+          ),
+        );
+        return;
+      }
+      if (!_mounted) {
+        return;
+      }
       if (transport == 'cellular') {
-        state = AwaitingCellularConfirmation(manifest: current.manifest);
+        _emit(AwaitingCellularConfirmation(manifest: current.manifest));
         return;
       }
       await _downloadAndVerify(current.manifest);
-    } catch (_) {
-      state = UpdateFailed(
-        reasonCode: UpdateFailureReason.networkCheckFailed,
-        manifest: current.manifest,
-      );
     } finally {
       _operationActive = false;
     }
@@ -115,37 +142,70 @@ final class UpdateController extends Notifier<UpdateStatus> {
     try {
       late final bool allowed;
       try {
-        allowed = await ref.read(updateInstallPermissionProvider)();
+        final checkPermission = ref.read(updateInstallPermissionProvider);
+        allowed = await checkPermission();
       } catch (_) {
-        state = UpdateFailed(
-          reasonCode: UpdateFailureReason.permissionCheckFailed,
-          manifest: manifest,
+        _emit(
+          UpdateFailed(
+            reasonCode: UpdateFailureReason.permissionCheckFailed,
+            manifest: manifest,
+          ),
         );
         return;
       }
+      if (!_mounted) {
+        return;
+      }
       if (!allowed) {
-        state = PermissionRequired(manifest: manifest, file: file);
-        if (current is ReadyToInstall) {
+        final shouldOpenSettings =
+            current is ReadyToInstall ||
+            current is PermissionRequired &&
+                current.retryPhase == PermissionRetryPhase.explicitRetry;
+        _emit(
+          PermissionRequired(
+            manifest: manifest,
+            file: file,
+            retryPhase: shouldOpenSettings
+                ? PermissionRetryPhase.awaitingResume
+                : PermissionRetryPhase.explicitRetry,
+          ),
+        );
+        if (shouldOpenSettings) {
           try {
-            await ref.read(updateOpenInstallPermissionProvider)();
+            if (!_mounted) {
+              return;
+            }
+            final openSettings = ref.read(updateOpenInstallPermissionProvider);
+            await openSettings();
           } catch (_) {
-            state = UpdateFailed(
-              reasonCode: UpdateFailureReason.permissionSettingsFailed,
-              manifest: manifest,
+            _emit(
+              UpdateFailed(
+                reasonCode: UpdateFailureReason.permissionSettingsFailed,
+                manifest: manifest,
+              ),
             );
           }
         }
         return;
       }
 
-      state = UpdateInstalling(manifest: manifest, file: file);
+      _emit(UpdateInstalling(manifest: manifest, file: file));
       try {
-        await ref.read(updateApkInstallProvider)(file);
-        state = ReadyToInstall(manifest: manifest, file: file);
+        if (!_mounted) {
+          return;
+        }
+        final openInstaller = ref.read(updateApkInstallProvider);
+        await openInstaller(file);
+        if (!_mounted) {
+          return;
+        }
+        _emit(ReadyToInstall(manifest: manifest, file: file));
       } catch (_) {
-        state = UpdateFailed(
-          reasonCode: UpdateFailureReason.installFailed,
-          manifest: manifest,
+        _emit(
+          UpdateFailed(
+            reasonCode: UpdateFailureReason.installFailed,
+            manifest: manifest,
+          ),
         );
       }
     } finally {
@@ -155,91 +215,134 @@ final class UpdateController extends Notifier<UpdateStatus> {
 
   Future<void> _downloadAndVerify(UpdateManifest manifest) async {
     final installed = _installedVersion;
-    if (installed == null) {
-      state = UpdateFailed(
-        reasonCode: UpdateFailureReason.downloadFailed,
-        manifest: manifest,
+    if (installed == null || !_mounted) {
+      _emit(
+        UpdateFailed(
+          reasonCode: UpdateFailureReason.downloadFailed,
+          manifest: manifest,
+        ),
       );
       return;
     }
 
+    final cleanup = ref.read(updateCompletedDownloadCleanupProvider);
     final cancellation = DownloadCancellation();
     _downloadCancellation = cancellation;
     File? downloadedFile;
     var failureReason = UpdateFailureReason.downloadFailed;
     final stopwatch = Stopwatch()..start();
-    state = UpdateDownloading(
-      manifest: manifest,
-      receivedBytes: 0,
-      totalBytes: manifest.android.size,
-      bytesPerSecond: 0,
+    _emit(
+      UpdateDownloading(
+        manifest: manifest,
+        receivedBytes: 0,
+        totalBytes: manifest.android.size,
+        bytesPerSecond: 0,
+      ),
     );
     try {
-      final directory = await ref.read(updateDownloadDirectoryProvider.future);
-      final downloaded = await ref.read(updateDownloadOperationProvider)(
+      final directoryFuture = ref.read(updateDownloadDirectoryProvider.future);
+      final directory = await directoryFuture;
+      if (!_mounted) {
+        return;
+      }
+      final download = ref.read(updateDownloadOperationProvider);
+      final downloaded = await download(
         manifest.android,
         directory,
         cancellation: cancellation,
         onProgress: (progress) {
-          if (cancellation.isCancelled) {
+          if (cancellation.isCancelled || !_mounted) {
             return;
           }
           final elapsedMicros = stopwatch.elapsedMicroseconds;
-          state = UpdateDownloading(
-            manifest: manifest,
-            receivedBytes: progress.receivedBytes,
-            totalBytes: progress.totalBytes,
-            bytesPerSecond: elapsedMicros == 0
-                ? 0
-                : (progress.receivedBytes * Duration.microsecondsPerSecond) ~/
-                      elapsedMicros,
+          _emit(
+            UpdateDownloading(
+              manifest: manifest,
+              receivedBytes: progress.receivedBytes,
+              totalBytes: progress.totalBytes,
+              bytesPerSecond: elapsedMicros == 0
+                  ? 0
+                  : (progress.receivedBytes * Duration.microsecondsPerSecond) ~/
+                        elapsedMicros,
+            ),
           );
         },
       );
       downloadedFile = downloaded.file;
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
+      cancellation.throwIfCancelled();
+
+      failureReason = UpdateFailureReason.fileVerificationFailed;
+      final verifyFile = ref.read(updateFileVerificationProvider);
+      await verifyFile(downloaded.file, manifest.android);
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
       cancellation.throwIfCancelled();
 
       failureReason = UpdateFailureReason.packageInspectionFailed;
-      await ref.read(updateFileVerificationProvider)(
-        downloaded.file,
-        manifest.android,
-      );
+      final inspect = ref.read(updateApkInspectionProvider);
+      final apk = await inspect(downloaded.file);
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
       cancellation.throwIfCancelled();
-      final apk = await ref.read(updateApkInspectionProvider)(downloaded.file);
-      cancellation.throwIfCancelled();
-      await ref.read(updatePackageVerificationProvider)(
-        apk,
-        manifest,
-        installed,
-      );
+
+      failureReason = UpdateFailureReason.packageVerificationFailed;
+      final verifyPackage = ref.read(updatePackageVerificationProvider);
+      await verifyPackage(apk, manifest, installed);
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
       cancellation.throwIfCancelled();
 
       failureReason = UpdateFailureReason.stagingFailed;
-      final stagingDirectory = await ref.read(
-        updateStagingDirectoryProvider.future,
-      );
-      final staged = await ref.read(updateApkStagingProvider)(
+      final stagingFuture = ref.read(updateStagingDirectoryProvider.future);
+      final stagingDirectory = await stagingFuture;
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
+      final stage = ref.read(updateApkStagingProvider);
+      final staged = await stage(
         downloaded.file,
         manifest.android,
         stagingDirectory,
       );
+      if (!_mounted) {
+        await _bestEffortCleanup(cleanup, downloadedFile);
+        return;
+      }
       cancellation.throwIfCancelled();
-      state = ReadyToInstall(manifest: manifest, file: staged);
+
+      await _bestEffortCleanup(cleanup, downloaded.file);
+      if (!_mounted) {
+        return;
+      }
+      _emit(ReadyToInstall(manifest: manifest, file: staged));
     } on DownloadCancelled {
-      await _deleteCompletedDownload(downloadedFile);
-      state = UpdateAvailable(manifest: manifest, supportsDirectInstall: true);
+      await _bestEffortCleanup(cleanup, downloadedFile);
+      _emit(UpdateAvailable(manifest: manifest, supportsDirectInstall: true));
     } on UpdateVerificationException catch (error) {
-      await _deleteCompletedDownload(downloadedFile);
-      state = UpdateFailed(reasonCode: error.reason, manifest: manifest);
+      await _bestEffortCleanup(cleanup, downloadedFile);
+      _emit(UpdateFailed(reasonCode: error.reason, manifest: manifest));
     } on UpdateStagingException {
-      await _deleteCompletedDownload(downloadedFile);
-      state = UpdateFailed(
-        reasonCode: UpdateFailureReason.stagingFailed,
-        manifest: manifest,
+      await _bestEffortCleanup(cleanup, downloadedFile);
+      _emit(
+        UpdateFailed(
+          reasonCode: UpdateFailureReason.stagingFailed,
+          manifest: manifest,
+        ),
       );
     } catch (_) {
-      await _deleteCompletedDownload(downloadedFile);
-      state = UpdateFailed(reasonCode: failureReason, manifest: manifest);
+      await _bestEffortCleanup(cleanup, downloadedFile);
+      _emit(UpdateFailed(reasonCode: failureReason, manifest: manifest));
     } finally {
       stopwatch.stop();
       if (identical(_downloadCancellation, cancellation)) {
@@ -248,12 +351,29 @@ final class UpdateController extends Notifier<UpdateStatus> {
     }
   }
 
+  bool get _mounted => !_disposed && ref.mounted;
+
   bool get _isAndroid =>
+      _mounted &&
       ref.read(updateRuntimePlatformProvider) == UpdateRuntimePlatform.android;
+
+  void _emit(UpdateStatus next) {
+    if (_mounted) {
+      state = next;
+    }
+  }
 }
 
-Future<void> _deleteCompletedDownload(File? file) async {
-  if (file != null && await file.exists()) {
-    await file.delete();
+Future<void> _bestEffortCleanup(
+  UpdateCompletedDownloadCleanup cleanup,
+  File? file,
+) async {
+  if (file == null) {
+    return;
+  }
+  try {
+    await cleanup(file);
+  } catch (_) {
+    // Cleanup must never hide the cancellation or verification failure.
   }
 }

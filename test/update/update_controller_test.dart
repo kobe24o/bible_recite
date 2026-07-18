@@ -79,6 +79,22 @@ void main() {
     harness.dispose();
   });
 
+  test(
+    'disposing during check prevents later provider reads and state writes',
+    () async {
+      final gate = Completer<UpdateManifest>();
+      final harness = _Harness(root: root, manifestLoader: () => gate.future);
+
+      final check = harness.controller.check();
+      await Future<void>.delayed(Duration.zero);
+      harness.dispose();
+      gate.complete(_manifest());
+
+      await expectLater(check, completes);
+      expect(harness.installedVersionCalls, 0);
+    },
+  );
+
   test('cellular requires confirmation before download', () async {
     final harness = _Harness(root: root, networkTransport: 'cellular');
     await harness.controller.check();
@@ -92,6 +108,57 @@ void main() {
     await harness.controller.confirmCellularDownload();
 
     expect(harness.controller.state, isA<ReadyToInstall>());
+    expect(harness.downloadCalls, 1);
+    harness.dispose();
+  });
+
+  test('network transport failure is stable and never downloads', () async {
+    final harness = _Harness(
+      root: root,
+      networkError: StateError('private network detail'),
+    );
+    await harness.controller.check();
+
+    await expectLater(harness.controller.startDownload(), completes);
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.networkCheckFailed);
+    expect(harness.downloadCalls, 0);
+    expect(harness.controller.state, isNot(isA<UpdateDownloading>()));
+    harness.dispose();
+  });
+
+  test(
+    'Wi-Fi download failure is stable and leaves downloading state',
+    () async {
+      final harness = _Harness(
+        root: root,
+        downloadError: StateError('private download detail'),
+      );
+      await harness.controller.check();
+
+      await expectLater(harness.controller.startDownload(), completes);
+
+      final failed = harness.controller.state as UpdateFailed;
+      expect(failed.reasonCode, UpdateFailureReason.downloadFailed);
+      expect(harness.downloadCalls, 1);
+      harness.dispose();
+    },
+  );
+
+  test('cellular-confirmed download failure is stable', () async {
+    final harness = _Harness(
+      root: root,
+      networkTransport: 'cellular',
+      downloadError: StateError('private download detail'),
+    );
+    await harness.controller.check();
+    await harness.controller.startDownload();
+
+    await expectLater(harness.controller.confirmCellularDownload(), completes);
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.downloadFailed);
     expect(harness.downloadCalls, 1);
     harness.dispose();
   });
@@ -140,6 +207,18 @@ void main() {
     harness.dispose();
   });
 
+  test('disposing during download cancels and prevents later calls', () async {
+    final harness = _Harness(root: root, waitForCancellation: true);
+    await harness.controller.check();
+
+    final downloading = harness.controller.startDownload();
+    await harness.downloadStarted.future;
+    harness.dispose();
+
+    await expectLater(downloading, completes);
+    expect(harness.events, ['download', 'cancel']);
+  });
+
   test('verification failure never stages or installs bytes', () async {
     final harness = _Harness(
       root: root,
@@ -154,6 +233,134 @@ void main() {
     expect(failed.manifest, isNotNull);
     expect(harness.events, ['download', 'progress', 'verify-file']);
     expect(harness.installCalls, 0);
+    harness.dispose();
+  });
+
+  test('cleanup failure never masks the verification reason', () async {
+    final harness = _Harness(
+      root: root,
+      verificationFailure: const UpdateVerificationException('sha256_mismatch'),
+      cleanupError: const FileSystemException('cleanup denied'),
+    );
+    await harness.controller.check();
+
+    await expectLater(harness.controller.startDownload(), completes);
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, 'sha256_mismatch');
+    expect(harness.events, ['download', 'progress', 'verify-file', 'cleanup']);
+    harness.dispose();
+  });
+
+  test('inspection failure blocks package verification and staging', () async {
+    final harness = _Harness(
+      root: root,
+      inspectionError: const FormatException('private inspect failure'),
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.packageInspectionFailed);
+    expect(harness.events, ['download', 'progress', 'verify-file', 'inspect']);
+    harness.dispose();
+  });
+
+  test('package mismatch blocks staging and permission calls', () async {
+    final harness = _Harness(
+      root: root,
+      packageVerificationFailure: const UpdateVerificationException(
+        'certificate_mismatch',
+      ),
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, 'certificate_mismatch');
+    expect(harness.events, [
+      'download',
+      'progress',
+      'verify-file',
+      'inspect',
+      'verify-package',
+    ]);
+    harness.dispose();
+  });
+
+  test('staging failure blocks permission and installer calls', () async {
+    final harness = _Harness(
+      root: root,
+      stagingError: const UpdateStagingException('injected_staging_failure'),
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.stagingFailed);
+    expect(harness.events.last, 'stage');
+    expect(harness.events, isNot(contains('permission-check')));
+    expect(harness.events, isNot(contains('install')));
+    harness.dispose();
+  });
+
+  test('corrupted staged bytes never reach permission or installer', () async {
+    final manifest = _manifest(
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+    );
+    final harness = _Harness(
+      root: root,
+      manifest: manifest,
+      writeDownloadedBytes: true,
+      stagingOperation: (file, asset, directory) => stageVerifiedUpdateApk(
+        file,
+        asset,
+        directory,
+        afterCopy: (reserved) => reserved.writeAsBytes([9, 9, 9], flush: true),
+      ),
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.stagingFailed);
+    expect(harness.events, isNot(contains('permission-check')));
+    expect(harness.events, isNot(contains('install')));
+    harness.dispose();
+  });
+
+  test('successful staging ignores completed-source cleanup failure', () async {
+    final harness = _Harness(
+      root: root,
+      recordCleanup: true,
+      cleanupError: const FileSystemException('cleanup denied'),
+    );
+    await harness.controller.check();
+
+    await expectLater(harness.controller.startDownload(), completes);
+
+    expect(harness.controller.state, isA<ReadyToInstall>());
+    expect(harness.events.last, 'cleanup');
+    harness.dispose();
+  });
+
+  test('successful staging deletes the application-support source', () async {
+    final harness = _Harness(root: root, writeDownloadedBytes: true);
+    final source = File(
+      '${root.path}${Platform.pathSeparator}support${Platform.pathSeparator}updates'
+      '${Platform.pathSeparator}${harness.manifest.android.fileName}',
+    );
+    await harness.controller.check();
+
+    await harness.controller.startDownload();
+
+    expect(harness.controller.state, isA<ReadyToInstall>());
+    expect(await source.exists(), isFalse);
     harness.dispose();
   });
 
@@ -214,23 +421,77 @@ void main() {
   });
 
   test(
-    'denied permission remains required without reopening settings',
+    'permission retry distinguishes resume from a later explicit retry',
     () async {
-      final harness = _Harness(root: root, permissionResults: [false, false]);
+      final harness = _Harness(
+        root: root,
+        permissionResults: [false, false, false, true],
+      );
       await harness.controller.check();
       await harness.controller.startDownload();
-      await harness.controller.install();
-      await harness.controller.install();
 
-      expect(harness.controller.state, isA<PermissionRequired>());
+      // Initial tap opens settings.
+      await harness.controller.install();
       expect(
         harness.events.where((event) => event == 'open-settings'),
         hasLength(1),
       );
-      expect(harness.installCalls, 0);
+
+      // Lifecycle resume only rechecks and does not bounce back to settings.
+      await harness.controller.install();
+      expect(
+        harness.events.where((event) => event == 'open-settings'),
+        hasLength(1),
+      );
+
+      // A later explicit tap may open settings again.
+      await harness.controller.install();
+      expect(
+        harness.events.where((event) => event == 'open-settings'),
+        hasLength(2),
+      );
+
+      // A later resume with permission granted installs.
+      await harness.controller.install();
+
+      expect(harness.controller.state, isA<ReadyToInstall>());
+      expect(harness.installCalls, 1);
       harness.dispose();
     },
   );
+
+  test('permission exception blocks installer with a stable reason', () async {
+    final harness = _Harness(
+      root: root,
+      permissionError: const FileSystemException('private permission error'),
+    );
+    await harness.controller.check();
+    await harness.controller.startDownload();
+
+    await expectLater(harness.controller.install(), completes);
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.permissionCheckFailed);
+    expect(harness.installCalls, 0);
+    expect(harness.events.last, 'permission-check');
+    harness.dispose();
+  });
+
+  test('installer exception is stable and never escapes to UI', () async {
+    final harness = _Harness(
+      root: root,
+      installError: const FileSystemException('private installer error'),
+    );
+    await harness.controller.check();
+    await harness.controller.startDownload();
+
+    await expectLater(harness.controller.install(), completes);
+
+    final failed = harness.controller.state as UpdateFailed;
+    expect(failed.reasonCode, UpdateFailureReason.installFailed);
+    expect(harness.installCalls, 1);
+    harness.dispose();
+  });
 
   test(
     'non-Android exposes the Release only and never downloads APK',
@@ -281,7 +542,7 @@ void main() {
     );
   });
 
-  test('staging replaces collisions with the exact verified APK', () async {
+  test('staging preserves unrelated collisions and owns unique paths', () async {
     final bytes = [1, 2, 3];
     final digest = await Sha256().hash(bytes);
     final sha = digest.bytes
@@ -298,6 +559,8 @@ void main() {
       '${staging.path}${Platform.pathSeparator}${manifest.android.fileName}',
     );
     await collision.writeAsBytes([9, 9, 9]);
+    final fixedTemporary = File('${collision.path}.staging');
+    await fixedTemporary.writeAsBytes([8, 8, 8]);
 
     final staged = await stageVerifiedUpdateApk(
       source,
@@ -310,7 +573,10 @@ void main() {
       await staged.parent.resolveSymbolicLinks(),
       await staging.resolveSymbolicLinks(),
     );
-    expect(staged.path, collision.path);
+    expect(staged.path, isNot(collision.path));
+    expect(staged.path, endsWith('.apk'));
+    expect(await collision.readAsBytes(), [9, 9, 9]);
+    expect(await fixedTemporary.readAsBytes(), [8, 8, 8]);
   });
 
   test(
@@ -329,14 +595,93 @@ void main() {
     },
   );
 
-  test('staging removes temporary bytes when copy verification fails', () async {
+  test(
+    'staging removes temporary bytes when copy verification fails',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+
+      await expectLater(
+        stageVerifiedUpdateApk(source, _manifest().android, staging),
+        throwsA(isA<UpdateStagingException>()),
+      );
+
+      expect(await staging.list().toList(), isEmpty);
+    },
+  );
+
+  test(
+    'mid-copy failure cleans only invocation-owned temporary bytes',
+    () async {
+      final source = File('${root.path}${Platform.pathSeparator}source.apk');
+      await source.writeAsBytes([1, 2, 3]);
+      final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+      await staging.create();
+      final unrelated = File(
+        '${staging.path}${Platform.pathSeparator}unrelated.apk',
+      );
+      final unrelatedTemporary = File(
+        '${staging.path}${Platform.pathSeparator}unrelated.staging',
+      );
+      await unrelated.writeAsBytes([7]);
+      await unrelatedTemporary.writeAsBytes([8]);
+      final manifest = _manifest(
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      );
+
+      await expectLater(
+        stageVerifiedUpdateApk(
+          source,
+          manifest.android,
+          staging,
+          copyToReservedFile: (source, output) async {
+            await output.writeFrom([1]);
+            throw const FileSystemException('injected output failure');
+          },
+        ),
+        throwsA(
+          isA<FileSystemException>().having(
+            (error) => error.message,
+            'message',
+            'injected output failure',
+          ),
+        ),
+      );
+
+      expect(await unrelated.readAsBytes(), [7]);
+      expect(await unrelatedTemporary.readAsBytes(), [8]);
+      expect(await staging.list().map((entry) => entry.path).toSet(), {
+        unrelated.path,
+        unrelatedTemporary.path,
+      });
+    },
+  );
+
+  test('reopened staged-byte corruption is rejected before install', () async {
     final source = File('${root.path}${Platform.pathSeparator}source.apk');
     await source.writeAsBytes([1, 2, 3]);
     final staging = Directory('${root.path}${Platform.pathSeparator}updates');
+    final manifest = _manifest(
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+    );
 
     await expectLater(
-      stageVerifiedUpdateApk(source, _manifest().android, staging),
-      throwsA(isA<UpdateStagingException>()),
+      stageVerifiedUpdateApk(
+        source,
+        manifest.android,
+        staging,
+        afterCopy: (reserved) => reserved.writeAsBytes([9, 9, 9], flush: true),
+      ),
+      throwsA(
+        isA<UpdateStagingException>().having(
+          (error) => error.reasonCode,
+          'reasonCode',
+          'staged_hash_mismatch',
+        ),
+      ),
     );
 
     expect(await staging.list().toList(), isEmpty);
@@ -349,27 +694,36 @@ final class _Harness {
     UpdateManifest? manifest,
     Future<UpdateManifest> Function()? manifestLoader,
     this.networkTransport = 'wifi',
+    this.networkError,
     this.runtimePlatform = UpdateRuntimePlatform.android,
     this.downloadGate,
     this.installGate,
     this.waitForCancellation = false,
+    this.downloadError,
     this.verificationFailure,
+    this.inspectionError,
+    this.packageVerificationFailure,
+    this.stagingError,
+    this.stagingOperation,
+    this.cleanupError,
+    this.recordCleanup = false,
+    this.permissionError,
+    this.installError,
+    this.writeDownloadedBytes = false,
     List<bool> permissionResults = const [true],
   }) : manifest = manifest ?? _manifest(),
        _permissionResults = [...permissionResults] {
     container = ProviderContainer(
       overrides: [
         updateRuntimePlatformProvider.overrideWith((ref) => runtimePlatform),
-        installedAppVersionProvider.overrideWith(
-          (ref) async => AppVersion.parse('1.0.3', '4'),
-        ),
+        installedAppVersionProvider.overrideWith((ref) async {
+          installedVersionCalls++;
+          return AppVersion.parse('1.0.3', '4');
+        }),
         updateManifestLoaderProvider.overrideWith(
           (ref) => manifestLoader ?? () async => this.manifest,
         ),
-        updateNetworkTransportProvider.overrideWith(
-          (ref) =>
-              () async => networkTransport,
-        ),
+        updateNetworkTransportProvider.overrideWith((ref) => _network),
         updateDownloadDirectoryProvider.overrideWith(
           (ref) async => Directory(
             '${root.path}${Platform.pathSeparator}support${Platform.pathSeparator}updates',
@@ -384,7 +738,13 @@ final class _Harness {
         updateFileVerificationProvider.overrideWith((ref) => _verifyFile),
         updateApkInspectionProvider.overrideWith((ref) => _inspect),
         updatePackageVerificationProvider.overrideWith((ref) => _verifyPackage),
-        updateApkStagingProvider.overrideWith((ref) => _stage),
+        updateApkStagingProvider.overrideWith(
+          (ref) => stagingOperation ?? _stage,
+        ),
+        if (cleanupError != null || recordCleanup)
+          updateCompletedDownloadCleanupProvider.overrideWith(
+            (ref) => _cleanup,
+          ),
         updateInstallPermissionProvider.overrideWith((ref) => _canInstall),
         updateOpenInstallPermissionProvider.overrideWith(
           (ref) => _openSettings,
@@ -398,11 +758,22 @@ final class _Harness {
   final Directory root;
   final UpdateManifest manifest;
   final String networkTransport;
+  final Object? networkError;
   final UpdateRuntimePlatform runtimePlatform;
   final Completer<void>? downloadGate;
   final Completer<void>? installGate;
   final bool waitForCancellation;
+  final Object? downloadError;
   final UpdateVerificationException? verificationFailure;
+  final Object? inspectionError;
+  final UpdateVerificationException? packageVerificationFailure;
+  final Object? stagingError;
+  final UpdateApkStaging? stagingOperation;
+  final Object? cleanupError;
+  final bool recordCleanup;
+  final Object? permissionError;
+  final Object? installError;
+  final bool writeDownloadedBytes;
   final List<bool> _permissionResults;
   final events = <String>[];
   final downloadStarted = Completer<void>();
@@ -412,6 +783,14 @@ final class _Harness {
   late final UpdateController controller;
   int downloadCalls = 0;
   int installCalls = 0;
+  int installedVersionCalls = 0;
+
+  Future<String> _network() async {
+    if (networkError case final error?) {
+      throw error;
+    }
+    return networkTransport;
+  }
 
   Future<DownloadedUpdate> _download(
     AndroidUpdateAsset asset,
@@ -433,15 +812,23 @@ final class _Harness {
       await cancelled.future;
       throw const DownloadCancelled();
     }
+    if (downloadError case final error?) {
+      throw error;
+    }
     onProgress(const DownloadProgress(receivedBytes: 2, totalBytes: 3));
     events.add('progress');
     if (!progressPublished.isCompleted) {
       progressPublished.complete();
     }
     await downloadGate?.future;
-    return DownloadedUpdate(
-      file: File('${directory.path}${Platform.pathSeparator}${asset.fileName}'),
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}${asset.fileName}',
     );
+    if (writeDownloadedBytes) {
+      await directory.create(recursive: true);
+      await file.writeAsBytes([1, 2, 3]);
+    }
+    return DownloadedUpdate(file: file);
   }
 
   Future<void> _verifyFile(File file, AndroidUpdateAsset asset) async {
@@ -453,6 +840,9 @@ final class _Harness {
 
   Future<AndroidApkInfo> _inspect(File file) async {
     events.add('inspect');
+    if (inspectionError case final error?) {
+      throw error;
+    }
     return const AndroidApkInfo(
       packageName: 'app.biblerecite',
       versionName: '1.0.4',
@@ -468,6 +858,9 @@ final class _Harness {
     AppVersion installedVersion,
   ) async {
     events.add('verify-package');
+    if (packageVerificationFailure case final failure?) {
+      throw failure;
+    }
   }
 
   Future<File> _stage(
@@ -476,11 +869,24 @@ final class _Harness {
     Directory directory,
   ) async {
     events.add('stage');
+    if (stagingError case final error?) {
+      throw error;
+    }
     return File('${directory.path}${Platform.pathSeparator}${asset.fileName}');
+  }
+
+  Future<void> _cleanup(File file) async {
+    events.add('cleanup');
+    if (cleanupError case final error?) {
+      throw error;
+    }
   }
 
   Future<bool> _canInstall() async {
     events.add('permission-check');
+    if (permissionError case final error?) {
+      throw error;
+    }
     return _permissionResults.length == 1
         ? _permissionResults.single
         : _permissionResults.removeAt(0);
@@ -495,6 +901,9 @@ final class _Harness {
     installCalls++;
     if (!installStarted.isCompleted) {
       installStarted.complete();
+    }
+    if (installError case final error?) {
+      throw error;
     }
     await installGate?.future;
   }

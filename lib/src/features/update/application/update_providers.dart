@@ -44,6 +44,10 @@ typedef UpdateApkStaging =
 typedef UpdateInstallPermission = Future<bool> Function();
 typedef UpdateOpenInstallPermission = Future<void> Function();
 typedef UpdateApkInstall = Future<void> Function(File file);
+typedef UpdateCompletedDownloadCleanup = Future<void> Function(File file);
+typedef UpdateStagingCopy =
+    Future<void> Function(File source, RandomAccessFile output);
+typedef UpdateStagingAfterCopy = Future<void> Function(File reserved);
 
 final class UpdateConfigurationException implements Exception {
   const UpdateConfigurationException(this.reasonCode);
@@ -187,11 +191,16 @@ final updateApkStagingProvider = Provider<UpdateApkStaging>(
   (ref) => stageVerifiedUpdateApk,
 );
 
+final updateCompletedDownloadCleanupProvider =
+    Provider<UpdateCompletedDownloadCleanup>((ref) => _deleteCompletedDownload);
+
 Future<File> stageVerifiedUpdateApk(
   File source,
   AndroidUpdateAsset asset,
-  Directory stagingDirectory,
-) async {
+  Directory stagingDirectory, {
+  UpdateStagingCopy copyToReservedFile = _copyToReservedFile,
+  UpdateStagingAfterCopy? afterCopy,
+}) async {
   if (!_isSinglePathSegment(asset.fileName)) {
     throw const UpdateStagingException('invalid_staging_filename');
   }
@@ -203,57 +212,70 @@ Future<File> stageVerifiedUpdateApk(
   final canonicalDirectory = Directory(
     await stagingDirectory.resolveSymbolicLinks(),
   );
-  final destination = File(
-    '${canonicalDirectory.path}${Platform.pathSeparator}${asset.fileName}',
+  final ownedDirectory = await canonicalDirectory.createTemp('.update-stage-');
+  final canonicalOwnedDirectory = Directory(
+    await ownedDirectory.resolveSymbolicLinks(),
   );
-  final temporary = File('${destination.path}.staging');
-  if (await temporary.exists()) {
-    await temporary.delete();
+  if (await canonicalOwnedDirectory.parent.resolveSymbolicLinks() !=
+      canonicalDirectory.path) {
+    await _bestEffortDeleteOwnedDirectory(ownedDirectory);
+    throw const UpdateStagingException('invalid_staging_destination');
   }
-
-  final hashSink = Sha256().newHashSink();
-  final output = temporary.openWrite(mode: FileMode.writeOnly);
-  var copiedBytes = 0;
+  final reserved = File(
+    '${canonicalOwnedDirectory.path}${Platform.pathSeparator}candidate.pending',
+  );
+  File? promoted;
   try {
-    await for (final chunk in source.openRead()) {
-      copiedBytes += chunk.length;
-      if (copiedBytes > asset.size) {
-        throw const UpdateStagingException('staged_size_mismatch');
-      }
-      hashSink.add(chunk);
-      output.add(chunk);
+    final output = await reserved.open(mode: FileMode.writeOnly);
+    Object? writeFailure;
+    StackTrace? writeStackTrace;
+    try {
+      await copyToReservedFile(source, output);
+      await output.flush();
+    } catch (error, stackTrace) {
+      writeFailure = error;
+      writeStackTrace = stackTrace;
     }
-    await output.flush();
-  } finally {
-    await output.close();
-    hashSink.close();
-  }
+    try {
+      await output.close();
+    } catch (error, stackTrace) {
+      writeFailure ??= error;
+      writeStackTrace ??= stackTrace;
+    }
+    if (writeFailure != null) {
+      Error.throwWithStackTrace(writeFailure, writeStackTrace!);
+    }
 
-  try {
-    final digest = await hashSink.hash();
-    if (copiedBytes != asset.size ||
-        _hexFromBytes(digest.bytes) != asset.sha256) {
+    await afterCopy?.call(reserved);
+    final stagedDigest = await _hashFile(reserved);
+    if (stagedDigest.$1 != asset.size || stagedDigest.$2 != asset.sha256) {
       throw const UpdateStagingException('staged_hash_mismatch');
     }
 
-    if (await destination.exists()) {
-      final existingParent = await destination.parent.resolveSymbolicLinks();
-      if (existingParent != canonicalDirectory.path) {
-        throw const UpdateStagingException('invalid_staging_destination');
-      }
-      await destination.delete();
+    final token = _lastPathSegment(canonicalOwnedDirectory.path);
+    final stem = asset.fileName.substring(0, asset.fileName.length - 4);
+    final destination = File(
+      '${canonicalDirectory.path}${Platform.pathSeparator}$stem-$token.apk',
+    );
+    if (await FileSystemEntity.type(destination.path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      throw const UpdateStagingException('staging_destination_collision');
     }
-    final staged = await temporary.rename(destination.path);
-    final canonicalStaged = File(await staged.resolveSymbolicLinks());
+    promoted = await reserved.rename(destination.path);
+    final canonicalStaged = File(await promoted.resolveSymbolicLinks());
     final canonicalParent = await canonicalStaged.parent.resolveSymbolicLinks();
     if (canonicalParent != canonicalDirectory.path ||
         canonicalStaged.path != destination.path) {
-      await _deleteIfExists(staged);
       throw const UpdateStagingException('invalid_staging_destination');
     }
-    return staged;
+    return promoted;
+  } catch (_) {
+    if (promoted != null) {
+      await _bestEffortDeleteOwnedFile(promoted);
+    }
+    rethrow;
   } finally {
-    await _deleteIfExists(temporary);
+    await _bestEffortDeleteOwnedDirectory(ownedDirectory);
   }
 }
 
@@ -267,9 +289,50 @@ bool _isSinglePathSegment(String value) =>
 String _hexFromBytes(List<int> bytes) =>
     bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 
-Future<void> _deleteIfExists(File file) async {
+Future<void> _copyToReservedFile(File source, RandomAccessFile output) async {
+  await for (final chunk in source.openRead()) {
+    await output.writeFrom(chunk);
+  }
+}
+
+Future<(int, String)> _hashFile(File file) async {
+  var size = 0;
+  final sink = Sha256().newHashSink();
+  await for (final chunk in file.openRead()) {
+    size += chunk.length;
+    sink.add(chunk);
+  }
+  sink.close();
+  final digest = await sink.hash();
+  return (size, _hexFromBytes(digest.bytes));
+}
+
+String _lastPathSegment(String path) {
+  final separator = path.lastIndexOf(Platform.pathSeparator);
+  return separator < 0 ? path : path.substring(separator + 1);
+}
+
+Future<void> _deleteCompletedDownload(File file) async {
   if (await file.exists()) {
     await file.delete();
+  }
+}
+
+Future<void> _bestEffortDeleteOwnedFile(File file) async {
+  try {
+    if (await file.exists()) {
+      await file.delete();
+    }
+  } catch (_) {}
+}
+
+Future<void> _bestEffortDeleteOwnedDirectory(Directory directory) async {
+  try {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  } catch (_) {
+    // Cleanup must never replace the staging failure that triggered it.
   }
 }
 

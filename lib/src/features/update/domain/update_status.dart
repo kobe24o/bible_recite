@@ -59,11 +59,18 @@ final class ReadyToInstall extends UpdateStatus {
 }
 
 final class PermissionRequired extends UpdateStatus {
-  const PermissionRequired({required this.manifest, required this.file});
+  const PermissionRequired({
+    required this.manifest,
+    required this.file,
+    this.retryPhase = PermissionRetryPhase.awaitingResume,
+  });
 
   final UpdateManifest manifest;
   final File file;
+  final PermissionRetryPhase retryPhase;
 }
+
+enum PermissionRetryPhase { awaitingResume, explicitRetry }
 
 final class UpdateInstalling extends UpdateStatus {
   const UpdateInstalling({required this.manifest, required this.file});
@@ -85,7 +92,9 @@ abstract final class UpdateFailureReason {
   static const checkFailed = 'check_failed';
   static const networkCheckFailed = 'network_check_failed';
   static const downloadFailed = 'download_failed';
+  static const fileVerificationFailed = 'file_verification_failed';
   static const packageInspectionFailed = 'package_inspection_failed';
+  static const packageVerificationFailed = 'package_verification_failed';
   static const stagingFailed = 'staging_failed';
   static const permissionCheckFailed = 'permission_check_failed';
   static const permissionSettingsFailed = 'permission_settings_failed';

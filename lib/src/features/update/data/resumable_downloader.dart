@@ -106,7 +106,11 @@ final class ResumableDownloader {
     final sidecarFile = File(_sidecarPath(directory, asset));
     final completedFile = File(_completedPath(directory, asset));
     if (await completedFile.exists()) {
-      throw StateError('Completed update file already exists');
+      cancellation.throwIfCancelled();
+      if (await completedFile.length() == asset.size) {
+        return DownloadedUpdate(file: completedFile);
+      }
+      await completedFile.delete();
     }
     final resume = await _readResumeState(partFile, sidecarFile, asset);
     if (resume != null && resume.receivedBytes == asset.size) {

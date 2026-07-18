@@ -311,6 +311,29 @@ void main() {
   );
 
   test(
+    'returns a same-size stale completed file for normal verification',
+    () async {
+      final payload = utf8.encode('stale complete payload');
+      final asset = await _asset(payload, const ['/must-not-download']);
+      final completed = File(
+        '${directory.path}${Platform.pathSeparator}${asset.fileName}',
+      );
+      await completed.writeAsBytes(payload);
+
+      final recovered = await downloader().download(
+        asset,
+        directory,
+        onProgress: (_) {},
+        cancellation: DownloadCancellation(),
+      );
+
+      expect(recovered.file.path, completed.path);
+      expect(await recovered.file.readAsBytes(), payload);
+      expect(handler.paths, isEmpty);
+    },
+  );
+
+  test(
     'propagates progress callback errors without trying a fallback source',
     () async {
       final payload = utf8.encode('callback failure payload');
@@ -335,34 +358,30 @@ void main() {
     },
   );
 
-  test(
-    'propagates final APK collisions before making a source request',
-    () async {
-      final payload = utf8.encode('final collision payload');
-      final asset = await _asset(payload, const ['/collision', '/fallback']);
-      final finalFile = File(
-        '${directory.path}${Platform.pathSeparator}${asset.fileName}',
-      );
-      await finalFile.writeAsBytes(payload);
-      handler.routes['/collision'] = (request) async {
-        _send(request.response, HttpStatus.ok, payload, etag: '"v1"');
-      };
-      handler.routes['/fallback'] = (request) async {
-        _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
-      };
+  test('replaces a wrong-size stale completed file from the network', () async {
+    final payload = utf8.encode('final collision payload');
+    final asset = await _asset(payload, const ['/collision', '/fallback']);
+    final finalFile = File(
+      '${directory.path}${Platform.pathSeparator}${asset.fileName}',
+    );
+    await finalFile.writeAsBytes([...payload, 0]);
+    handler.routes['/collision'] = (request) async {
+      _send(request.response, HttpStatus.ok, payload, etag: '"v1"');
+    };
+    handler.routes['/fallback'] = (request) async {
+      _send(request.response, HttpStatus.ok, payload, etag: '"fallback"');
+    };
 
-      await expectLater(
-        downloader().download(
-          asset,
-          directory,
-          onProgress: (_) {},
-          cancellation: DownloadCancellation(),
-        ),
-        throwsA(isA<StateError>()),
-      );
-      expect(handler.paths, isEmpty);
-    },
-  );
+    final recovered = await downloader().download(
+      asset,
+      directory,
+      onProgress: (_) {},
+      cancellation: DownloadCancellation(),
+    );
+
+    expect(await recovered.file.readAsBytes(), payload);
+    expect(handler.paths, ['/collision']);
+  });
 
   test(
     'rejects a 206 response whose Content-Range starts at the wrong byte',
