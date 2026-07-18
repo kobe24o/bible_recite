@@ -200,6 +200,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateFailedMessage => '请检查网络后重试。';
+
+  @override
+  String get updateReleaseOpenFailed => '无法打开发布页面，请重试。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -398,4 +401,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get updateFailedMessage => '請檢查網路後重試。';
+
+  @override
+  String get updateReleaseOpenFailed => '無法開啟發行頁面，請重試。';
 }

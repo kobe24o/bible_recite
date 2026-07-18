@@ -66,5 +66,6 @@
   "updatePermissionRetryMessage": "仍未獲得許可。點選安裝可再次開啟 Android 設定。",
   "updateInstalling": "正在開啟 Android 安裝程式…",
   "updateFailed": "無法更新",
-  "updateFailedMessage": "請檢查網路後重試。"
+  "updateFailedMessage": "請檢查網路後重試。",
+  "updateReleaseOpenFailed": "無法開啟發行頁面，請重試。"
 }

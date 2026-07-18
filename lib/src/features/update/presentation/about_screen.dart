@@ -20,11 +20,19 @@ final aboutUpdateActionsProvider = Provider<AboutUpdateActions>(
   ),
 );
 
+typedef UpdateReleaseLauncher = Future<bool> Function(Uri uri);
+
+final updateReleaseLauncherProvider = Provider<UpdateReleaseLauncher>(
+  (ref) =>
+      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
+);
+
 abstract interface class AboutUpdateActions {
   Future<void> check();
   Future<void> startDownload();
   Future<void> confirmCellularDownload();
   Future<void> cancelDownload();
+  Future<void> cancelCellularDownload();
   Future<void> install();
 }
 
@@ -35,6 +43,9 @@ class _ControllerAboutUpdateActions implements AboutUpdateActions {
 
   @override
   Future<void> cancelDownload() => _controller.cancelDownload();
+
+  @override
+  Future<void> cancelCellularDownload() => _controller.cancelCellularDownload();
 
   @override
   Future<void> check() => _controller.check();
@@ -73,14 +84,17 @@ class _AboutScreenState extends ConsumerState<AboutScreen>
         _permissionResumePending =
             next is PermissionRequired &&
             next.retryPhase == PermissionRetryPhase.awaitingResume;
-        if (next is AwaitingCellularConfirmation) {
+        if (next is AwaitingCellularConfirmation &&
+            ref.read(updateRuntimePlatformProvider) ==
+                UpdateRuntimePlatform.android) {
           _showCellularDialog(next.manifest);
         }
       },
       fireImmediately: true,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      final status = ref.read(aboutUpdateStatusProvider);
+      if (mounted && _mayAutoCheck(status)) {
         unawaited(ref.read(aboutUpdateActionsProvider).check());
       }
     });
@@ -113,36 +127,45 @@ class _AboutScreenState extends ConsumerState<AboutScreen>
       }
       await showDialog<void>(
         context: context,
+        barrierDismissible: false,
         builder: (context) {
           final strings = AppLocalizations.of(context)!;
-          return AlertDialog(
-            title: Text(strings.updateCellularTitle),
-            content: Text(
-              strings.updateCellularMessage(
-                _formatBytes(manifest.android.size),
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: Text(strings.updateCellularTitle),
+              content: Text(
+                strings.updateCellularMessage(
+                  _formatBytes(manifest.android.size),
+                ),
               ),
+              actions: [
+                TextButton(
+                  key: const Key('about-cellular-cancel'),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    unawaited(
+                      ref
+                          .read(aboutUpdateActionsProvider)
+                          .cancelCellularDownload(),
+                    );
+                  },
+                  child: Text(strings.updateNotNow),
+                ),
+                FilledButton(
+                  key: const Key('about-update'),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    unawaited(
+                      ref
+                          .read(aboutUpdateActionsProvider)
+                          .confirmCellularDownload(),
+                    );
+                  },
+                  child: Text(strings.updateDownload),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  unawaited(ref.read(aboutUpdateActionsProvider).check());
-                },
-                child: Text(strings.updateNotNow),
-              ),
-              FilledButton(
-                key: const Key('about-update'),
-                onPressed: () {
-                  Navigator.pop(context);
-                  unawaited(
-                    ref
-                        .read(aboutUpdateActionsProvider)
-                        .confirmCellularDownload(),
-                  );
-                },
-                child: Text(strings.updateDownload),
-              ),
-            ],
           );
         },
       );
@@ -194,6 +217,21 @@ class _UpdatePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = AppLocalizations.of(context)!;
     final controller = ref.read(aboutUpdateActionsProvider);
+
+    final nonAndroidManifest = switch (status) {
+      AwaitingCellularConfirmation(:final manifest) => manifest,
+      UpdateDownloading(:final manifest) => manifest,
+      ReadyToInstall(:final manifest) => manifest,
+      PermissionRequired(:final manifest) => manifest,
+      UpdateInstalling(:final manifest) => manifest,
+      _ => null,
+    };
+    if (!isAndroid && nonAndroidManifest != null) {
+      return _AvailablePanel(
+        manifest: nonAndroidManifest,
+        directInstall: false,
+      );
+    }
 
     Widget checkButton() => OutlinedButton(
       key: const Key('about-check'),
@@ -326,19 +364,58 @@ class _AvailablePanel extends ConsumerWidget {
               child: Text(strings.updateDownload),
             )
           else
-            FilledButton.icon(
-              key: const Key('about-release-link'),
-              onPressed: () => unawaited(
-                launchUrl(
-                  manifest.releasePageUrl,
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-              icon: const Icon(Icons.open_in_new),
-              label: Text(strings.updateViewRelease),
-            ),
+            _ReleaseLinkButton(uri: manifest.releasePageUrl),
         ],
       ),
+    );
+  }
+}
+
+class _ReleaseLinkButton extends ConsumerStatefulWidget {
+  const _ReleaseLinkButton({required this.uri});
+  final Uri uri;
+  @override
+  ConsumerState<_ReleaseLinkButton> createState() => _ReleaseLinkButtonState();
+}
+
+class _ReleaseLinkButtonState extends ConsumerState<_ReleaseLinkButton> {
+  var _opening = false;
+  var _failed = false;
+  Future<void> _open() async {
+    if (_opening) return;
+    setState(() {
+      _opening = true;
+      _failed = false;
+    });
+    var opened = false;
+    try {
+      opened = await ref.read(updateReleaseLauncherProvider)(widget.uri);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _opening = false;
+      _failed = !opened;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          key: const Key('about-release-link'),
+          onPressed: _opening ? null : _open,
+          icon: const Icon(Icons.open_in_new),
+          label: Text(strings.updateViewRelease),
+        ),
+        if (_failed)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(strings.updateReleaseOpenFailed),
+          ),
+      ],
     );
   }
 }
@@ -398,3 +475,11 @@ String _formatBytes(int bytes) {
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
+
+bool _mayAutoCheck(UpdateStatus status) => switch (status) {
+  UpdateIdle() ||
+  UpdateCurrent() ||
+  UpdateAvailable() ||
+  UpdateFailed() => true,
+  _ => false,
+};

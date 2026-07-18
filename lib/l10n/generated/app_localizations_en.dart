@@ -207,4 +207,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateFailedMessage =>
       'Please check your connection and try again.';
+
+  @override
+  String get updateReleaseOpenFailed =>
+      'Unable to open the release page. Please try again.';
 }

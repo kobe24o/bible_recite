@@ -66,5 +66,6 @@
   "updatePermissionRetryMessage": "Permission is still not allowed. Tap install to open Android settings again.",
   "updateInstalling": "Opening Android installer…",
   "updateFailed": "Unable to update",
-  "updateFailedMessage": "Please check your connection and try again."
+  "updateFailedMessage": "Please check your connection and try again.",
+  "updateReleaseOpenFailed": "Unable to open the release page. Please try again."
 }

@@ -114,6 +114,25 @@ void main() {
     expect(actions.installs, 1);
   });
 
+  testWidgets(
+    'does not auto-check or expose APK UI for pending non-Android state',
+    (tester) async {
+      final actions = _Actions();
+      await _pumpAbout(
+        tester,
+        status: ReadyToInstall(
+          manifest: _manifest(),
+          file: File('verified.apk'),
+        ),
+        actions: actions,
+      );
+      expect(actions.checks, 0);
+      expect(find.byKey(const Key('about-release-link')), findsOneWidget);
+      expect(find.byKey(const Key('about-install')), findsNothing);
+      expect(find.byKey(const Key('about-cancel')), findsNothing);
+    },
+  );
+
   testWidgets('shows stable failure text and non-Android Release link', (
     tester,
   ) async {
@@ -180,6 +199,9 @@ final class _Actions implements AboutUpdateActions {
 
   @override
   Future<void> cancelDownload() async => cancellations++;
+
+  @override
+  Future<void> cancelCellularDownload() async => cancellations++;
 
   @override
   Future<void> check() async => checks++;

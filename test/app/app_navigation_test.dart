@@ -82,6 +82,9 @@ final class _CountingUpdateActions implements AboutUpdateActions {
   Future<void> cancelDownload() async {}
 
   @override
+  Future<void> cancelCellularDownload() async {}
+
+  @override
   Future<void> check() async => checks++;
 
   @override

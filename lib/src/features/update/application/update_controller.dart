@@ -119,6 +119,21 @@ final class UpdateController extends Notifier<UpdateStatus> {
     _downloadCancellation?.cancel();
   }
 
+  Future<void> cancelCellularDownload() async {
+    if (_operationActive || !_isAndroid) {
+      return;
+    }
+    final current = state;
+    if (current is AwaitingCellularConfirmation) {
+      _emit(
+        UpdateAvailable(
+          manifest: current.manifest,
+          supportsDirectInstall: true,
+        ),
+      );
+    }
+  }
+
   Future<void> install() async {
     if (_operationActive || !_isAndroid) {
       return;

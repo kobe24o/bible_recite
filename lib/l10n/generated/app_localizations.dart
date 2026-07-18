@@ -452,6 +452,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please check your connection and try again.'**
   String get updateFailedMessage;
+
+  /// No description provided for @updateReleaseOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open the release page. Please try again.'**
+  String get updateReleaseOpenFailed;
 }
 
 class _AppLocalizationsDelegate
