@@ -102,7 +102,10 @@ class _AboutScreenState extends ConsumerState<AboutScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !_permissionResumePending) {
+    if (state != AppLifecycleState.resumed ||
+        !_permissionResumePending ||
+        ref.read(updateRuntimePlatformProvider) !=
+            UpdateRuntimePlatform.android) {
       return;
     }
     _permissionResumePending = false;

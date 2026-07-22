@@ -118,6 +118,47 @@ void main() {
     expect(actions.installs, 1);
   });
 
+  testWidgets('non-Android permission resume never starts an APK install', (
+    tester,
+  ) async {
+    final actions = _Actions();
+    await _pumpAbout(
+      tester,
+      status: PermissionRequired(
+        manifest: _manifest(),
+        file: File('verified.apk'),
+      ),
+      actions: actions,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(actions.installs, 0);
+    expect(find.byKey(const Key('about-release-link')), findsOneWidget);
+    expect(find.byKey(const Key('about-install')), findsNothing);
+  });
+
+  testWidgets('cellular cancel closes the protected dialog without download', (
+    tester,
+  ) async {
+    final actions = _Actions();
+    await _pumpAbout(
+      tester,
+      platform: UpdateRuntimePlatform.android,
+      status: AwaitingCellularConfirmation(manifest: _manifest()),
+      actions: actions,
+    );
+    expect(find.text('Use cellular data?'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Use cellular data?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('about-cellular-cancel')));
+    await tester.pumpAndSettle();
+    expect(actions.cancellations, 1);
+    expect(actions.downloads, 0);
+  });
+
   testWidgets(
     'does not auto-check or expose APK UI for pending non-Android state',
     (tester) async {
