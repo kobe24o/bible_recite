@@ -8,6 +8,7 @@ import '../../plans/application/plan_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
 import '../data/sherpa_streaming_recognizer.dart';
+import '../domain/exact_text_comparator.dart';
 import '../domain/recognition_models.dart';
 import '../domain/recitation_alignment.dart';
 import '../domain/speech_recognizer.dart';
@@ -49,6 +50,7 @@ class RecitationPracticeScreen extends ConsumerStatefulWidget {
 
 class _RecitationPracticeScreenState
     extends ConsumerState<RecitationPracticeScreen> {
+  static const _exactComparator = ExactTextComparator();
   late final OfflineSpeechRecognizer _recognizer;
   StreamSubscription<RecognitionEvent>? _subscription;
   String _transcript = '';
@@ -76,7 +78,7 @@ class _RecitationPracticeScreenState
   }
 
   RecitationAlignment get _alignment =>
-      RecitationAlignment.compare(_target, _transcript, finished: _finished);
+      _exactComparator.compare(_target, _transcript, finished: _finished);
 
   @override
   void initState() {
@@ -103,7 +105,7 @@ class _RecitationPracticeScreenState
   Future<void> _toggleRecording() async {
     if (_recording) {
       await _recognizer.stop();
-      final alignment = RecitationAlignment.compare(
+      final alignment = _exactComparator.compare(
         _target,
         _transcript,
         finished: true,
