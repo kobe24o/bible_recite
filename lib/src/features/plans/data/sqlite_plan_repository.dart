@@ -304,6 +304,53 @@ final class SqlitePlanRepository {
         .toList(growable: false);
   }
 
+  /// Appends passages as new daily tasks.  Keeping their original book on each
+  /// task (rather than on the plan header) is what permits one plan to span
+  /// chapters and books.
+  Future<void> appendDailyTasks(
+    MemorizationPlan plan,
+    List<NewPlanTask> passages,
+  ) async {
+    if (plan.contentLocked) {
+      throw StateError('云端计划的经文内容不能修改');
+    }
+    if (passages.isEmpty) return;
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      for (var index = 0; index < passages.length; index++) {
+        final task = passages[index];
+        final dayIndex = plan.days + index;
+        final dueDate = plan.startDate.add(Duration(days: dayIndex));
+        _database.execute(
+          '''INSERT INTO plan_task
+          (plan_id, day_index, due_date, book_id, start_chapter, start_verse,
+           end_chapter, end_verse) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+          [
+            plan.id,
+            dayIndex,
+            _date(dueDate),
+            task.bookId ?? plan.bookId,
+            task.startChapter,
+            task.startVerse,
+            task.endChapter,
+            task.endVerse,
+          ],
+        );
+      }
+      final days = plan.days + passages.length;
+      final endDate = plan.startDate.add(Duration(days: days - 1));
+      _database.execute(
+        'UPDATE memorization_plan SET days = ?, end_date = ? WHERE id = ?',
+        [days, _date(endDate), plan.id],
+      );
+      _database.execute('COMMIT');
+      await evaluateAndUnlockAchievements(source: 'plan');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   Future<List<PlanTask>> dueTasks(
     DateTime date, {
     bool includeCompleted = false,

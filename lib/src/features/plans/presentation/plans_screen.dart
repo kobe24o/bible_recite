@@ -164,7 +164,45 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           onPressed: _working ? null : () => _editPlan(plan),
           icon: const Icon(Icons.edit_outlined),
         ),
-        onTap: _working ? null : () => _editPlan(plan),
+        onTap: _working ? null : () => _showPlanSchedule(plan),
+      ),
+    );
+  }
+
+  Future<void> _showPlanSchedule(MemorizationPlan plan) async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    final tasks = await repository.listTasks(plan.id);
+    if (!mounted) return;
+    final catalog = ref.read(bookNameCatalogProvider);
+    final locale = Localizations.localeOf(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            Text(plan.title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('每天背诵安排 · ${plan.days} 天'),
+            const SizedBox(height: 12),
+            for (final task in tasks)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(child: Text('${task.dayIndex + 1}')),
+                title: Text(
+                  '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
+                  '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
+                ),
+                subtitle: Text(
+                  '${task.dueDate.year}-${task.dueDate.month.toString().padLeft(2, '0')}-${task.dueDate.day.toString().padLeft(2, '0')}',
+                ),
+                trailing: task.completed
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : null,
+              ),
+          ],
+        ),
       ),
     );
   }

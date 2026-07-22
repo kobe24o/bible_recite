@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/domain/plan_draft_builder.dart';
+import '../../plans/domain/plan_models.dart';
 import '../../plans/presentation/plan_editor_dialog.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../application/scripture_providers.dart';
@@ -31,6 +32,8 @@ class PassageScreen extends ConsumerStatefulWidget {
 
 class _PassageScreenState extends ConsumerState<PassageScreen> {
   String? _parallelTranslationId;
+  final Set<int> _selectedVerseIndexes = <int>{};
+  bool _selectingVerses = false;
 
   Future<_PassageData> _load(ScriptureRepository repository) async {
     final translations = await repository.listTranslations();
@@ -66,7 +69,22 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       Localizations.localeOf(context),
     );
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Text(
+          _selectingVerses ? '已选择 ${_selectedVerseIndexes.length} 节' : title,
+        ),
+        actions: [
+          if (_selectingVerses)
+            IconButton(
+              tooltip: '取消选择',
+              onPressed: () => setState(() {
+                _selectingVerses = false;
+                _selectedVerseIndexes.clear();
+              }),
+              icon: const Icon(Icons.close),
+            ),
+        ],
+      ),
       body: repository.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
@@ -144,11 +162,18 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           key: const Key('add-to-plan-button'),
-                          onPressed: data.units.isEmpty
+                          onPressed:
+                              data.units.isEmpty ||
+                                  (_selectingVerses &&
+                                      _selectedVerseIndexes.isEmpty)
                               ? null
-                              : () => _showAddToPlan(context),
+                              : () => _showAddToPlan(context, data.units),
                           icon: const Icon(Icons.playlist_add_rounded),
-                          label: Text(AppLocalizations.of(context)!.addToPlan),
+                          label: Text(
+                            _selectingVerses
+                                ? '加入背诵计划（${_selectedVerseIndexes.length}）'
+                                : AppLocalizations.of(context)!.addToPlan,
+                          ),
                         ),
                       ),
                     ],
@@ -156,7 +181,23 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                 ),
                 Expanded(
                   child: data.parallel == null
-                      ? _SinglePassage(units: data.units)
+                      ? _SinglePassage(
+                          units: data.units,
+                          selecting: _selectingVerses,
+                          selectedIndexes: _selectedVerseIndexes,
+                          onLongPress: (index) => setState(() {
+                            _selectingVerses = true;
+                            _selectedVerseIndexes.add(index);
+                          }),
+                          onTap: (index) {
+                            if (!_selectingVerses) return;
+                            setState(() {
+                              if (!_selectedVerseIndexes.add(index)) {
+                                _selectedVerseIndexes.remove(index);
+                              }
+                            });
+                          },
+                        )
                       : _ParallelPassageView(passage: data.parallel!),
                 ),
               ],
@@ -167,7 +208,16 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     );
   }
 
-  Future<void> _showAddToPlan(BuildContext context) async {
+  Future<void> _showAddToPlan(
+    BuildContext context,
+    List<VerseUnit> units,
+  ) async {
+    final selected = _selectingVerses
+        ? [
+            for (var index = 0; index < units.length; index++)
+              if (_selectedVerseIndexes.contains(index)) units[index],
+          ]
+        : units;
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
     await showDialog<void>(
       context: context,
@@ -186,14 +236,22 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              context.go('/plans');
+              if (_selectingVerses) {
+                _chooseExistingPlan(selected);
+              } else {
+                context.go('/plans');
+              }
             },
             child: Text(chinese ? '选择已有计划' : 'Existing plans'),
           ),
           FilledButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              await _openNewPlanEditor();
+              if (_selectingVerses) {
+                await _createPlanFromSelection(selected);
+              } else {
+                await _openNewPlanEditor();
+              }
             },
             child: Text(chinese ? '新建计划' : 'New plan'),
           ),
@@ -201,6 +259,106 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       ),
     );
   }
+
+  Future<void> _chooseExistingPlan(List<VerseUnit> selected) async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    final plans = (await repository.listPlans())
+        .where((plan) => !plan.contentLocked)
+        .toList(growable: false);
+    if (!mounted) return;
+    if (plans.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可编辑的本地计划，请先新建计划')));
+      return;
+    }
+    final plan = await showModalBottomSheet<MemorizationPlan>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('选择要加入的背诵计划')),
+            for (final item in plans)
+              ListTile(
+                leading: const Icon(Icons.playlist_add_rounded),
+                title: Text(item.title),
+                subtitle: Text('目前 ${item.days} 天 · ${item.totalTasks} 段'),
+                onTap: () => Navigator.pop(context, item),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (plan == null || !mounted) return;
+    try {
+      await repository.appendDailyTasks(plan, _tasksFor(selected));
+      if (!mounted) return;
+      setState(() {
+        _selectingVerses = false;
+        _selectedVerseIndexes.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已加入“${plan.title}”，按新增日期安排背诵')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加入计划失败：$error')));
+      }
+    }
+  }
+
+  Future<void> _createPlanFromSelection(List<VerseUnit> selected) async {
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day);
+    final catalog = ref.read(bookNameCatalogProvider);
+    final title =
+        '${catalog.chapterLabel(widget.bookId, widget.chapter, Localizations.localeOf(context))} 背诵计划';
+    try {
+      final repository = await ref.read(planRepositoryProvider.future);
+      await repository.createPlan(
+        NewMemorizationPlan(
+          title: title,
+          translationId: widget.translationId,
+          bookId: widget.bookId,
+          startChapter: widget.chapter,
+          endChapter: widget.chapter,
+          startDate: start,
+          endDate: start.add(Duration(days: selected.length - 1)),
+          tasks: _tasksFor(selected),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _selectingVerses = false;
+        _selectedVerseIndexes.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('计划已创建：每天安排一节，可在计划中查看')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建计划失败：$error')));
+      }
+    }
+  }
+
+  List<NewPlanTask> _tasksFor(List<VerseUnit> units) => [
+    for (var index = 0; index < units.length; index++)
+      NewPlanTask(
+        dayIndex: index,
+        bookId: units[index].start.osisBookId,
+        startChapter: units[index].start.chapter,
+        startVerse: units[index].start.verse,
+        endChapter: units[index].end.chapter,
+        endVerse: units[index].end.verse,
+      ),
+  ];
 
   Future<void> _openNewPlanEditor() async {
     final locale = Localizations.localeOf(context);
@@ -315,8 +473,18 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
 }
 
 class _SinglePassage extends StatelessWidget {
-  const _SinglePassage({required this.units});
+  const _SinglePassage({
+    required this.units,
+    required this.selecting,
+    required this.selectedIndexes,
+    required this.onLongPress,
+    required this.onTap,
+  });
   final List<VerseUnit> units;
+  final bool selecting;
+  final Set<int> selectedIndexes;
+  final ValueChanged<int> onLongPress;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -324,14 +492,30 @@ class _SinglePassage extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       itemCount: units.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _VerseRow(unit: units[index]),
+      itemBuilder: (context, index) => _VerseRow(
+        unit: units[index],
+        selected: selectedIndexes.contains(index),
+        selectable: selecting,
+        onLongPress: () => onLongPress(index),
+        onTap: () => onTap(index),
+      ),
     );
   }
 }
 
 class _VerseRow extends StatelessWidget {
-  const _VerseRow({required this.unit});
+  const _VerseRow({
+    required this.unit,
+    this.selected = false,
+    this.selectable = false,
+    this.onLongPress,
+    this.onTap,
+  });
   final VerseUnit unit;
+  final bool selected;
+  final bool selectable;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -342,23 +526,40 @@ class _VerseRow extends StatelessWidget {
       label:
           '${unit.translationId} ${unit.start.osisBookId} '
           '${unit.start.chapter}:$label',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 48,
-            child: Text(label, style: Theme.of(context).textTheme.labelLarge),
-          ),
-          Expanded(
-            child: Text(
-              unit.status == SourceTextStatus.omitted
-                  ? AppLocalizations.of(context)?.omittedVerse ??
-                        'This verse is omitted in this translation.'
-                  : unit.text,
-              style: Theme.of(context).textTheme.bodyLarge,
+      child: Material(
+        color: selected
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onLongPress: onLongPress,
+          onTap: selectable ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    unit.status == SourceTextStatus.omitted
+                        ? AppLocalizations.of(context)?.omittedVerse ??
+                              'This verse is omitted in this translation.'
+                        : unit.text,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

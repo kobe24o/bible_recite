@@ -51,4 +51,38 @@ void main() {
     expect(find.text('编辑背诵计划'), findsOneWidget);
     expect(find.text('约翰福音 3章'), findsWidgets);
   });
+
+  testWidgets('long press enables multi-verse selection', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: [Locale('zh'), Locale('en')],
+          home: PassageScreen(
+            translationId: 'eng-web',
+            bookId: 'JHN',
+            chapter: 3,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('16'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选择 1 节'), findsOneWidget);
+    expect(find.text('加入背诵计划（1）'), findsOneWidget);
+  });
 }

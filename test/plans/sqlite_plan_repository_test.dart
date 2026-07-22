@@ -56,6 +56,40 @@ void main() {
     ]);
   });
 
+  test('appends selected passages as future days across books', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(_plan());
+    final original = (await repository.listPlans()).single;
+
+    await repository.appendDailyTasks(original, const [
+      NewPlanTask(
+        dayIndex: 0,
+        bookId: 'ROM',
+        startChapter: 8,
+        startVerse: 28,
+        endChapter: 8,
+        endVerse: 28,
+      ),
+      NewPlanTask(
+        dayIndex: 1,
+        bookId: 'PHP',
+        startChapter: 4,
+        startVerse: 13,
+        endChapter: 4,
+        endVerse: 13,
+      ),
+    ]);
+
+    final plan = (await repository.listPlans()).single;
+    final tasks = await repository.listTasks(id);
+    expect(plan.days, 5);
+    expect(plan.endDate, DateTime(2026, 7, 18));
+    expect(tasks.map((task) => task.bookId), ['JHN', 'ROM', 'PHP']);
+    expect(tasks.map((task) => task.dayIndex), [0, 3, 4]);
+    expect(tasks.last.dueDate, DateTime(2026, 7, 18));
+  });
+
   test('persists cloud identity and locked content metadata', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
