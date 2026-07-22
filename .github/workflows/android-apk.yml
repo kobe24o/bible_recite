@@ -166,7 +166,7 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS simulator app
-        run: flutter build ios --simulator --release
+        run: flutter build ios --simulator --debug
 
       - name: Validate and package iOS simulator app
         run: |

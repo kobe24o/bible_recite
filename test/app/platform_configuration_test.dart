@@ -130,7 +130,7 @@ void main() {
     ).readAsStringSync();
 
     expect(workflow, contains('flutter build apk --release'));
-    expect(workflow, contains('flutter build ios --release --no-codesign'));
+    expect(workflow, contains('flutter build ios --simulator --debug'));
     expect(workflow, contains('apksigner verify --print-certs'));
     expect(workflow, contains(r'print tolower($NF)'));
     expect(workflow, contains('gh release create'));
