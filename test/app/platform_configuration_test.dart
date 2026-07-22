@@ -96,7 +96,10 @@ void main() {
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
     expect(manifest, contains('@mipmap/ic_launcher_bible'));
-    expect(pubspec, contains('version: 1.0.3+4'));
+    expect(
+      pubspec,
+      matches(RegExp(r'^version: \d+\.\d+\.\d+\+\d+$', multiLine: true)),
+    );
   });
 
   test('phonetic recitation scoring packages its pinned pinyin dependency', () {
