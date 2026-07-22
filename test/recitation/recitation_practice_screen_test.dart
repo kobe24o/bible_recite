@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:bible_recite/src/features/recitation/domain/bible_pronunciation_lexicon.dart';
+import 'package:bible_recite/src/features/recitation/domain/mandarin_phonetic_comparator.dart';
 import 'package:bible_recite/src/features/recitation/domain/recognition_models.dart';
 import 'package:bible_recite/src/features/recitation/domain/speech_recognizer.dart';
 import 'package:bible_recite/src/features/recitation/presentation/recitation_practice_screen.dart';
@@ -41,6 +43,7 @@ void main() {
     );
 
     expect(find.text('第 1 / 2 节'), findsOneWidget);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
     recognizer.emit(const RecognitionPartial('神爱'));
@@ -122,6 +125,8 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
     recognizer.emit(const RecognitionPartial('神爱世人甚至将他的独生子赐给他们'));
@@ -171,6 +176,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
     recognizer.emit(const RecognitionFinal('神爱世人'));
@@ -183,6 +189,58 @@ void main() {
         DateTime.now().add(const Duration(days: 30)),
       ),
       hasLength(6),
+    );
+  });
+
+  testWidgets('finished Chinese recitation records phonetic corrections', (
+    tester,
+  ) async {
+    final recognizer = FakeRecognizer();
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: const [Locale('zh')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: RecitationPracticeScreen(
+            request: RecitationRequest(
+              translationId: 'cmn-cu89s',
+              bookId: 'JHN',
+              chapter: 3,
+              mode: RecitationMode.verse,
+              units: [_unit(16, '喜乐')],
+            ),
+            recognizer: recognizer,
+            mandarinComparator: MandarinPhoneticComparator(
+              lexicon: BiblePronunciationLexicon.fromJson('{}'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+    recognizer.emit(const RecognitionFinal('洗了'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('同音修正 2'), findsWidgets);
+    expect(
+      (await repository.listRecitationResults()).single.phoneticCorrectCount,
+      2,
     );
   });
 }

@@ -7,10 +7,13 @@ import 'package:flutter/services.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
+import '../application/recitation_scoring_provider.dart';
 import '../data/sherpa_streaming_recognizer.dart';
 import '../domain/exact_text_comparator.dart';
+import '../domain/mandarin_phonetic_comparator.dart';
 import '../domain/recognition_models.dart';
 import '../domain/recitation_alignment.dart';
+import '../domain/recitation_comparator.dart';
 import '../domain/speech_recognizer.dart';
 
 enum RecitationMode { verse, continuous }
@@ -37,11 +40,13 @@ class RecitationPracticeScreen extends ConsumerStatefulWidget {
   const RecitationPracticeScreen({
     required this.request,
     this.recognizer,
+    this.mandarinComparator,
     super.key,
   });
 
   final RecitationRequest request;
   final OfflineSpeechRecognizer? recognizer;
+  final MandarinPhoneticComparator? mandarinComparator;
 
   @override
   ConsumerState<RecitationPracticeScreen> createState() =>
@@ -61,6 +66,7 @@ class _RecitationPracticeScreenState
   bool _preparing = false;
   bool _revealed = false;
   bool _finished = false;
+  RecitationAlignment? _finishedAlignment;
   int _currentVerse = 0;
   DateTime? _startedAt;
 
@@ -78,12 +84,19 @@ class _RecitationPracticeScreenState
   }
 
   RecitationAlignment get _alignment =>
+      _finishedAlignment ??
       _exactComparator.compare(_target, _transcript, finished: _finished);
 
   @override
   void initState() {
     super.initState();
     _recognizer = widget.recognizer ?? SherpaStreamingRecognizer();
+    // Load before recording starts so completion normally has no scoring delay.
+    unawaited(
+      ref
+          .read(mandarinPhoneticComparatorProvider.future)
+          .then<void>((_) {}, onError: (_) {}),
+    );
     _subscription = _recognizer.events.listen((event) {
       if (!mounted) return;
       setState(() {
@@ -105,15 +118,12 @@ class _RecitationPracticeScreenState
   Future<void> _toggleRecording() async {
     if (_recording) {
       await _recognizer.stop();
-      final alignment = _exactComparator.compare(
-        _target,
-        _transcript,
-        finished: true,
-      );
+      final alignment = await _finishedScoring();
       if (mounted) {
         setState(() {
           _recording = false;
           _finished = true;
+          _finishedAlignment = alignment;
         });
       }
       await _saveResult(alignment);
@@ -124,6 +134,7 @@ class _RecitationPracticeScreenState
       _error = null;
       _transcript = '';
       _finished = false;
+      _finishedAlignment = null;
       _startedAt = DateTime.now();
     });
     try {
@@ -138,6 +149,25 @@ class _RecitationPracticeScreenState
     } finally {
       if (mounted) setState(() => _preparing = false);
     }
+  }
+
+  Future<RecitationAlignment> _finishedScoring() async {
+    final scoring = ref.read(mandarinPhoneticComparatorProvider);
+    final mandarin =
+        widget.mandarinComparator ??
+        switch (scoring) {
+          AsyncData(:final value) => value,
+          _ => null,
+        };
+    if (mandarin == null) {
+      // Asset loading must never delay or prevent saving a recitation.
+      return _exactComparator.compare(_target, _transcript, finished: true);
+    }
+    return comparatorForTranslation(
+      widget.request.translationId,
+      finished: true,
+      mandarin: mandarin,
+    ).compare(_target, _transcript, finished: true);
   }
 
   Future<void> _saveResult(RecitationAlignment alignment) async {
@@ -159,6 +189,7 @@ class _RecitationPracticeScreenState
           mode: widget.request.mode.name,
           durationSeconds: elapsed.inSeconds,
           correctCount: alignment.correctCount,
+          phoneticCorrectCount: alignment.phoneticCorrectCount,
           incorrectCount: alignment.incorrectCount,
           omittedCount: alignment.omittedCount,
           reorderedCount: alignment.reorderedCount,
@@ -214,6 +245,7 @@ class _RecitationPracticeScreenState
       _currentVerse++;
       _transcript = '';
       _finished = false;
+      _finishedAlignment = null;
       _revealed = false;
       _error = null;
     });
@@ -288,7 +320,9 @@ class _RecitationPracticeScreenState
                             style: TextStyle(
                               color: _colorFor(context, token.kind),
                               fontWeight:
-                                  token.kind == RecitationTokenKind.correct
+                                  token.kind == RecitationTokenKind.correct ||
+                                      token.kind ==
+                                          RecitationTokenKind.phoneticCorrect
                                   ? FontWeight.w600
                                   : FontWeight.w700,
                               decoration:
@@ -307,6 +341,11 @@ class _RecitationPracticeScreenState
               spacing: 12,
               children: [
                 _Legend(color: Colors.green, label: chinese ? '正确' : 'Correct'),
+                if (_finished && alignment.phoneticCorrectCount > 0)
+                  _Legend(
+                    color: Colors.teal,
+                    label: chinese ? '同音修正' : 'Phonetic correction',
+                  ),
                 _Legend(
                   color: Colors.red,
                   label: chinese ? '错误／漏字' : 'Wrong / missing',
@@ -355,9 +394,11 @@ class _RecitationPracticeScreenState
               ),
               subtitle: Text(
                 chinese
-                    ? '正确 ${alignment.correctCount} · 错误 ${alignment.incorrectCount} · '
+                    ? '原字正确 ${alignment.exactCorrectCount} · 错误 ${alignment.incorrectCount} · '
+                          '${alignment.phoneticCorrectCount > 0 ? '同音修正 ${alignment.phoneticCorrectCount} · ' : ''}'
                           '漏字 ${alignment.omittedCount} · 错序 ${alignment.reorderedCount}'
-                    : 'Correct ${alignment.correctCount} · Wrong ${alignment.incorrectCount} · '
+                    : 'Exact ${alignment.exactCorrectCount} · Wrong ${alignment.incorrectCount} · '
+                          '${alignment.phoneticCorrectCount > 0 ? 'Phonetic ${alignment.phoneticCorrectCount} · ' : ''}'
                           'Missing ${alignment.omittedCount} · Reordered ${alignment.reorderedCount}',
               ),
             ),
@@ -396,8 +437,8 @@ class _RecitationPracticeScreenState
     BuildContext context,
     RecitationTokenKind kind,
   ) => switch (kind) {
-    RecitationTokenKind.correct || RecitationTokenKind.phoneticCorrect =>
-      Colors.green,
+    RecitationTokenKind.correct ||
+    RecitationTokenKind.phoneticCorrect => Colors.green,
     RecitationTokenKind.incorrect || RecitationTokenKind.omitted => Colors.red,
     RecitationTokenKind.reordered => Colors.orange,
     RecitationTokenKind.pending => Colors.grey,

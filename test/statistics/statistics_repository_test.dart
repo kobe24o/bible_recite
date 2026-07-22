@@ -18,6 +18,7 @@ void main() {
         mode: 'continuous',
         durationSeconds: 42,
         correctCount: 20,
+        phoneticCorrectCount: 3,
         incorrectCount: 2,
         omittedCount: 1,
         reorderedCount: 1,
@@ -46,6 +47,7 @@ void main() {
     final records = await repository.listRecitationResults();
     expect(records, hasLength(2));
     expect(records.first.mode, 'verse');
+    expect(records.last.phoneticCorrectCount, 3);
     final summary = await repository.getRecitationSummary();
     expect(summary.totalSessions, 2);
     expect(summary.totalVerses, 3);

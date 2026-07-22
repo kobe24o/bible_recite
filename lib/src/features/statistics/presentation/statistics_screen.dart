@@ -137,6 +137,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             chinese
                                 ? '${result.mode == 'verse' ? '逐节' : '连续'} · '
                                       '${result.durationSeconds} 秒 · '
+                                      '${result.phoneticCorrectCount > 0 ? '同音修正 ${result.phoneticCorrectCount} · ' : ''}'
                                       '错 ${result.incorrectCount} 漏 ${result.omittedCount} '
                                       '错序 ${result.reorderedCount}'
                                 : '${result.mode} · ${result.durationSeconds}s',

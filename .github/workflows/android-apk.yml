@@ -205,6 +205,16 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
+      - name: Set up Flutter for signed manifest
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - name: Install manifest dependencies
+        run: flutter pub get
+
       - name: Download validated artifacts
         uses: actions/download-artifact@v6
         with:
@@ -227,3 +237,40 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
             --notes "Validated Android APK with stable signing fingerprint. The iOS simulator archive is for CI verification and is not installable on physical devices."
+
+      - name: Publish signed update feed
+        env:
+          UPDATE_MANIFEST_PRIVATE_KEY: ${{ secrets.UPDATE_MANIFEST_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$UPDATE_MANIFEST_PRIVATE_KEY"
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          version_name="${version%%+*}"
+          build_number="${version##*+}"
+          tag="build-${version}-${GITHUB_RUN_NUMBER}"
+          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' -printf '%f\n')"
+          test -n "$apk_name"
+          sha256="$(awk '{print $1}' "dist/$apk_name.sha256")"
+          dart run tool/update_feed/bin/create_update_envelope.dart \
+            --apk "dist/$apk_name" \
+            --sha256 "$sha256" \
+            --version-name "$version_name" \
+            --build-number "$build_number" \
+            --source-commit "$GITHUB_SHA" \
+            --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
+            --download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
+            --release-notes "See the GitHub Release for this version." \
+            --output "$RUNNER_TEMP/latest.json"
+          feed_dir="$RUNNER_TEMP/update-feed"
+          git worktree add --detach "$feed_dir"
+          pushd "$feed_dir"
+          git checkout --orphan update-feed
+          git rm -rf .
+          mkdir -p updates
+          cp "$RUNNER_TEMP/latest.json" updates/latest.json
+          git add updates/latest.json
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "publish: update feed $version"
+          git push --force origin HEAD:update-feed

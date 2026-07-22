@@ -9,6 +9,7 @@ final class NewRecitationResult {
     required this.mode,
     required this.durationSeconds,
     required this.correctCount,
+    this.phoneticCorrectCount = 0,
     required this.incorrectCount,
     required this.omittedCount,
     required this.reorderedCount,
@@ -25,6 +26,7 @@ final class NewRecitationResult {
   final String mode;
   final int durationSeconds;
   final int correctCount;
+  final int phoneticCorrectCount;
   final int incorrectCount;
   final int omittedCount;
   final int reorderedCount;
@@ -44,6 +46,7 @@ final class RecitationResult extends NewRecitationResult {
     required super.mode,
     required super.durationSeconds,
     required super.correctCount,
+    super.phoneticCorrectCount,
     required super.incorrectCount,
     required super.omittedCount,
     required super.reorderedCount,

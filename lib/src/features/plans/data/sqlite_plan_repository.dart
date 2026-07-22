@@ -56,6 +56,7 @@ final class SqlitePlanRepository {
         mode TEXT NOT NULL,
         duration_seconds INTEGER NOT NULL,
         correct_count INTEGER NOT NULL,
+        phonetic_correct_count INTEGER NOT NULL DEFAULT 0,
         incorrect_count INTEGER NOT NULL,
         omitted_count INTEGER NOT NULL,
         reordered_count INTEGER NOT NULL,
@@ -182,7 +183,12 @@ final class SqlitePlanRepository {
         'ALTER TABLE recitation_result ADD COLUMN chapter_verse_count INTEGER NOT NULL DEFAULT 0',
       );
     }
-    _database.execute('PRAGMA user_version = 5');
+    if (!resultColumns.contains('phonetic_correct_count')) {
+      _database.execute(
+        'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    _database.execute('PRAGMA user_version = 6');
   }
 
   final Database _database;
@@ -450,9 +456,9 @@ final class SqlitePlanRepository {
       '''INSERT INTO recitation_result
       (translation_id, book_id, chapter, start_verse, end_verse,
        chapter_verse_count, mode,
-       duration_seconds, correct_count, incorrect_count, omitted_count,
-       reordered_count, accuracy, completed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+       duration_seconds, correct_count, phonetic_correct_count, incorrect_count,
+       omitted_count, reordered_count, accuracy, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         result.translationId,
         result.bookId,
@@ -463,6 +469,7 @@ final class SqlitePlanRepository {
         result.mode,
         result.durationSeconds,
         result.correctCount,
+        result.phoneticCorrectCount,
         result.incorrectCount,
         result.omittedCount,
         result.reorderedCount,
@@ -873,6 +880,7 @@ final class SqlitePlanRepository {
     mode: row['mode'] as String,
     durationSeconds: row['duration_seconds'] as int,
     correctCount: row['correct_count'] as int,
+    phoneticCorrectCount: row['phonetic_correct_count'] as int,
     incorrectCount: row['incorrect_count'] as int,
     omittedCount: row['omitted_count'] as int,
     reorderedCount: row['reordered_count'] as int,
