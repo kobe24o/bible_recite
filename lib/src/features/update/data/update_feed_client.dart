@@ -13,7 +13,12 @@ const updateFeedFallbacks = [
   'https://raw.githubusercontent.com/kobe24o/bible_recite/update-feed/updates/latest.json',
 ];
 
-List<Uri> buildUpdateFeedSources({required Uri r2PublicBaseUrl}) {
+List<Uri> buildUpdateFeedSources({Uri? r2PublicBaseUrl}) {
+  if (r2PublicBaseUrl == null) {
+    return List.unmodifiable([
+      for (final fallback in updateFeedFallbacks) Uri.parse(fallback),
+    ]);
+  }
   if (r2PublicBaseUrl.scheme != 'https' || r2PublicBaseUrl.host.isEmpty) {
     throw ArgumentError.value(
       r2PublicBaseUrl,

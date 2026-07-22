@@ -103,8 +103,10 @@ final installedAppVersionProvider = FutureProvider<AppVersion>((ref) async {
   return AppVersion.parse(info.version, info.buildNumber);
 });
 
-final updateR2PublicBaseUrlProvider = Provider<Uri>(
-  (ref) => parseR2PublicBaseUrl(_r2PublicBaseUrl),
+final updateR2PublicBaseUrlProvider = Provider<Uri?>(
+  (ref) => _r2PublicBaseUrl.trim().isEmpty
+      ? null
+      : parseR2PublicBaseUrl(_r2PublicBaseUrl),
 );
 
 final updateFeedSourcesProvider = Provider<List<Uri>>(

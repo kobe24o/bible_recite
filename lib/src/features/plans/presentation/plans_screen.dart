@@ -412,8 +412,17 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   Future<void> _saveCustomPlan(PlanEditorDraft draft, {int? planId}) async {
     await _runSave(() async {
       final scripture = await ref.read(scriptureRepositoryProvider.future);
-      final plan = await buildPlanFromDraft(scripture, draft);
       final repository = await ref.read(planRepositoryProvider.future);
+      final completedTasks = planId == null
+          ? const <PlanTask>[]
+          : (await repository.listTasks(
+              planId,
+            )).where((task) => task.completed).toList(growable: false);
+      final plan = await buildPlanFromDraft(
+        scripture,
+        draft,
+        completedTasks: completedTasks,
+      );
       if (planId == null) {
         await repository.createPlan(plan);
       } else {

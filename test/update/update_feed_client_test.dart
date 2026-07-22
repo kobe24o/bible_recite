@@ -54,6 +54,13 @@ void main() {
     );
   });
 
+  test('uses approved CDN and GitHub fallbacks without an R2 URL', () {
+    final sources = buildUpdateFeedSources();
+
+    expect(sources.first.host, 'gcore.jsdelivr.net');
+    expect(sources, hasLength(4));
+  });
+
   test('rejects an R2 public base URL that is not HTTPS', () {
     expect(
       () => buildUpdateFeedSources(

@@ -11,11 +11,18 @@ import '../../scripture/application/scripture_providers.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 
-class StatisticsScreen extends ConsumerWidget {
+class StatisticsScreen extends ConsumerStatefulWidget {
   const StatisticsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StatisticsScreen> createState() => _StatisticsScreenState();
+}
+
+class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
+  bool _recentExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     final repository = ref.watch(planRepositoryProvider);
     final names = ref.watch(bookNameCatalogProvider);
@@ -113,7 +120,10 @@ class StatisticsScreen extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    for (final result in data.results)
+                    for (final result
+                        in _recentExpanded
+                            ? data.results
+                            : data.results.take(5))
                       Card(
                         child: ListTile(
                           leading: CircleAvatar(
@@ -131,6 +141,22 @@ class StatisticsScreen extends ConsumerWidget {
                                       '错序 ${result.reorderedCount}'
                                 : '${result.mode} · ${result.durationSeconds}s',
                           ),
+                        ),
+                      ),
+                    if (data.results.length > 5)
+                      TextButton.icon(
+                        key: const Key('toggle-recent-recitation'),
+                        onPressed: () =>
+                            setState(() => _recentExpanded = !_recentExpanded),
+                        icon: Icon(
+                          _recentExpanded
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                        ),
+                        label: Text(
+                          chinese
+                              ? (_recentExpanded ? '收起最近背诵' : '查看全部背诵')
+                              : (_recentExpanded ? 'Show less' : 'Show all'),
                         ),
                       ),
                   ],
