@@ -1,5 +1,8 @@
+import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/app/responsive_shell.dart';
+import 'package:bible_recite/src/app/router.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,5 +25,18 @@ void main() {
 
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+  });
+
+  testWidgets('About keeps the My destination selected', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    appRouter.go('/about');
+    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
   });
 }

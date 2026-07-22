@@ -27,6 +27,7 @@ class ResponsiveShell extends StatelessWidget {
       '/about/scripture-sources' => 1,
       final value when value.startsWith('/plans') => 2,
       final value when value.startsWith('/statistics') => 3,
+      '/about' => 3,
       _ => 0,
     };
     void navigate(int index) {

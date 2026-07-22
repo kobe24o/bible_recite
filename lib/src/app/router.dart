@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../features/dashboard/presentation/today_screen.dart';
+import '../features/update/presentation/about_screen.dart';
 import '../features/plans/presentation/plans_screen.dart';
 import '../features/recitation/presentation/recitation_practice_screen.dart';
 import '../features/scripture/presentation/passage_screen.dart';
@@ -47,6 +48,10 @@ final appRouter = GoRouter(
       path: '/statistics',
       builder: (context, state) =>
           const ResponsiveShell(child: StatisticsScreen()),
+    ),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) => const ResponsiveShell(child: AboutScreen()),
     ),
     GoRoute(
       path: '/about/scripture-sources',
