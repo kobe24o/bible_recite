@@ -99,6 +99,16 @@ void main() {
     expect(pubspec, contains('version: 1.0.3+4'));
   });
 
+  test('phonetic recitation scoring packages its pinned pinyin dependency', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+
+    expect(pubspec, contains('lpinyin: 2.0.3'));
+    expect(
+      pubspec,
+      contains('assets/pronunciation/bible_pinyin_overrides.json'),
+    );
+  });
+
   test('cloud release builds use a persistent signing keystore', () {
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
     final workflow = File(
