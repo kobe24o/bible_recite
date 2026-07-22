@@ -1,5 +1,6 @@
 enum RecitationTokenKind {
   correct,
+  phoneticCorrect,
   incorrect,
   omitted,
   reordered,
@@ -14,15 +15,17 @@ final class RecitationToken {
 }
 
 final class RecitationAlignment {
-  const RecitationAlignment.fromTokens({
-    required this.tokens,
+  RecitationAlignment.fromTokens({
+    required List<RecitationToken> tokens,
     required this.targetLength,
-  });
+  }) : tokens = List.unmodifiable(tokens);
 
   final List<RecitationToken> tokens;
   final int targetLength;
 
-  int get correctCount => _count(RecitationTokenKind.correct);
+  int get exactCorrectCount => _count(RecitationTokenKind.correct);
+  int get phoneticCorrectCount => _count(RecitationTokenKind.phoneticCorrect);
+  int get correctCount => exactCorrectCount + phoneticCorrectCount;
   int get incorrectCount => _count(RecitationTokenKind.incorrect);
   int get omittedCount => _count(RecitationTokenKind.omitted);
   int get reorderedCount => _count(RecitationTokenKind.reordered);
