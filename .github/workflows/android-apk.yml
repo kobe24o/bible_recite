@@ -123,7 +123,7 @@ jobs:
           retention-days: 30
 
   ios:
-    name: Build unsigned iOS IPA
+    name: Build iOS simulator app
     runs-on: macos-latest
     timeout-minutes: 45
 
@@ -165,32 +165,30 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS simulator app
+        run: flutter build ios --simulator --release
 
-      - name: Validate and package unsigned IPA
+      - name: Validate and package iOS simulator app
         run: |
-          app="build/ios/iphoneos/Runner.app"
+          app="build/ios/iphonesimulator/Runner.app"
           test -d "$app"
           bundle_id="$(plutil -extract CFBundleIdentifier raw \
             -o - "$app/Info.plist")"
           test "$bundle_id" = "app.biblerecite"
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
-          ipa_name="BibleRecite-iOS-${version}-unsigned.ipa"
-          rm -rf Payload
-          mkdir -p Payload dist
-          cp -R "$app" Payload/Runner.app
-          ditto -c -k --keepParent Payload "dist/$ipa_name"
-          (cd dist && shasum -a 256 "$ipa_name" > "$ipa_name.sha256")
-          echo "IPA_NAME=$ipa_name" >> "$GITHUB_ENV"
+          archive_name="BibleRecite-iOS-${version}-simulator.zip"
+          mkdir -p dist
+          ditto -c -k --keepParent "$app" "dist/$archive_name"
+          (cd dist && shasum -a 256 "$archive_name" > "$archive_name.sha256")
+          echo "IOS_ARTIFACT_NAME=$archive_name" >> "$GITHUB_ENV"
 
-      - name: Upload unsigned IPA
+      - name: Upload iOS simulator app
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.IPA_NAME }}
+          name: ${{ env.IOS_ARTIFACT_NAME }}
           path: |
-            dist/${{ env.IPA_NAME }}
-            dist/${{ env.IPA_NAME }}.sha256
+            dist/${{ env.IOS_ARTIFACT_NAME }}
+            dist/${{ env.IOS_ARTIFACT_NAME }}.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -228,4 +226,4 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
-            --notes "Validated Android APK with stable signing fingerprint. The iOS IPA is unsigned and requires Apple signing before installation."
+            --notes "Validated Android APK with stable signing fingerprint. The iOS simulator archive is for CI verification and is not installable on physical devices."

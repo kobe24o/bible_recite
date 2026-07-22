@@ -396,7 +396,8 @@ class _RecitationPracticeScreenState
     BuildContext context,
     RecitationTokenKind kind,
   ) => switch (kind) {
-    RecitationTokenKind.correct => Colors.green,
+    RecitationTokenKind.correct || RecitationTokenKind.phoneticCorrect =>
+      Colors.green,
     RecitationTokenKind.incorrect || RecitationTokenKind.omitted => Colors.red,
     RecitationTokenKind.reordered => Colors.orange,
     RecitationTokenKind.pending => Colors.grey,
