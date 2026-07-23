@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
 import '../application/recitation_scoring_provider.dart';
-import '../data/sherpa_streaming_recognizer.dart';
+import '../application/recitation_recognizer_provider.dart';
 import '../domain/exact_text_comparator.dart';
 import '../domain/mandarin_phonetic_comparator.dart';
 import '../domain/recognition_models.dart';
@@ -59,6 +60,7 @@ class _RecitationPracticeScreenState
     extends ConsumerState<RecitationPracticeScreen> {
   static const _exactComparator = ExactTextComparator();
   late final OfflineSpeechRecognizer _recognizer;
+  late final bool _ownsRecognizer;
   StreamSubscription<RecognitionEvent>? _subscription;
   String _transcript = '';
   String? _error;
@@ -92,7 +94,9 @@ class _RecitationPracticeScreenState
   @override
   void initState() {
     super.initState();
-    _recognizer = widget.recognizer ?? SherpaStreamingRecognizer();
+    _ownsRecognizer = widget.recognizer != null;
+    _recognizer = widget.recognizer ?? ref.read(recitationRecognizerProvider);
+    unawaited(_recognizer.initialize().catchError((_) {}));
     // Load before recording starts so completion normally has no scoring delay.
     unawaited(
       ref
@@ -271,6 +275,13 @@ class _RecitationPracticeScreenState
   @override
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final chapterLabel = ref
+        .watch(bookNameCatalogProvider)
+        .chapterLabel(
+          widget.request.bookId,
+          widget.request.chapter,
+          Localizations.localeOf(context),
+        );
     final units = _presentUnits;
     final alignment = _alignment;
     final verseMode = widget.request.mode == RecitationMode.verse;
@@ -297,6 +308,8 @@ class _RecitationPracticeScreenState
                       : 'Continuous · ${units.length} verses'),
             style: Theme.of(context).textTheme.titleLarge,
           ),
+          const SizedBox(height: 4),
+          Text(chapterLabel, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -470,7 +483,7 @@ class _RecitationPracticeScreenState
   @override
   void dispose() {
     _subscription?.cancel();
-    unawaited(_recognizer.dispose());
+    if (_ownsRecognizer) unawaited(_recognizer.dispose());
     super.dispose();
   }
 }
