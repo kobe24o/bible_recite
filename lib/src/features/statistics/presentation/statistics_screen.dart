@@ -55,6 +55,27 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   ),
                   const SizedBox(height: 12),
                   Card(
+                    child: SwitchListTile(
+                      key: const Key('ignore-final-nasal-toggle'),
+                      secondary: const Icon(Icons.record_voice_over_outlined),
+                      title: Text(chinese ? '忽略后鼻音' : 'Ignore final nasal'),
+                      subtitle: Text(
+                        chinese
+                            ? '拼音纠正时将 yin / ying 等视为相同'
+                            : 'Treat yin and ying as equal in phonetic scoring',
+                      ),
+                      value: data.ignoreFinalNasal,
+                      onChanged: (value) async {
+                        await repository.setSetting(
+                          'ignore_final_nasal',
+                          value ? 'true' : 'false',
+                        );
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
                     child: ListTile(
                       key: const Key('about-open'),
                       leading: const Icon(Icons.info_outline_rounded),
@@ -186,6 +207,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       results: await repository.listRecitationResults(),
       achievements: await repository.listAchievementProgress(),
       settings: await repository.getEbbinghausSettings(),
+      ignoreFinalNasal:
+          await repository.getSetting('ignore_final_nasal', 'true') == 'true',
     );
   }
 }
@@ -391,9 +414,11 @@ final class _StatisticsData {
     required this.results,
     required this.achievements,
     required this.settings,
+    required this.ignoreFinalNasal,
   });
   final RecitationSummary summary;
   final List<RecitationResult> results;
   final List<AchievementProgress> achievements;
   final EbbinghausSettings settings;
+  final bool ignoreFinalNasal;
 }

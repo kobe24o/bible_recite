@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
+import '../../recitation/application/plan_recitation_builder.dart';
+import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../application/plan_providers.dart';
 import '../domain/cloud_plan_manifest.dart';
 import '../domain/plan_draft_builder.dart';
@@ -200,6 +202,27 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 trailing: task.completed
                     ? const Icon(Icons.check_circle, color: Colors.green)
                     : null,
+                onTap: task.completed
+                    ? null
+                    : () async {
+                        final scripture = await ref.read(
+                          scriptureRepositoryProvider.future,
+                        );
+                        final request = await buildPlanRecitationRequest(
+                          scripture: scripture,
+                          plan: plan,
+                          tasks: tasks,
+                          selected: task,
+                        );
+                        if (!mounted || request == null) return;
+                        Navigator.of(context).pop();
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                RecitationPracticeScreen(request: request),
+                          ),
+                        );
+                      },
               ),
           ],
         ),

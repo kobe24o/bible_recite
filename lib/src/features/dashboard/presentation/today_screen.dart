@@ -7,6 +7,8 @@ import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../plans/domain/plan_models.dart';
 import '../../review/domain/ebbinghaus_models.dart';
+import '../../recitation/application/plan_recitation_builder.dart';
+import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../scripture/application/scripture_providers.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
@@ -72,6 +74,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       completed: false,
                       onChanged: () => setState(() => _revision++),
                       repository: repository,
+                      onStart: () =>
+                          _startTask(task, data.plans[task.planId], repository),
                     ),
                 ],
                 if (completed.isNotEmpty) ...[
@@ -88,12 +92,35 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       completed: true,
                       onChanged: () => setState(() => _revision++),
                       repository: repository,
+                      onStart: () =>
+                          _startTask(task, data.plans[task.planId], repository),
                     ),
                 ],
               ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  Future<void> _startTask(
+    PlanTask task,
+    MemorizationPlan? plan,
+    SqlitePlanRepository repository,
+  ) async {
+    if (plan == null) return;
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final request = await buildPlanRecitationRequest(
+      scripture: scripture,
+      plan: plan,
+      tasks: await repository.listTasks(plan.id),
+      selected: task,
+    );
+    if (!mounted || request == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecitationPracticeScreen(request: request),
       ),
     );
   }
@@ -143,6 +170,7 @@ class _TaskCard extends StatelessWidget {
     required this.completed,
     required this.onChanged,
     required this.repository,
+    required this.onStart,
   });
 
   final PlanTask task;
@@ -150,6 +178,7 @@ class _TaskCard extends StatelessWidget {
   final bool completed;
   final VoidCallback onChanged;
   final SqlitePlanRepository repository;
+  final Future<void> Function() onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -159,12 +188,7 @@ class _TaskCard extends StatelessWidget {
               '${task.endChapter}:${task.endVerse}';
     return Card(
       child: ListTile(
-        onTap: plan == null
-            ? null
-            : () => context.go(
-                '/bible/${plan!.translationId}/${task.bookId}/'
-                '${task.startChapter}',
-              ),
+        onTap: plan == null ? null : onStart,
         leading: CircleAvatar(
           child: Icon(
             completed ? Icons.check_rounded : Icons.menu_book_rounded,

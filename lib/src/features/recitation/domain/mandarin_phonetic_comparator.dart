@@ -10,9 +10,13 @@ import 'recitation_comparator.dart';
 /// phrase-specific Bible lexicon takes precedence over lpinyin's dictionaries,
 /// so an arbitrary pronunciation of a polyphonic character is never accepted.
 final class MandarinPhoneticComparator implements RecitationComparator {
-  MandarinPhoneticComparator({required this.lexicon});
+  MandarinPhoneticComparator({
+    required this.lexicon,
+    this.ignoreFinalNasal = false,
+  });
 
   final BiblePronunciationLexicon lexicon;
+  final bool ignoreFinalNasal;
 
   @override
   RecitationAlignment compare(
@@ -62,6 +66,7 @@ final class MandarinPhoneticComparator implements RecitationComparator {
           spoken[j - 1],
           expectedPinyin[i - 1],
           spokenPinyin[j - 1],
+          ignoreFinalNasal,
         );
         if (scores[i][j] == scores[i - 1][j - 1].add(_costFor(kind))) {
           reversed.add(
@@ -142,6 +147,7 @@ final class MandarinPhoneticComparator implements RecitationComparator {
           spoken[j - 1],
           expectedPinyin[i - 1],
           spokenPinyin[j - 1],
+          ignoreFinalNasal,
         );
         var best = scores[i - 1][j - 1].add(_costFor(kind));
         final deletion = scores[i - 1][j].add(_Score.deletion);
@@ -257,14 +263,30 @@ final class MandarinPhoneticComparator implements RecitationComparator {
     _ComparableCharacter spoken,
     String? expectedPinyin,
     String? spokenPinyin,
+    bool ignoreFinalNasal,
   ) {
     if (expected.normalized == spoken.normalized) {
       return RecitationTokenKind.correct;
     }
-    if (expectedPinyin != null && expectedPinyin == spokenPinyin) {
+    if (expectedPinyin != null &&
+        _normalizedPinyin(expectedPinyin, ignoreFinalNasal) ==
+            _normalizedPinyin(spokenPinyin, ignoreFinalNasal)) {
       return RecitationTokenKind.phoneticCorrect;
     }
     return RecitationTokenKind.incorrect;
+  }
+
+  static String? _normalizedPinyin(String? value, bool ignoreFinalNasal) {
+    if (!ignoreFinalNasal || value == null) return value;
+    return value.endsWith('ing')
+        ? '${value.substring(0, value.length - 3)}in'
+        : value.endsWith('eng')
+        ? '${value.substring(0, value.length - 3)}en'
+        : value.endsWith('ang')
+        ? '${value.substring(0, value.length - 3)}an'
+        : value.endsWith('ong')
+        ? '${value.substring(0, value.length - 3)}on'
+        : value;
   }
 
   static _Score _costFor(RecitationTokenKind kind) => switch (kind) {

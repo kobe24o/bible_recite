@@ -26,6 +26,7 @@ final class RecitationRequest {
     required this.mode,
     required this.units,
     this.reviewId,
+    this.next,
   });
 
   final String translationId;
@@ -34,6 +35,7 @@ final class RecitationRequest {
   final RecitationMode mode;
   final List<VerseUnit> units;
   final int? reviewId;
+  final RecitationRequest? next;
 }
 
 class RecitationPracticeScreen extends ConsumerStatefulWidget {
@@ -163,10 +165,16 @@ class _RecitationPracticeScreenState
       // Asset loading must never delay or prevent saving a recitation.
       return _exactComparator.compare(_target, _transcript, finished: true);
     }
+    final repository = await ref.read(planRepositoryProvider.future);
+    final ignoreFinalNasal =
+        await repository.getSetting('ignore_final_nasal', 'true') == 'true';
     return comparatorForTranslation(
       widget.request.translationId,
       finished: true,
-      mandarin: mandarin,
+      mandarin: MandarinPhoneticComparator(
+        lexicon: mandarin.lexicon,
+        ignoreFinalNasal: ignoreFinalNasal,
+      ),
     ).compare(_target, _transcript, finished: true);
   }
 
@@ -240,6 +248,15 @@ class _RecitationPracticeScreenState
   }
 
   void _nextVerse() {
+    final next = widget.request.next;
+    if (next != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => RecitationPracticeScreen(request: next),
+        ),
+      );
+      return;
+    }
     if (_currentVerse + 1 >= _presentUnits.length) return;
     setState(() {
       _currentVerse++;
@@ -402,12 +419,17 @@ class _RecitationPracticeScreenState
                           'Missing ${alignment.omittedCount} · Reordered ${alignment.reorderedCount}',
               ),
             ),
-            if (verseMode && _currentVerse + 1 < units.length)
+            if (widget.request.next != null ||
+                (verseMode && _currentVerse + 1 < units.length))
               OutlinedButton.icon(
                 key: const Key('next-verse-button'),
                 onPressed: _nextVerse,
                 icon: const Icon(Icons.navigate_next_rounded),
-                label: Text(chinese ? '下一节' : 'Next verse'),
+                label: Text(
+                  widget.request.next != null
+                      ? (chinese ? '下一项计划' : 'Next planned passage')
+                      : (chinese ? '下一节' : 'Next verse'),
+                ),
               ),
           ],
           const SizedBox(height: 20),
