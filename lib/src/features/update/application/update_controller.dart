@@ -14,6 +14,7 @@ final updateControllerProvider =
 
 final class UpdateController extends Notifier<UpdateStatus> {
   bool _operationActive = false;
+  bool _checking = false;
   bool _disposed = false;
   DownloadCancellation? _downloadCancellation;
   AppVersion? _installedVersion;
@@ -27,12 +28,15 @@ final class UpdateController extends Notifier<UpdateStatus> {
     return const UpdateIdle();
   }
 
-  Future<void> check() async {
-    if (_operationActive || !_mounted) {
+  Future<void> autoCheck() => check(automatic: true);
+
+  Future<void> check({bool automatic = false}) async {
+    if (_checking || !_mounted) {
       return;
     }
-    _operationActive = true;
-    _emit(const UpdateChecking());
+    _checking = true;
+    final downloading = state is UpdateDownloading;
+    if (!downloading) _emit(const UpdateChecking());
     try {
       final loader = ref.read(updateManifestLoaderProvider);
       final manifest = await loader();
@@ -45,18 +49,46 @@ final class UpdateController extends Notifier<UpdateStatus> {
         return;
       }
       _installedVersion = installed;
-      _emit(
-        manifest.version.isNewerThan(installed)
-            ? UpdateAvailable(
-                manifest: manifest,
-                supportsDirectInstall: _isAndroid,
-              )
-            : UpdateCurrent(installedVersion: installed),
-      );
+      if (!manifest.version.isNewerThan(installed)) {
+        if (!downloading) _emit(UpdateCurrent(installedVersion: installed));
+      } else if (downloading) {
+        final current = state as UpdateDownloading;
+        if (manifest.version.isNewerThan(current.manifest.version)) {
+          _downloadCancellation?.cancel();
+          _pendingAutoManifest = manifest;
+        }
+      } else {
+        _emit(
+          UpdateAvailable(
+            manifest: manifest,
+            supportsDirectInstall: _isAndroid,
+          ),
+        );
+        if (automatic) await _autoDownloadOnWifi(manifest);
+      }
     } on UpdateConfigurationException catch (error) {
       _emit(UpdateFailed(reasonCode: error.reasonCode));
     } catch (_) {
       _emit(const UpdateFailed(reasonCode: UpdateFailureReason.checkFailed));
+    } finally {
+      _checking = false;
+    }
+  }
+
+  UpdateManifest? _pendingAutoManifest;
+
+  Future<void> _autoDownloadOnWifi(
+    UpdateManifest manifest, {
+    bool allowActiveDownload = false,
+  }) async {
+    if (!_isAndroid || (_operationActive && !allowActiveDownload)) return;
+    try {
+      if (await ref.read(updateNetworkTransportProvider) == 'wifi') {
+        _operationActive = true;
+        await _downloadAndVerify(manifest);
+      }
+    } catch (_) {
+      // A background check must not surface a transport probe failure.
     } finally {
       _operationActive = false;
     }
@@ -343,7 +375,13 @@ final class UpdateController extends Notifier<UpdateStatus> {
       _emit(ReadyToInstall(manifest: manifest, file: staged));
     } on DownloadCancelled {
       await _bestEffortCleanup(cleanup, downloadedFile);
-      _emit(UpdateAvailable(manifest: manifest, supportsDirectInstall: true));
+      final latest = _pendingAutoManifest;
+      _pendingAutoManifest = null;
+      if (latest != null) {
+        await _autoDownloadOnWifi(latest, allowActiveDownload: true);
+      } else {
+        _emit(UpdateAvailable(manifest: manifest, supportsDirectInstall: true));
+      }
     } on UpdateVerificationException catch (error) {
       await _bestEffortCleanup(cleanup, downloadedFile);
       _emit(UpdateFailed(reasonCode: error.reason, manifest: manifest));
