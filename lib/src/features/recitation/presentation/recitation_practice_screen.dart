@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
 import '../../scripture/application/scripture_providers.dart';
+import '../../scripture/domain/book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
 import '../application/recitation_scoring_provider.dart';
@@ -275,16 +276,20 @@ class _RecitationPracticeScreenState
   @override
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
-    final chapterLabel = ref
-        .watch(bookNameCatalogProvider)
-        .chapterLabel(
-          widget.request.bookId,
-          widget.request.chapter,
-          Localizations.localeOf(context),
-        );
+    final locale = Localizations.localeOf(context);
+    final bookNames = ref.watch(bookNameCatalogProvider);
+    final chapterLabel = bookNames.chapterLabel(
+      widget.request.bookId,
+      widget.request.chapter,
+      locale,
+    );
     final units = _presentUnits;
     final alignment = _alignment;
     final verseMode = widget.request.mode == RecitationMode.verse;
+    final currentReference = verseMode
+        ? _referenceFor(units[_currentVerse], bookNames, locale)
+        : '${_referenceFor(units.first, bookNames, locale)} – '
+              '${_referenceFor(units.last, bookNames, locale)}';
     return Scaffold(
       appBar: AppBar(title: Text(chinese ? '离线背诵' : 'Offline recitation')),
       body: ListView(
@@ -310,12 +315,73 @@ class _RecitationPracticeScreenState
           ),
           const SizedBox(height: 4),
           Text(chapterLabel, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            verseMode
+                ? (chinese
+                      ? '当前背诵：$currentReference'
+                      : 'Reciting: $currentReference')
+                : (chinese
+                      ? '本次经文：$currentReference'
+                      : 'Passage: $currentReference'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: _revealed
-                  ? Text(_target, style: Theme.of(context).textTheme.bodyLarge)
+                  ? units.length == 1
+                        ? Text(
+                            _target,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          )
+                        : Column(
+                            children: [
+                              for (final unit in units) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Theme.of(context).dividerColor,
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 82,
+                                        child: Text(
+                                          _referenceFor(
+                                            unit,
+                                            bookNames,
+                                            locale,
+                                          ),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelLarge,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          unit.text,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyLarge,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (unit != units.last)
+                                  const SizedBox(height: 10),
+                              ],
+                            ],
+                          )
                   : Text(
                       chinese ? '经文已隐藏，点击提示可查看。' : 'Scripture hidden.',
                       textAlign: TextAlign.center,
@@ -466,6 +532,21 @@ class _RecitationPracticeScreenState
         ],
       ),
     );
+  }
+
+  String _referenceFor(
+    VerseUnit unit,
+    BookNameCatalog bookNames,
+    Locale locale,
+  ) {
+    final start = unit.start;
+    final end = unit.end;
+    final verseRange = start.chapter == end.chapter && start.verse != end.verse
+        ? '${start.chapter}:${start.verse}-${end.verse}'
+        : start.chapter == end.chapter
+        ? '${start.chapter}:${start.verse}'
+        : '${start.chapter}:${start.verse}-${end.chapter}:${end.verse}';
+    return '${bookNames.nameFor(start.osisBookId, locale)} $verseRange';
   }
 
   Color _colorFor(

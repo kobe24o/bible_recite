@@ -42,7 +42,10 @@ Future<void> main(List<String> arguments) async {
       'size': await apk.length(),
       'sha256': checksum,
       'signingCertificateSha256': _certificateSha256,
-      'urls': [options.downloadUrl],
+      'urls': [
+        options.downloadUrl,
+        if (options.fallbackDownloadUrl != null) options.fallbackDownloadUrl!,
+      ],
     },
   };
   final payloadBytes = utf8.encode(jsonEncode(payload));
@@ -82,6 +85,7 @@ _EnvelopeOptions _parseArguments(List<String> arguments) {
     sourceCommit: requireValue('--source-commit'),
     releasePageUrl: requireValue('--release-page-url'),
     downloadUrl: requireValue('--download-url'),
+    fallbackDownloadUrl: values['--fallback-download-url'],
     releaseNotes: values['--release-notes'] ?? '',
     outputPath: requireValue('--output'),
   );
@@ -96,6 +100,7 @@ final class _EnvelopeOptions {
     required this.sourceCommit,
     required this.releasePageUrl,
     required this.downloadUrl,
+    this.fallbackDownloadUrl,
     required this.releaseNotes,
     required this.outputPath,
   });
@@ -107,6 +112,7 @@ final class _EnvelopeOptions {
   final String sourceCommit;
   final String releasePageUrl;
   final String downloadUrl;
+  final String? fallbackDownloadUrl;
   final String releaseNotes;
   final String outputPath;
 }
