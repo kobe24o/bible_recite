@@ -140,10 +140,17 @@ final class UpdateController extends Notifier<UpdateStatus> {
       return;
     }
     _operationActive = true;
+    var readyToInstall = false;
     try {
       await _downloadAndVerify(current.manifest);
+      readyToInstall = state is ReadyToInstall;
     } finally {
       _operationActive = false;
+    }
+    // Cellular downloads are user initiated, so open the system installer
+    // after the verified file is ready. Wi-Fi background downloads never do.
+    if (readyToInstall && _mounted) {
+      await install();
     }
   }
 
