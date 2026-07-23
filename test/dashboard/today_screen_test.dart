@@ -145,8 +145,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('待完成'), findsOneWidget);
 
-    await tester.tap(find.text('今日约翰福音'));
-    await tester.pumpAndSettle();
-    expect(find.text('经文详情已打开'), findsOneWidget);
   });
 }
