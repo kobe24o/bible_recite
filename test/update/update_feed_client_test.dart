@@ -36,7 +36,7 @@ void main() {
     expect(sources, [
       Uri.parse('https://updates.example.com/releases/updates/latest.json'),
       Uri.parse(
-        'https://gcore.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
+        'https://raw.githubusercontent.com/kobe24o/bible_recite/update-feed/updates/latest.json',
       ),
       Uri.parse(
         'https://fastly.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
@@ -45,7 +45,7 @@ void main() {
         'https://cdn.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
       ),
       Uri.parse(
-        'https://raw.githubusercontent.com/kobe24o/bible_recite/update-feed/updates/latest.json',
+        'https://gcore.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
       ),
     ]);
     expect(
@@ -57,7 +57,7 @@ void main() {
   test('uses approved CDN and GitHub fallbacks without an R2 URL', () {
     final sources = buildUpdateFeedSources();
 
-    expect(sources.first.host, 'gcore.jsdelivr.net');
+    expect(sources.first.host, 'raw.githubusercontent.com');
     expect(sources, hasLength(4));
   });
 
@@ -85,7 +85,7 @@ void main() {
     expect(manifest.version.minor, 0);
     expect(manifest.version.patch, 5);
     expect(manifest.version.buildNumber, 6);
-    expect(transport.requests, [primary]);
+    expect(transport.requests, [primary, secondary]);
   });
 
   test('uses the secondary feed after the primary transport throws', () async {
@@ -108,6 +108,29 @@ void main() {
     expect(manifest.version.buildNumber, 6);
     expect(transport.requests, [primary, secondary]);
   });
+
+  test(
+    'chooses the newest verified manifest when a CDN serves a stale one',
+    () async {
+      final stale = await _signedFeed(algorithm, keyPair, versionName: '1.0.6');
+      final latest = await _signedFeed(
+        algorithm,
+        keyPair,
+        versionName: '1.0.10',
+      );
+      final transport = _FakeTransport({primary: stale, secondary: latest});
+      final client = UpdateFeedClient(
+        sources: [primary, secondary],
+        transport: transport,
+        publicKey: publicKey,
+      );
+
+      final manifest = await client.fetchLatest();
+
+      expect(manifest.version.patch, 10);
+      expect(transport.requests, [primary, secondary]);
+    },
+  );
 
   test(
     'reports every source failure when no signed feed can be used',

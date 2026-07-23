@@ -7,10 +7,10 @@ abstract interface class UpdateBytesTransport {
 }
 
 const updateFeedFallbacks = [
-  'https://gcore.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
+  'https://raw.githubusercontent.com/kobe24o/bible_recite/update-feed/updates/latest.json',
   'https://fastly.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
   'https://cdn.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
-  'https://raw.githubusercontent.com/kobe24o/bible_recite/update-feed/updates/latest.json',
+  'https://gcore.jsdelivr.net/gh/kobe24o/bible_recite@update-feed/updates/latest.json',
 ];
 
 List<Uri> buildUpdateFeedSources({Uri? r2PublicBaseUrl}) {
@@ -58,6 +58,7 @@ final class UpdateFeedClient {
 
   Future<UpdateManifest> fetchLatest() async {
     final failures = <String>[];
+    UpdateManifest? newest;
     for (final source in sources) {
       try {
         final envelope = SignedUpdateEnvelope.decode(
@@ -70,11 +71,15 @@ final class UpdateFeedClient {
         if (!valid) {
           throw const FormatException('Invalid update signature');
         }
-        return UpdateManifest.fromPayloadBytes(envelope.payloadBytes);
+        final manifest = UpdateManifest.fromPayloadBytes(envelope.payloadBytes);
+        if (newest == null || manifest.version.isNewerThan(newest.version)) {
+          newest = manifest;
+        }
       } catch (error) {
         failures.add('${source.host}: $error');
       }
     }
+    if (newest != null) return newest;
     throw UpdateFeedException(List.unmodifiable(failures));
   }
 }
