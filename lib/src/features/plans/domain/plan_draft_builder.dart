@@ -9,8 +9,9 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   PlanEditorDraft draft, {
   List<PlanTask> completedTasks = const [],
 }) async {
-  final units = <VerseUnit>[];
+  final passageUnits = <List<VerseUnit>>[];
   if (draft.passages.isEmpty) {
+    final units = <VerseUnit>[];
     for (
       var chapter = draft.startChapter;
       chapter <= draft.endChapter;
@@ -20,9 +21,10 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
         await scripture.getChapter(draft.translationId, draft.bookId, chapter),
       );
     }
+    passageUnits.add(units);
   } else {
     for (final passage in draft.passages) {
-      units.addAll(
+      passageUnits.add(
         (await scripture.getPassage(
           draft.translationId,
           PassageRange(
@@ -43,21 +45,29 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
       );
     }
   }
-  if (units.isEmpty) throw StateError('所选章节没有可用经文');
+  if (passageUnits.every((units) => units.isEmpty)) {
+    throw StateError('所选章节没有可用经文');
+  }
   final completedDays = completedTasks.map((task) => task.dayIndex).toSet();
   final availableDays = [
     for (var day = 0; day < draft.days; day++)
       if (!completedDays.contains(day)) day,
   ];
-  final pendingUnits = units
-      .where((unit) => !completedTasks.any((task) => _contains(task, unit)))
+  final pendingPassages = passageUnits
+      .map(
+        (units) => units
+            .where(
+              (unit) => !completedTasks.any((task) => _contains(task, unit)),
+            )
+            .toList(growable: false),
+      )
+      .where((units) => units.isNotEmpty)
       .toList(growable: false);
-  final chunks = availableDays.isEmpty || pendingUnits.isEmpty
-      ? const <GeneratedPlanTask>[]
-      : const PlanGenerator().generate(
-          units: pendingUnits,
-          days: availableDays.length,
-        );
+  if (pendingPassages.length > availableDays.length) {
+    throw StateError('剩余天数不足，无法为每段经文安排独立的背诵任务');
+  }
+  final dayCounts = _allocateDays(pendingPassages, availableDays.length);
+  var dayCursor = 0;
   final tasks = <NewPlanTask>[
     for (final task in completedTasks)
       NewPlanTask(
@@ -68,20 +78,33 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
         endChapter: task.endChapter,
         endVerse: task.endVerse,
       ),
-    for (final chunk in chunks)
-      if (chunk.units.isNotEmpty)
-        (() {
-          final selected = chunk.units;
-          return NewPlanTask(
-            dayIndex: availableDays[chunk.dayIndex],
-            bookId: selected.first.start.osisBookId,
-            startChapter: selected.first.start.chapter,
-            startVerse: selected.first.start.verse,
-            endChapter: selected.last.end.chapter,
-            endVerse: selected.last.end.verse,
-          );
-        })(),
-  ]..sort((a, b) => a.dayIndex.compareTo(b.dayIndex));
+  ];
+  for (
+    var passageIndex = 0;
+    passageIndex < pendingPassages.length;
+    passageIndex++
+  ) {
+    final chunks = const PlanGenerator().generate(
+      units: pendingPassages[passageIndex],
+      days: dayCounts[passageIndex],
+    );
+    for (final chunk in chunks) {
+      if (chunk.units.isEmpty) continue;
+      final selected = chunk.units;
+      tasks.add(
+        NewPlanTask(
+          dayIndex: availableDays[dayCursor + chunk.dayIndex],
+          bookId: selected.first.start.osisBookId,
+          startChapter: selected.first.start.chapter,
+          startVerse: selected.first.start.verse,
+          endChapter: selected.last.end.chapter,
+          endVerse: selected.last.end.verse,
+        ),
+      );
+    }
+    dayCursor += dayCounts[passageIndex];
+  }
+  tasks.sort((a, b) => a.dayIndex.compareTo(b.dayIndex));
   return NewMemorizationPlan(
     title: draft.title,
     translationId: draft.translationId,
@@ -92,6 +115,32 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
     endDate: draft.endDate,
     tasks: tasks,
   );
+}
+
+List<int> _allocateDays(List<List<VerseUnit>> passages, int totalDays) {
+  if (passages.isEmpty) return const [];
+  final weights = [
+    for (final passage in passages)
+      passage.fold<int>(
+        0,
+        (total, unit) =>
+            total + unit.text.replaceAll(RegExp(r'\s+'), '').runes.length,
+      ),
+  ];
+  final days = List<int>.filled(passages.length, 1);
+  var remaining = totalDays - passages.length;
+  while (remaining > 0) {
+    var selected = 0;
+    for (var index = 1; index < passages.length; index++) {
+      final left = days[index] / (weights[index] == 0 ? 1 : weights[index]);
+      final right =
+          days[selected] / (weights[selected] == 0 ? 1 : weights[selected]);
+      if (left < right) selected = index;
+    }
+    days[selected]++;
+    remaining--;
+  }
+  return days;
 }
 
 bool _contains(PlanTask task, VerseUnit unit) {

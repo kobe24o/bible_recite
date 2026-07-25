@@ -245,10 +245,13 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   void _save() {
     if (_title.text.trim().isEmpty ||
         (!widget.contentLocked && _passages.isEmpty) ||
+        (!widget.contentLocked && _days < _passages.length) ||
         _days < 1 ||
         _days < widget.minimumDays ||
         _days > 365) {
-      setState(() => _error = '请检查名称、章节范围和日期（${widget.minimumDays}–365 天）');
+      setState(
+        () => _error = '请检查名称、经文段数和日期（每段至少安排一天，${widget.minimumDays}–365 天）',
+      );
       return;
     }
     Navigator.pop(

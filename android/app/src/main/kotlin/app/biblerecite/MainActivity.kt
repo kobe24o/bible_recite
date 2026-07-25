@@ -7,5 +7,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AppUpdateChannel(this).register(flutterEngine)
+        QrImageStoreChannel(this).register(flutterEngine)
     }
 }

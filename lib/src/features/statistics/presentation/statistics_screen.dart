@@ -1,8 +1,8 @@
-import 'dart:typed_data';
+import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +30,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   static const _androidDownloadUrl =
       'https://ghfast.top/https://github.com/kobe24o/bible_recite/releases/latest/download/BibleRecite-latest.apk';
+  static const _qrImageStoreChannel = MethodChannel(
+    'app.biblerecite/qr_image_store',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +292,20 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 child: QrImageView(
                   data: _androidDownloadUrl,
                   size: 220,
-                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square),
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.black,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.black,
+                  ),
+                  errorStateBuilder: (_, error) => SizedBox(
+                    width: 220,
+                    height: 220,
+                    child: Center(child: Text('二维码生成失败：$error')),
+                  ),
                 ),
               ),
             ),
@@ -325,22 +341,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       final image = await boundary.toImage(pixelRatio: 3);
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) return;
-      final location = await getSaveLocation(
-        suggestedName: 'BibleRecite-Android-QR.png',
-        acceptedTypeGroups: const [
-          XTypeGroup(
-            label: 'PNG',
-            extensions: ['png'],
-            mimeTypes: ['image/png'],
-          ),
-        ],
-      );
-      if (location == null) return;
-      await XFile.fromData(
-        Uint8List.fromList(data.buffer.asUint8List()),
-        mimeType: 'image/png',
-        name: 'BibleRecite-Android-QR.png',
-      ).saveTo(location.path);
+      if (!Platform.isAndroid) {
+        throw UnsupportedError('当前平台暂不支持保存二维码');
+      }
+      await _qrImageStoreChannel.invokeMethod<String>('savePng', {
+        'bytes': Uint8List.fromList(data.buffer.asUint8List()),
+        'displayName': 'BibleRecite-Android-QR.png',
+      });
       if (mounted) {
         ScaffoldMessenger.of(
           context,
