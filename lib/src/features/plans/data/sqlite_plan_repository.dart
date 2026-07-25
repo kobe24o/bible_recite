@@ -443,6 +443,36 @@ final class SqlitePlanRepository {
     _database.execute('DELETE FROM memorization_plan WHERE id = ?', [planId]);
   }
 
+  Future<void> restartPlan(int planId, {DateTime? startDate}) async {
+    final start = DateTime(
+      (startDate ?? DateTime.now()).year,
+      (startDate ?? DateTime.now()).month,
+      (startDate ?? DateTime.now()).day,
+    );
+    final rows = _database.select(
+      'SELECT days FROM memorization_plan WHERE id = ?',
+      [planId],
+    );
+    if (rows.isEmpty) throw StateError('计划不存在');
+    final days = rows.single['days'] as int;
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute(
+        'UPDATE memorization_plan SET start_date = ?, end_date = ? WHERE id = ?',
+        [_date(start), _date(start.add(Duration(days: days - 1))), planId],
+      );
+      _database.execute(
+        '''UPDATE plan_task SET completed = 0,
+        due_date = date(?, '+' || day_index || ' days') WHERE plan_id = ?''',
+        [_date(start), planId],
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   Future<void> setTaskCompleted(int taskId, bool completed) async {
     _database.execute(
       '''UPDATE plan_task SET completed = ?, due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END

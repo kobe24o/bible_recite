@@ -134,6 +134,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
 
   Widget _planCard(MemorizationPlan plan, AppLocalizations localizations) {
     final locked = plan.contentLocked;
+    final completed =
+        plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks;
     return Card(
       child: ListTile(
         leading: Icon(
@@ -162,15 +164,34 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                     '${plan.completedTasks}/${plan.totalTasks} · '
                     '${_translationLabel(plan.translationId)}',
         ),
-        trailing: IconButton(
-          key: Key('edit-plan-${plan.id}'),
-          tooltip: '编辑计划',
-          onPressed: _working ? null : () => _editPlan(plan),
-          icon: const Icon(Icons.edit_outlined),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (completed)
+              IconButton(
+                key: Key('restart-plan-${plan.id}'),
+                tooltip: '再次执行',
+                onPressed: _working ? null : () => _restartPlan(plan),
+                icon: const Icon(Icons.replay_rounded),
+              ),
+            IconButton(
+              key: Key('edit-plan-${plan.id}'),
+              tooltip: '编辑计划',
+              onPressed: _working ? null : () => _editPlan(plan),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ],
         ),
         onTap: _working ? null : () => _showPlanSchedule(plan),
       ),
     );
+  }
+
+  Future<void> _restartPlan(MemorizationPlan plan) async {
+    await _runSave(() async {
+      final repository = await ref.read(planRepositoryProvider.future);
+      await repository.restartPlan(plan.id);
+    });
   }
 
   Future<void> _showPlanSchedule(MemorizationPlan plan) async {

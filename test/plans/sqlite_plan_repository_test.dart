@@ -220,6 +220,27 @@ void main() {
   });
 
   test(
+    'restarts a completed plan from today without changing its duration',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final id = await repository.createPlan(_plan());
+      final task = (await repository.listTasks(id)).single;
+      await repository.setTaskCompleted(task.id, true);
+
+      await repository.restartPlan(id, startDate: DateTime(2026, 8, 1));
+
+      final plan = (await repository.listPlans()).single;
+      final restarted = (await repository.listTasks(id)).single;
+    expect(plan.days, 3);
+    expect(plan.startDate, DateTime(2026, 8, 1));
+    expect(plan.endDate, DateTime(2026, 8, 3));
+      expect(restarted.completed, isFalse);
+      expect(restarted.dueDate, DateTime(2026, 8, 1));
+    },
+  );
+
+  test(
     'today includes overdue work but not completed tasks from older days',
     () async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
