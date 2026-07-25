@@ -12,6 +12,8 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/empty_state_page.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../reminder/daily_task_reminder.dart';
+import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../domain/achievement.dart';
@@ -66,6 +68,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     repository: repository,
                     initial: data.settings,
                   ),
+                  const SizedBox(height: 12),
+                  _DailyReminderCard(repository: repository),
                   const SizedBox(height: 12),
                   Card(
                     child: SwitchListTile(
@@ -361,6 +365,118 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       }
     }
   }
+}
+
+class _DailyReminderCard extends ConsumerStatefulWidget {
+  const _DailyReminderCard({required this.repository});
+
+  final SqlitePlanRepository repository;
+
+  @override
+  ConsumerState<_DailyReminderCard> createState() => _DailyReminderCardState();
+}
+
+class _DailyReminderCardState extends ConsumerState<_DailyReminderCard> {
+  late Future<DailyTaskReminderSettings> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = DailyTaskReminderScheduler.readSettings(widget.repository);
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<DailyTaskReminderSettings>(
+    future: _future,
+    builder: (context, snapshot) {
+      final settings = snapshot.data;
+      if (settings == null) return const Card(child: LinearProgressIndicator());
+      return Card(
+        child: Column(
+          children: [
+            SwitchListTile(
+              key: const Key('daily-reminder-toggle'),
+              secondary: const Icon(Icons.notifications_active_outlined),
+              title: const Text('今日任务提醒'),
+              subtitle: const Text('未完成今日任务时，在设定时段内重复提醒'),
+              value: settings.enabled,
+              onChanged: (value) => _save(settings.copyWith(enabled: value)),
+            ),
+            ListTile(
+              enabled: settings.enabled,
+              title: const Text('开始提醒时间'),
+              subtitle: Text(_format(settings.startMinutes)),
+              trailing: const Icon(Icons.schedule_outlined),
+              onTap: () => _pickTime(settings, true),
+            ),
+            ListTile(
+              enabled: settings.enabled,
+              title: const Text('结束提醒时间'),
+              subtitle: Text('${_format(settings.endMinutes)}（默认 23:59）'),
+              trailing: const Icon(Icons.event_available_outlined),
+              onTap: () => _pickTime(settings, false),
+            ),
+            ListTile(
+              enabled: settings.enabled,
+              title: const Text('提醒间隔'),
+              subtitle: Text(_formatInterval(settings.intervalMinutes)),
+              trailing: DropdownButton<int>(
+                value: settings.intervalMinutes,
+                items: [
+                  for (final hours in List<int>.generate(13, (index) => index))
+                    for (final minutes in const [0, 15, 30, 45])
+                      if (hours > 0 || minutes > 0)
+                        DropdownMenuItem(
+                          value: hours * 60 + minutes,
+                          child: Text(_formatInterval(hours * 60 + minutes)),
+                        ),
+                ],
+                onChanged: settings.enabled
+                    ? (value) {
+                        if (value != null)
+                          _save(settings.copyWith(intervalMinutes: value));
+                      }
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  Future<void> _pickTime(DailyTaskReminderSettings settings, bool start) async {
+    final minutes = start ? settings.startMinutes : settings.endMinutes;
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+    );
+    if (selected == null) return;
+    final value = selected.hour * 60 + selected.minute;
+    await _save(
+      start
+          ? settings.copyWith(startMinutes: value)
+          : settings.copyWith(endMinutes: value),
+    );
+  }
+
+  Future<void> _save(DailyTaskReminderSettings settings) async {
+    if (settings.endMinutes < settings.startMinutes) return;
+    await DailyTaskReminderScheduler.saveSettings(widget.repository, settings);
+    await ref
+        .read(dailyTaskReminderSchedulerProvider)
+        .reschedule(widget.repository);
+    if (mounted) setState(() => _future = Future.value(settings));
+  }
+
+  String _format(int minutes) =>
+      '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
+  String _formatInterval(int minutes) => minutes % 60 == 0
+      ? '${minutes ~/ 60} 小时'
+      : '${minutes ~/ 60} 小时 ${minutes % 60} 分钟';
 }
 
 class _EbbinghausSettingsCard extends StatefulWidget {

@@ -10,6 +10,7 @@ import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
+import '../../reminder/reminder_providers.dart';
 import '../application/plan_providers.dart';
 import '../domain/cloud_plan_manifest.dart';
 import '../domain/plan_draft_builder.dart';
@@ -499,9 +500,10 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           : (await repository.listTasks(
               planId,
             )).where((task) => task.completed).toList(growable: false);
+      final normalized = _normalizeDraftForPendingWork(draft, completedTasks);
       final plan = await buildPlanFromDraft(
         scripture,
-        draft,
+        normalized,
         completedTasks: completedTasks,
       );
       if (planId == null) {
@@ -512,10 +514,50 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     });
   }
 
+  PlanEditorDraft _normalizeDraftForPendingWork(
+    PlanEditorDraft draft,
+    List<PlanTask> completedTasks,
+  ) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final anchor = today.isAfter(draft.startDate) ? today : draft.startDate;
+    final total = draft.passages.isEmpty ? 1 : draft.passages.length;
+    final pending = (total - completedTasks.length).clamp(0, 365);
+    final completedEnd = completedTasks.isEmpty
+        ? draft.startDate
+        : draft.startDate.add(
+            Duration(
+              days: completedTasks
+                  .map((task) => task.dayIndex)
+                  .reduce((a, b) => a > b ? a : b),
+            ),
+          );
+    final pendingEnd = pending == 0
+        ? anchor
+        : anchor.add(Duration(days: pending - 1));
+    final end = [
+      draft.endDate,
+      completedEnd,
+      pendingEnd,
+    ].reduce((a, b) => a.isAfter(b) ? a : b);
+    if (end == draft.endDate) return draft;
+    return PlanEditorDraft(
+      title: draft.title,
+      translationId: draft.translationId,
+      bookId: draft.bookId,
+      startChapter: draft.startChapter,
+      endChapter: draft.endChapter,
+      startDate: draft.startDate,
+      endDate: end,
+      passages: draft.passages,
+    );
+  }
+
   Future<void> _runSave(Future<void> Function() action) async {
     setState(() => _working = true);
     try {
       await action();
+      final repository = await ref.read(planRepositoryProvider.future);
+      await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
       if (!mounted) return;
       setState(() => _revision++);
       ScaffoldMessenger.of(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
@@ -185,26 +186,39 @@ class _AboutScreenState extends ConsumerState<AboutScreen>
         ref.watch(updateRuntimePlatformProvider) ==
         UpdateRuntimePlatform.android;
 
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.aboutTitle)),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            strings.appTitle,
-            style: Theme.of(context).textTheme.headlineSmall,
+    return WillPopScope(
+      onWillPop: () async {
+        context.go('/statistics');
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回我的',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.go('/statistics'),
           ),
-          const SizedBox(height: 8),
-          package.when(
-            data: (info) => Text(
-              strings.updateInstalledVersion(info.version, info.buildNumber),
+          title: Text(strings.aboutTitle),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(
+              strings.appTitle,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            loading: () => const SizedBox(height: 20),
-            error: (_, _) => const SizedBox.shrink(),
-          ),
-          const SizedBox(height: 24),
-          _UpdatePanel(status: status, isAndroid: isAndroid),
-        ],
+            const SizedBox(height: 8),
+            package.when(
+              data: (info) => Text(
+                strings.updateInstalledVersion(info.version, info.buildNumber),
+              ),
+              loading: () => const SizedBox(height: 20),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 24),
+            _UpdatePanel(status: status, isAndroid: isAndroid),
+          ],
+        ),
       ),
     );
   }

@@ -8,6 +8,7 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   ScriptureRepository scripture,
   PlanEditorDraft draft, {
   List<PlanTask> completedTasks = const [],
+  DateTime? now,
 }) async {
   final passageUnits = <List<VerseUnit>>[];
   if (draft.passages.isEmpty) {
@@ -49,9 +50,13 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
     throw StateError('所选章节没有可用经文');
   }
   final completedDays = completedTasks.map((task) => task.dayIndex).toSet();
+  final current = now ?? DateTime.now();
+  final today = DateTime(current.year, current.month, current.day);
   final availableDays = [
     for (var day = 0; day < draft.days; day++)
-      if (!completedDays.contains(day)) day,
+      if (!completedDays.contains(day) &&
+          !draft.startDate.add(Duration(days: day)).isBefore(today))
+        day,
   ];
   final pendingPassages = passageUnits
       .map(

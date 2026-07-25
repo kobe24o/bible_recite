@@ -5,6 +5,35 @@ import 'package:bible_recite/src/features/scripture/domain/scripture_repository.
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('never splits one verse across multiple days', () async {
+    final plan = await buildPlanFromDraft(
+      _ScriptureFixture(),
+      PlanEditorDraft(
+        title: '单节计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 25),
+        endDate: DateTime(2026, 7, 30),
+        passages: const [
+          PlanPassageSelection(
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      ),
+      now: DateTime(2026, 7, 25),
+    );
+
+    expect(plan.tasks, hasLength(1));
+    expect(plan.tasks.single.startVerse, 16);
+    expect(plan.tasks.single.endVerse, 16);
+  });
+
   test('keeps every added passage in a book-specific scheduled task', () async {
     final plan = await buildPlanFromDraft(
       _ScriptureFixture(),

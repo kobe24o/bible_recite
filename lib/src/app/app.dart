@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../features/update/application/update_controller.dart';
+import '../features/plans/application/plan_providers.dart';
+import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
 
 class BibleReciteApp extends ConsumerStatefulWidget {
@@ -25,12 +27,18 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(ref.read(updateControllerProvider.notifier).autoCheck());
+      unawaited(_refreshDailyReminders());
       _updateTimer = Timer.periodic(
         const Duration(minutes: 30),
         (_) =>
             unawaited(ref.read(updateControllerProvider.notifier).autoCheck()),
       );
     });
+  }
+
+  Future<void> _refreshDailyReminders() async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
   }
 
   @override

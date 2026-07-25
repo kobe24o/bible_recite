@@ -245,13 +245,10 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   void _save() {
     if (_title.text.trim().isEmpty ||
         (!widget.contentLocked && _passages.isEmpty) ||
-        (!widget.contentLocked && _days < _passages.length) ||
         _days < 1 ||
         _days < widget.minimumDays ||
         _days > 365) {
-      setState(
-        () => _error = '请检查名称、经文段数和日期（每段至少安排一天，${widget.minimumDays}–365 天）',
-      );
+      setState(() => _error = '请检查名称和日期（${widget.minimumDays}–365 天）');
       return;
     }
     Navigator.pop(
@@ -289,7 +286,14 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
 
   Future<void> _addPassage() async {
     final passage = await widget.onAddPassage?.call();
-    if (passage != null && mounted) setState(() => _passages.add(passage));
+    if (passage != null && mounted) {
+      setState(() {
+        _passages.add(passage);
+        if (_days < _passages.length) {
+          _endDate = _startDate.add(Duration(days: _passages.length - 1));
+        }
+      });
+    }
   }
 
   String _bookName(String id) =>

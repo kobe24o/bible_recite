@@ -444,10 +444,11 @@ final class SqlitePlanRepository {
   }
 
   Future<void> setTaskCompleted(int taskId, bool completed) async {
-    _database.execute('UPDATE plan_task SET completed = ? WHERE id = ?', [
-      completed ? 1 : 0,
-      taskId,
-    ]);
+    _database.execute(
+      '''UPDATE plan_task SET completed = ?, due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END
+      WHERE id = ?''',
+      [completed ? 1 : 0, completed ? 1 : 0, _date(DateTime.now()), taskId],
+    );
     await evaluateAndUnlockAchievements(source: 'plan');
   }
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../reminder/reminder_providers.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
@@ -223,6 +224,9 @@ class _RecitationPracticeScreenState
       }
       if (widget.request.planTaskId != null) {
         await repository.setTaskCompleted(widget.request.planTaskId!, true);
+        await ref
+            .read(dailyTaskReminderSchedulerProvider)
+            .reschedule(repository);
       }
       final unlocked = await repository.evaluateAndUnlockAchievements(
         source: 'recitation',
