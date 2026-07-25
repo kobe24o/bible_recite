@@ -15,6 +15,7 @@ import '../../reminder/reminder_providers.dart';
 import '../application/plan_providers.dart';
 import '../domain/cloud_plan_manifest.dart';
 import '../domain/plan_draft_builder.dart';
+import '../domain/plan_exchange.dart';
 import '../domain/plan_models.dart';
 import 'plan_editor_dialog.dart';
 
@@ -176,6 +177,12 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 icon: const Icon(Icons.replay_rounded),
               ),
             IconButton(
+              key: Key('export-plan-${plan.id}'),
+              tooltip: '导出计划 JSON',
+              onPressed: _working ? null : () => _exportPlan(plan),
+              icon: const Icon(Icons.ios_share_outlined),
+            ),
+            IconButton(
               key: Key('edit-plan-${plan.id}'),
               tooltip: '编辑计划',
               onPressed: _working ? null : () => _editPlan(plan),
@@ -194,6 +201,35 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       await repository.restartPlan(plan.id);
     });
   }
+
+  Future<void> _exportPlan(MemorizationPlan plan) async {
+    final tasks = await (await ref.read(
+      planRepositoryProvider.future,
+    )).listTasks(plan.id);
+    final location = await getSaveLocation(
+      suggestedName: 'BibleRecite-${_fileName(plan.title)}.json',
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'JSON',
+          extensions: ['json'],
+          mimeTypes: ['application/json'],
+        ),
+      ],
+    );
+    if (location == null) return;
+    await XFile.fromData(
+      utf8.encode(PlanExchange.encode(plan, tasks)),
+      mimeType: 'application/json',
+      name: 'plan.json',
+    ).saveTo(location.path);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('计划 JSON 已导出，可分享给其他用户导入')));
+  }
+
+  String _fileName(String value) =>
+      value.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
   Future<void> _showPlanSchedule(MemorizationPlan plan) async {
     final repository = await ref.read(planRepositoryProvider.future);
@@ -658,8 +694,21 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       if (bytes.length > 1024 * 1024) {
         throw const FormatException('JSON 文件不能超过 1 MB');
       }
-      final manifest = CloudPlanManifest.parse(utf8.decode(bytes));
       final repository = await ref.read(planRepositoryProvider.future);
+      final source = utf8.decode(bytes);
+      try {
+        final plan = PlanExchange.decode(source);
+        await repository.createPlan(plan);
+        if (!mounted) return;
+        setState(() => _revision++);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('计划已导入：完成状态已重置')));
+        return;
+      } on FormatException {
+        // Existing published cloud-plan JSON remains supported below.
+      }
+      final manifest = CloudPlanManifest.parse(source);
       final result = await ref
           .read(cloudPlanImporterProvider)
           .importPushed(
