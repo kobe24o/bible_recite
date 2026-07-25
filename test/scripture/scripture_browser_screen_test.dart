@@ -11,7 +11,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('selects translation, testament, book, and chapter', (
+  testWidgets('selects a book, hides the book grid, and restores it on return', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -43,8 +43,17 @@ void main() {
     expect(find.text('JHN'), findsNothing);
     await tester.tap(find.text('约翰福音'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('selected-book-JHN')), findsOneWidget);
+
+    // Selecting a book intentionally replaces the book grid with its chapters,
+    // so the user has a shorter path to the desired chapter.
+    expect(find.byType(BookGrid), findsNothing);
+    expect(find.text('约翰福音'), findsOneWidget);
     expect(find.text('第 3 章'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回书卷'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookGrid), findsOneWidget);
+    expect(find.text('约翰福音'), findsOneWidget);
   });
 
   testWidgets('book and chapter grids expose selected states', (tester) async {
