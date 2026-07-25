@@ -12,7 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  testWidgets('opens a due Ebbinghaus review chapter with its review id', (
+  testWidgets('shows a due Ebbinghaus review as a direct recitation task', (
     tester,
   ) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
@@ -42,9 +42,7 @@ void main() {
       ),
     );
     await repository.processEbbinghausResult(resultId: resultId);
-    final review = (await repository.dueEbbinghausReviews(
-      DateTime.now(),
-    )).single;
+    await repository.dueEbbinghausReviews(DateTime.now());
     final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const TodayScreen()),
@@ -75,9 +73,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('艾宾浩斯复习'), findsOneWidget);
-    await tester.tap(find.text('艾宾浩斯复习'));
-    await tester.pumpAndSettle();
-    expect(find.text('复习章节已打开:${review.id}'), findsOneWidget);
   });
 
   testWidgets('opens a task passage and keeps completed tasks with undo', (
@@ -144,6 +139,5 @@ void main() {
     await tester.tap(find.byKey(Key('undo-task-${task.id}')));
     await tester.pumpAndSettle();
     expect(find.text('待完成'), findsOneWidget);
-
   });
 }

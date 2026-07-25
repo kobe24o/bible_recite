@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
+import '../../scripture/domain/scripture_repository.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../application/plan_providers.dart';
@@ -189,45 +190,86 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             Text('每天背诵安排 · ${plan.days} 天'),
             const SizedBox(height: 12),
             for (final task in tasks)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Text('${task.dayIndex + 1}')),
-                title: Text(
-                  '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
-                  '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
+              Dismissible(
+                key: Key('plan-task-${task.id}'),
+                direction: task.completed
+                    ? DismissDirection.none
+                    : DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Icon(
+                    Icons.delete_outline,
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
                 ),
-                subtitle: Text(
-                  '${task.dueDate.year}-${task.dueDate.month.toString().padLeft(2, '0')}-${task.dueDate.day.toString().padLeft(2, '0')}',
+                confirmDismiss: (_) => _confirmDeleteTask(plan, task),
+                onDismissed: (_) => setState(() => _revision++),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(child: Text('${task.dayIndex + 1}')),
+                  title: Text(
+                    '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
+                    '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
+                  ),
+                  subtitle: Text(
+                    '${task.dueDate.year}-${task.dueDate.month.toString().padLeft(2, '0')}-${task.dueDate.day.toString().padLeft(2, '0')}',
+                  ),
+                  trailing: task.completed
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  onTap: task.completed
+                      ? null
+                      : () async {
+                          final scripture = await ref.read(
+                            scriptureRepositoryProvider.future,
+                          );
+                          final request = await buildPlanRecitationRequest(
+                            scripture: scripture,
+                            plan: plan,
+                            tasks: tasks,
+                            selected: task,
+                          );
+                          if (!mounted || request == null) return;
+                          Navigator.of(context).pop();
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  RecitationPracticeScreen(request: request),
+                            ),
+                          );
+                        },
                 ),
-                trailing: task.completed
-                    ? const Icon(Icons.check_circle, color: Colors.green)
-                    : null,
-                onTap: task.completed
-                    ? null
-                    : () async {
-                        final scripture = await ref.read(
-                          scriptureRepositoryProvider.future,
-                        );
-                        final request = await buildPlanRecitationRequest(
-                          scripture: scripture,
-                          plan: plan,
-                          tasks: tasks,
-                          selected: task,
-                        );
-                        if (!mounted || request == null) return;
-                        Navigator.of(context).pop();
-                        await Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) =>
-                                RecitationPracticeScreen(request: request),
-                          ),
-                        );
-                      },
               ),
           ],
         ),
       ),
     );
+  }
+
+  Future<bool> _confirmDeleteTask(MemorizationPlan plan, PlanTask task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除这项经文？'),
+        content: Text('将从“${plan.title}”中删除这条未完成安排。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return false;
+    final repository = await ref.read(planRepositoryProvider.future);
+    await repository.deleteTask(task.id);
+    return true;
   }
 
   Future<void> _configureTemplate(CloudPlanTemplate template) async {
@@ -246,6 +288,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        onAddPassage: () => _pickPassage(data),
         contentLocked: true,
         minimumDays: template.passages.length,
         initial: PlanEditorDraft(
@@ -319,6 +362,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        onAddPassage: () => _pickPassage(data),
         initial: PlanEditorDraft(
           title: '我的背诵计划',
           translationId: data.translation.id,
@@ -336,10 +380,14 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   Future<void> _editPlan(MemorizationPlan plan) async {
     final data = await _loadEditorData(translationId: plan.translationId);
     if (!mounted || data == null) return;
+    final existingTasks = await (await ref.read(
+      planRepositoryProvider.future,
+    )).listTasks(plan.id);
     final result = await showDialog<PlanEditorResult>(
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        onAddPassage: plan.contentLocked ? null : () => _pickPassage(data),
         allowDelete: true,
         contentLocked: plan.contentLocked,
         minimumDays: plan.contentLocked ? plan.totalTasks : 1,
@@ -351,6 +399,16 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           endChapter: plan.endChapter,
           startDate: plan.startDate,
           endDate: plan.endDate,
+          passages: [
+            for (final task in existingTasks)
+              PlanPassageSelection(
+                bookId: task.bookId,
+                startChapter: task.startChapter,
+                startVerse: task.startVerse,
+                endChapter: task.endChapter,
+                endVerse: task.endVerse,
+              ),
+          ],
         ),
       ),
     );
@@ -639,7 +697,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             ),
           )
           .toList(growable: false);
-      return _EditorData(translation, books);
+      return _EditorData(translation, books, scripture);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -649,6 +707,15 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       return null;
     }
   }
+
+  Future<PlanPassageSelection?> _pickPassage(_EditorData data) => showDialog(
+    context: context,
+    builder: (_) => _PassagePickerDialog(
+      books: data.books,
+      scripture: data.scripture,
+      translationId: data.translation.id,
+    ),
+  );
 
   String _translationLabel(String id) => switch (id) {
     'cmn-cu89t' => '繁體',
@@ -663,7 +730,181 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
 }
 
 final class _EditorData {
-  const _EditorData(this.translation, this.books);
+  const _EditorData(this.translation, this.books, this.scripture);
   final TranslationInfo translation;
   final List<BibleBook> books;
+  final ScriptureRepository scripture;
+}
+
+class _PassagePickerDialog extends StatefulWidget {
+  const _PassagePickerDialog({
+    required this.books,
+    required this.scripture,
+    required this.translationId,
+  });
+
+  final List<BibleBook> books;
+  final ScriptureRepository scripture;
+  final String translationId;
+
+  @override
+  State<_PassagePickerDialog> createState() => _PassagePickerDialogState();
+}
+
+class _PassagePickerDialogState extends State<_PassagePickerDialog> {
+  late BibleBook _startBook = widget.books.first;
+  late BibleBook _endBook = widget.books.first;
+  int _startChapter = 1;
+  int _endChapter = 1;
+  int? _startVerse;
+  int? _endVerse;
+
+  @override
+  Widget build(BuildContext context) {
+    final endBooks = [_startBook];
+    return AlertDialog(
+      title: const Text('添加经文'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _bookField(
+              '开始卷',
+              _startBook,
+              widget.books,
+              (book) => setState(() {
+                _startBook = book;
+                _endBook = book;
+                _startChapter = _endChapter = 1;
+                _startVerse = _endVerse = null;
+              }),
+            ),
+            _chapterField(
+              '开始章',
+              _startBook,
+              _startChapter,
+              (value) => setState(() {
+                _startChapter = value;
+                _startVerse = null;
+                if (_endBook == _startBook && _endChapter < value)
+                  _endChapter = value;
+              }),
+            ),
+            _verseField(true),
+            const Divider(),
+            _bookField(
+              '结束卷',
+              _endBook,
+              endBooks,
+              (book) => setState(() {
+                _endBook = book;
+                _endChapter = book == _startBook ? _startChapter : 1;
+                _endVerse = null;
+              }),
+            ),
+            _chapterField(
+              '结束章',
+              _endBook,
+              _endChapter,
+              (value) => setState(() {
+                _endChapter = value;
+                _endVerse = null;
+              }),
+            ),
+            _verseField(false),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('添加')),
+      ],
+    );
+  }
+
+  Widget _bookField(
+    String label,
+    BibleBook value,
+    Iterable<BibleBook> books,
+    ValueChanged<BibleBook> onChanged,
+  ) => DropdownButtonFormField<String>(
+    value: value.osisId,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      for (final book in books)
+        DropdownMenuItem(value: book.osisId, child: Text(book.name)),
+    ],
+    onChanged: (id) => onChanged(books.firstWhere((book) => book.osisId == id)),
+  );
+
+  Widget _chapterField(
+    String label,
+    BibleBook book,
+    int value,
+    ValueChanged<int> onChanged,
+  ) => DropdownButtonFormField<int>(
+    value: value,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      for (var chapter = 1; chapter <= book.chapterCount; chapter++)
+        DropdownMenuItem(value: chapter, child: Text('$chapter')),
+    ],
+    onChanged: (chapter) {
+      if (chapter != null) onChanged(chapter);
+    },
+  );
+
+  Widget _verseField(bool start) {
+    final book = start ? _startBook : _endBook;
+    final chapter = start ? _startChapter : _endChapter;
+    final selected = start ? _startVerse : _endVerse;
+    return FutureBuilder<List<VerseUnit>>(
+      future: widget.scripture.getChapter(
+        widget.translationId,
+        book.osisId,
+        chapter,
+      ),
+      builder: (context, snapshot) {
+        final verses = snapshot.data ?? const <VerseUnit>[];
+        final usable = verses.map((unit) => unit.start.verse).toList();
+        return DropdownButtonFormField<int>(
+          value: usable.contains(selected) ? selected : null,
+          decoration: InputDecoration(labelText: start ? '开始节' : '结束节'),
+          items: [
+            for (final verse in usable)
+              DropdownMenuItem(value: verse, child: Text('$verse')),
+          ],
+          onChanged: (verse) => setState(() {
+            if (start)
+              _startVerse = verse;
+            else
+              _endVerse = verse;
+          }),
+        );
+      },
+    );
+  }
+
+  void _save() {
+    if (_startVerse == null || _endVerse == null) return;
+    final start = (_startBook.ordinal, _startChapter, _startVerse!);
+    final end = (_endBook.ordinal, _endChapter, _endVerse!);
+    if (start.$1 > end.$1 ||
+        (start.$1 == end.$1 &&
+            (start.$2 > end.$2 || (start.$2 == end.$2 && start.$3 > end.$3))))
+      return;
+    Navigator.pop(
+      context,
+      PlanPassageSelection(
+        bookId: _startBook.osisId,
+        startChapter: _startChapter,
+        startVerse: _startVerse!,
+        endChapter: _endChapter,
+        endVerse: _endVerse!,
+      ),
+    );
+  }
 }

@@ -1,6 +1,12 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/empty_state_page.dart';
@@ -20,6 +26,10 @@ class StatisticsScreen extends ConsumerStatefulWidget {
 
 class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   bool _recentExpanded = false;
+  final GlobalKey _shareQrKey = GlobalKey();
+
+  static const _androidDownloadUrl =
+      'https://ghfast.top/https://github.com/kobe24o/bible_recite/releases/latest/download/BibleRecite-latest.apk';
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +91,18 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       leading: const Icon(Icons.info_outline_rounded),
                       title: Text(localizations.aboutTitle),
                       onTap: () => context.go('/about'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      key: const Key('share-app-button'),
+                      leading: const Icon(Icons.share_outlined),
+                      title: Text(chinese ? '分享应用' : 'Share app'),
+                      subtitle: Text(
+                        chinese ? '生成下载二维码' : 'Generate a download QR code',
+                      ),
+                      onTap: _showSharePlatforms,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -210,6 +232,127 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       ignoreFinalNasal:
           await repository.getSetting('ignore_final_nasal', 'true') == 'true',
     );
+  }
+
+  Future<void> _showSharePlatforms() async {
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('share-android'),
+              leading: const Icon(Icons.android_rounded),
+              title: const Text('Android'),
+              subtitle: Text(chinese ? '获取最新版安装包' : 'Get the latest APK'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAndroidQr();
+              },
+            ),
+            const ListTile(
+              leading: Icon(Icons.phone_iphone_outlined),
+              title: Text('iOS'),
+              subtitle: Text('即将支持'),
+              enabled: false,
+            ),
+            const ListTile(
+              leading: Icon(Icons.devices_other_outlined),
+              title: Text('鸿蒙'),
+              subtitle: Text('即将支持'),
+              enabled: false,
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAndroidQr() async {
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(chinese ? 'Android 下载二维码' : 'Android download QR'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RepaintBoundary(
+              key: _shareQrKey,
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(16),
+                child: QrImageView(
+                  data: _androidDownloadUrl,
+                  size: 220,
+                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              chinese
+                  ? '扫码下载最新版 Android 安装包'
+                  : 'Scan to download the latest Android APK',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saveQr,
+            child: Text(chinese ? '保存二维码' : 'Save QR code'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(chinese ? '完成' : 'Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveQr() async {
+    try {
+      final boundary =
+          _shareQrKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) return;
+      final location = await getSaveLocation(
+        suggestedName: 'BibleRecite-Android-QR.png',
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'PNG',
+            extensions: ['png'],
+            mimeTypes: ['image/png'],
+          ),
+        ],
+      );
+      if (location == null) return;
+      await XFile.fromData(
+        Uint8List.fromList(data.buffer.asUint8List()),
+        mimeType: 'image/png',
+        name: 'BibleRecite-Android-QR.png',
+      ).saveTo(location.path);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('二维码已保存')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存二维码失败：$error')));
+      }
+    }
   }
 }
 

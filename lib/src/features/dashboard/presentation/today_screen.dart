@@ -66,6 +66,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         review.bookId,
                         Localizations.localeOf(context),
                       ),
+                      onStart: () => _startReview(review),
                     ),
                   for (final task in pending)
                     _TaskCard(
@@ -125,6 +126,31 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
+  Future<void> _startReview(EbbinghausReview review) async {
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final units = await scripture.getChapter(
+      review.translationId,
+      review.bookId,
+      review.chapter,
+    );
+    if (!mounted || units.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecitationPracticeScreen(
+          request: RecitationRequest(
+            translationId: review.translationId,
+            bookId: review.bookId,
+            chapter: review.chapter,
+            mode: RecitationMode.continuous,
+            units: units,
+            reviewId: review.id,
+          ),
+        ),
+      ),
+    );
+    if (mounted) setState(() => _revision++);
+  }
+
   Future<_TodayData> _load(SqlitePlanRepository repository) async {
     final plans = await repository.listPlans();
     final tasks = await repository.dueTasks(
@@ -141,18 +167,20 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 }
 
 class _ReviewCard extends StatelessWidget {
-  const _ReviewCard({required this.review, required this.bookName});
+  const _ReviewCard({
+    required this.review,
+    required this.bookName,
+    required this.onStart,
+  });
 
   final EbbinghausReview review;
   final String bookName;
+  final Future<void> Function() onStart;
 
   @override
   Widget build(BuildContext context) => Card(
     child: ListTile(
-      onTap: () => context.go(
-        '/bible/${review.translationId}/${review.bookId}/${review.chapter}',
-        extra: review.id,
-      ),
+      onTap: onStart,
       leading: const CircleAvatar(child: Icon(Icons.auto_awesome_rounded)),
       title: const Text('艾宾浩斯复习'),
       subtitle: Text(

@@ -11,6 +11,7 @@ final class PlanEditorDraft {
     required this.endChapter,
     required this.startDate,
     required this.endDate,
+    this.passages = const [],
   });
 
   final String title;
@@ -20,8 +21,25 @@ final class PlanEditorDraft {
   final int endChapter;
   final DateTime startDate;
   final DateTime endDate;
+  final List<PlanPassageSelection> passages;
 
   int get days => endDate.difference(startDate).inDays + 1;
+}
+
+final class PlanPassageSelection {
+  const PlanPassageSelection({
+    required this.bookId,
+    required this.startChapter,
+    required this.startVerse,
+    required this.endChapter,
+    required this.endVerse,
+  });
+
+  final String bookId;
+  final int startChapter;
+  final int startVerse;
+  final int endChapter;
+  final int endVerse;
 }
 
 final class PlanEditorResult {
@@ -39,6 +57,7 @@ class PlanEditorDialog extends StatefulWidget {
     this.allowDelete = false,
     this.contentLocked = false,
     this.minimumDays = 1,
+    this.onAddPassage,
     super.key,
   });
 
@@ -47,6 +66,7 @@ class PlanEditorDialog extends StatefulWidget {
   final bool allowDelete;
   final bool contentLocked;
   final int minimumDays;
+  final Future<PlanPassageSelection?> Function()? onAddPassage;
 
   @override
   State<PlanEditorDialog> createState() => _PlanEditorDialogState();
@@ -54,9 +74,7 @@ class PlanEditorDialog extends StatefulWidget {
 
 class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late final TextEditingController _title;
-  late final TextEditingController _startChapter;
-  late final TextEditingController _endChapter;
-  late String _bookId;
+  late List<PlanPassageSelection> _passages;
   late String _translationId;
   late DateTime _startDate;
   late DateTime _endDate;
@@ -66,11 +84,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   void initState() {
     super.initState();
     _title = TextEditingController(text: widget.initial.title);
-    _startChapter = TextEditingController(
-      text: '${widget.initial.startChapter}',
-    );
-    _endChapter = TextEditingController(text: '${widget.initial.endChapter}');
-    _bookId = widget.initial.bookId;
+    _passages = List.of(widget.initial.passages);
     _translationId = widget.initial.translationId;
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
@@ -128,51 +142,28 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                 ),
               )
             else ...[
-              DropdownButtonFormField<String>(
-                key: const Key('plan-book'),
-                initialValue: _bookId,
-                decoration: InputDecoration(
-                  labelText: chinese ? '经卷' : 'Book',
-                  border: const OutlineInputBorder(),
-                ),
-                items: [
-                  for (final book in widget.books)
-                    DropdownMenuItem(
-                      value: book.osisId,
-                      child: Text(book.name),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _bookId = value);
-                },
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(chinese ? '背诵经文' : 'Passages'),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('start-chapter'),
-                      controller: _startChapter,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: chinese ? '开始章' : 'Start chapter',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
+              const SizedBox(height: 6),
+              for (final passage in _passages)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${_bookName(passage.bookId)} ${passage.startChapter}:${passage.startVerse}–${passage.endChapter}:${passage.endVerse}',
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('end-chapter'),
-                      controller: _endChapter,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: chinese ? '结束章' : 'End chapter',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => setState(() => _passages.remove(passage)),
                   ),
-                ],
+                ),
+              OutlinedButton.icon(
+                key: const Key('add-plan-passage'),
+                onPressed: widget.onAddPassage == null ? null : _addPassage,
+                icon: const Icon(Icons.add_rounded),
+                label: Text(chinese ? '添加经文' : 'Add passage'),
               ),
             ],
             const SizedBox(height: 8),
@@ -252,18 +243,8 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   }
 
   void _save() {
-    final startChapter = int.tryParse(_startChapter.text);
-    final endChapter = int.tryParse(_endChapter.text);
-    final book = widget.books
-        .where((book) => book.osisId == _bookId)
-        .firstOrNull;
     if (_title.text.trim().isEmpty ||
-        startChapter == null ||
-        endChapter == null ||
-        startChapter < 1 ||
-        endChapter < startChapter ||
-        (!widget.contentLocked &&
-            (book == null || endChapter > book.chapterCount)) ||
+        (!widget.contentLocked && _passages.isEmpty) ||
         _days < 1 ||
         _days < widget.minimumDays ||
         _days > 365) {
@@ -276,11 +257,18 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
         PlanEditorDraft(
           title: _title.text.trim(),
           translationId: _translationId,
-          bookId: _bookId,
-          startChapter: startChapter,
-          endChapter: endChapter,
+          bookId: _passages.isEmpty
+              ? widget.initial.bookId
+              : _passages.first.bookId,
+          startChapter: _passages.isEmpty
+              ? widget.initial.startChapter
+              : _passages.first.startChapter,
+          endChapter: _passages.isEmpty
+              ? widget.initial.endChapter
+              : _passages.last.endChapter,
           startDate: _startDate,
           endDate: _endDate,
+          passages: _passages,
         ),
       ),
     );
@@ -293,8 +281,14 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   @override
   void dispose() {
     _title.dispose();
-    _startChapter.dispose();
-    _endChapter.dispose();
     super.dispose();
   }
+
+  Future<void> _addPassage() async {
+    final passage = await widget.onAddPassage?.call();
+    if (passage != null && mounted) setState(() => _passages.add(passage));
+  }
+
+  String _bookName(String id) =>
+      widget.books.where((book) => book.osisId == id).firstOrNull?.name ?? id;
 }

@@ -10,14 +10,38 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   List<PlanTask> completedTasks = const [],
 }) async {
   final units = <VerseUnit>[];
-  for (
-    var chapter = draft.startChapter;
-    chapter <= draft.endChapter;
-    chapter++
-  ) {
-    units.addAll(
-      await scripture.getChapter(draft.translationId, draft.bookId, chapter),
-    );
+  if (draft.passages.isEmpty) {
+    for (
+      var chapter = draft.startChapter;
+      chapter <= draft.endChapter;
+      chapter++
+    ) {
+      units.addAll(
+        await scripture.getChapter(draft.translationId, draft.bookId, chapter),
+      );
+    }
+  } else {
+    for (final passage in draft.passages) {
+      units.addAll(
+        (await scripture.getPassage(
+          draft.translationId,
+          PassageRange(
+            start: (
+              canonId: CanonId.protestant66,
+              osisBookId: passage.bookId,
+              chapter: passage.startChapter,
+              verse: passage.startVerse,
+            ),
+            end: (
+              canonId: CanonId.protestant66,
+              osisBookId: passage.bookId,
+              chapter: passage.endChapter,
+              verse: passage.endVerse,
+            ),
+          ),
+        )).units,
+      );
+    }
   }
   if (units.isEmpty) throw StateError('所选章节没有可用经文');
   final completedDays = completedTasks.map((task) => task.dayIndex).toSet();

@@ -28,6 +28,7 @@ final class RecitationRequest {
     required this.mode,
     required this.units,
     this.reviewId,
+    this.planTaskId,
     this.next,
   });
 
@@ -37,6 +38,7 @@ final class RecitationRequest {
   final RecitationMode mode;
   final List<VerseUnit> units;
   final int? reviewId;
+  final int? planTaskId;
   final RecitationRequest? next;
 }
 
@@ -218,6 +220,9 @@ class _RecitationPracticeScreenState
         );
       } catch (error) {
         if (mounted) setState(() => _error = '背诵已保存，但复习排期失败：$error');
+      }
+      if (widget.request.planTaskId != null) {
+        await repository.setTaskCompleted(widget.request.planTaskId!, true);
       }
       final unlocked = await repository.evaluateAndUnlockAchievements(
         source: 'recitation',

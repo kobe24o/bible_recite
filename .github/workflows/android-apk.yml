@@ -232,6 +232,9 @@ jobs:
         run: |
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           tag="build-${version}-${GITHUB_RUN_NUMBER}"
+          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' -printf '%f\n')"
+          test -n "$apk_name"
+          cp "dist/$apk_name" dist/BibleRecite-latest.apk
           gh release create "$tag" dist/* \
             --latest \
             --target "$GITHUB_SHA" \

@@ -451,6 +451,11 @@ final class SqlitePlanRepository {
     await evaluateAndUnlockAchievements(source: 'plan');
   }
 
+  Future<void> deleteTask(int taskId) async {
+    _database.execute('DELETE FROM plan_task WHERE id = ?', [taskId]);
+    await evaluateAndUnlockAchievements(source: 'plan');
+  }
+
   Future<int> saveRecitationResult(NewRecitationResult result) async {
     _database.execute(
       '''INSERT INTO recitation_result

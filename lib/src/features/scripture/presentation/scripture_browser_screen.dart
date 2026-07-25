@@ -31,6 +31,16 @@ class _ScriptureBrowserScreenState
     final locale = Localizations.localeOf(context);
     return Scaffold(
       appBar: AppBar(
+        leading: _book == null
+            ? null
+            : IconButton(
+                tooltip: '返回书卷',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => setState(() {
+                  _book = null;
+                  _chapter = null;
+                }),
+              ),
         title: Text(AppLocalizations.of(context)?.bibleTitle ?? 'Bible'),
       ),
       body: repository.when(
@@ -108,7 +118,7 @@ class _ScriptureBrowserScreenState
                       }),
                     ),
                     const SizedBox(height: 16),
-                    if (_newTestament != null)
+                    if (_newTestament != null && _book == null)
                       BookGrid(
                         books: filtered,
                         selectedBookId: _book?.osisId,
@@ -119,9 +129,23 @@ class _ScriptureBrowserScreenState
                       ),
                     if (_book != null) ...[
                       const SizedBox(height: 20),
-                      Text(
-                        _book!.name,
-                        style: Theme.of(context).textTheme.titleLarge,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _book!.name,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => setState(() {
+                              _book = null;
+                              _chapter = null;
+                            }),
+                            icon: const Icon(Icons.menu_book_outlined),
+                            label: const Text('切换书卷'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       ChapterGrid(

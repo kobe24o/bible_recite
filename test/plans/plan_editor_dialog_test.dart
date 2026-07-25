@@ -41,6 +41,13 @@ void main() {
                       endDate: DateTime(2026, 7, 31),
                     ),
                     allowDelete: true,
+                    onAddPassage: () async => const PlanPassageSelection(
+                      bookId: 'JHN',
+                      startChapter: 2,
+                      startVerse: 1,
+                      endChapter: 4,
+                      endVerse: 1,
+                    ),
                   ),
                 );
               },
@@ -59,15 +66,15 @@ void main() {
     expect(find.byKey(const Key('plan-translation')), findsOneWidget);
     expect(find.byKey(const Key('delete-plan-button')), findsOneWidget);
     await tester.enterText(find.byKey(const Key('plan-title')), '新计划');
-    await tester.enterText(find.byKey(const Key('start-chapter')), '2');
-    await tester.enterText(find.byKey(const Key('end-chapter')), '4');
+    await tester.tap(find.byKey(const Key('add-plan-passage')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-plan-button')));
     await tester.pumpAndSettle();
 
     expect(result?.delete, isFalse);
     expect(result?.draft?.title, '新计划');
-    expect(result?.draft?.startChapter, 2);
-    expect(result?.draft?.endChapter, 4);
+    expect(result?.draft?.passages.single.startChapter, 2);
+    expect(result?.draft?.passages.single.endChapter, 4);
     expect(result?.draft?.days, 17);
   });
 }
