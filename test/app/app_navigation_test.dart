@@ -113,6 +113,10 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       3,
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('about-open')),
+      120,
+    );
     await tester.tap(find.byKey(const Key('about-open')));
     await tester.pumpAndSettle();
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -40,6 +42,9 @@ final class DailyTaskReminderScheduler {
   bool _initialized = false;
 
   Future<void> initialize() async {
+    // The app currently distributes the reminder feature on Android only.
+    // Avoid creating an Android plugin instance on desktop/test hosts.
+    if (!Platform.isAndroid) return;
     if (_initialized) return;
     tz.initializeTimeZones();
     await _notifications.initialize(
@@ -56,6 +61,7 @@ final class DailyTaskReminderScheduler {
   }
 
   Future<void> reschedule(SqlitePlanRepository repository) async {
+    if (!Platform.isAndroid) return;
     await initialize();
     await _notifications.cancelAll();
     final settings = await readSettings(repository);
