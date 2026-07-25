@@ -98,9 +98,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(Key('edit-plan-$planId')), findsOneWidget);
+    expect(find.byKey(Key('plan-actions-$planId')), findsOneWidget);
     expect(find.text('云端'), findsOneWidget);
-    await tester.tap(find.byKey(Key('edit-plan-$planId')));
+    await tester.tap(find.byKey(Key('plan-actions-$planId')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑计划'));
     await tester.pumpAndSettle();
     expect(find.text('编辑背诵计划'), findsOneWidget);
     expect(find.byKey(const Key('plan-translation')), findsOneWidget);

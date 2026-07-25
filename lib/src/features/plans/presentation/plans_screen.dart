@@ -28,6 +28,8 @@ class PlansScreen extends ConsumerStatefulWidget {
   ConsumerState<PlansScreen> createState() => _PlansScreenState();
 }
 
+enum _PlanAction { export, edit, restart }
+
 class _PlansScreenState extends ConsumerState<PlansScreen> {
   static const _planJsonStoreChannel = MethodChannel(
     'app.biblerecite/plan_json_store',
@@ -171,32 +173,43 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                     '${plan.completedTasks}/${plan.totalTasks} · '
                     '${_translationLabel(plan.translationId)}',
         ),
-        trailing: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  key: Key('export-plan-${plan.id}'),
-                  tooltip: '导出计划 JSON',
-                  onPressed: _working ? null : () => _exportPlan(plan),
-                  icon: const Icon(Icons.ios_share_outlined),
-                ),
-                IconButton(
-                  key: Key('edit-plan-${plan.id}'),
-                  tooltip: '编辑计划',
-                  onPressed: _working ? null : () => _editPlan(plan),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
+        trailing: PopupMenuButton<_PlanAction>(
+          key: Key('plan-actions-${plan.id}'),
+          tooltip: '计划操作',
+          onSelected: _working
+              ? null
+              : (action) async {
+                  switch (action) {
+                    case _PlanAction.export:
+                      await _exportPlan(plan);
+                    case _PlanAction.edit:
+                      await _editPlan(plan);
+                    case _PlanAction.restart:
+                      await _restartPlan(plan);
+                  }
+                },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: _PlanAction.export,
+              child: ListTile(
+                leading: Icon(Icons.ios_share_outlined),
+                title: Text('导出计划 JSON'),
+              ),
+            ),
+            const PopupMenuItem(
+              value: _PlanAction.edit,
+              child: ListTile(
+                leading: Icon(Icons.edit_outlined),
+                title: Text('编辑计划'),
+              ),
             ),
             if (completed)
-              IconButton(
-                key: Key('restart-plan-${plan.id}'),
-                tooltip: '再次执行',
-                onPressed: _working ? null : () => _restartPlan(plan),
-                icon: const Icon(Icons.replay_rounded),
+              const PopupMenuItem(
+                value: _PlanAction.restart,
+                child: ListTile(
+                  leading: Icon(Icons.replay_rounded),
+                  title: Text('再次执行'),
+                ),
               ),
           ],
         ),
@@ -219,7 +232,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final bytes = utf8.encode(PlanExchange.encode(plan, tasks));
     final name = 'BibleRecite-${_fileName(plan.title)}.json';
     if (Platform.isAndroid) {
-      await _planJsonStoreChannel.invokeMethod<void>('saveJson', {
+      await _planJsonStoreChannel.invokeMethod<String>('saveJson', {
         'bytes': bytes,
         'displayName': name,
       });
@@ -242,9 +255,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       ).saveTo(location.path);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('计划 JSON 已导出，可分享给其他用户导入')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('计划 JSON 已保存至 下载/BibleRecite/$name')),
+    );
   }
 
   String _fileName(String value) =>
