@@ -268,7 +268,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-            --release-notes "背诵计划可导出为 JSON 分享给他人导入；导入后从未完成状态开始，保留每日经文安排。" \
+            --release-notes "修复 Android 计划 JSON 导出保存，并优化导出、编辑与再次执行按钮布局。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

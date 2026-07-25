@@ -8,5 +8,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         AppUpdateChannel(this).register(flutterEngine)
         QrImageStoreChannel(this).register(flutterEngine)
+        PlanJsonStoreChannel(this).register(flutterEngine)
     }
 }

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
@@ -27,6 +29,9 @@ class PlansScreen extends ConsumerStatefulWidget {
 }
 
 class _PlansScreenState extends ConsumerState<PlansScreen> {
+  static const _planJsonStoreChannel = MethodChannel(
+    'app.biblerecite/plan_json_store',
+  );
   int _revision = 0;
   bool _working = false;
 
@@ -166,9 +171,26 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                     '${plan.completedTasks}/${plan.totalTasks} · '
                     '${_translationLabel(plan.translationId)}',
         ),
-        trailing: Row(
+        trailing: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: Key('export-plan-${plan.id}'),
+                  tooltip: '导出计划 JSON',
+                  onPressed: _working ? null : () => _exportPlan(plan),
+                  icon: const Icon(Icons.ios_share_outlined),
+                ),
+                IconButton(
+                  key: Key('edit-plan-${plan.id}'),
+                  tooltip: '编辑计划',
+                  onPressed: _working ? null : () => _editPlan(plan),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              ],
+            ),
             if (completed)
               IconButton(
                 key: Key('restart-plan-${plan.id}'),
@@ -176,18 +198,6 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 onPressed: _working ? null : () => _restartPlan(plan),
                 icon: const Icon(Icons.replay_rounded),
               ),
-            IconButton(
-              key: Key('export-plan-${plan.id}'),
-              tooltip: '导出计划 JSON',
-              onPressed: _working ? null : () => _exportPlan(plan),
-              icon: const Icon(Icons.ios_share_outlined),
-            ),
-            IconButton(
-              key: Key('edit-plan-${plan.id}'),
-              tooltip: '编辑计划',
-              onPressed: _working ? null : () => _editPlan(plan),
-              icon: const Icon(Icons.edit_outlined),
-            ),
           ],
         ),
         onTap: _working ? null : () => _showPlanSchedule(plan),
@@ -206,22 +216,31 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final tasks = await (await ref.read(
       planRepositoryProvider.future,
     )).listTasks(plan.id);
-    final location = await getSaveLocation(
-      suggestedName: 'BibleRecite-${_fileName(plan.title)}.json',
-      acceptedTypeGroups: const [
-        XTypeGroup(
-          label: 'JSON',
-          extensions: ['json'],
-          mimeTypes: ['application/json'],
-        ),
-      ],
-    );
-    if (location == null) return;
-    await XFile.fromData(
-      utf8.encode(PlanExchange.encode(plan, tasks)),
-      mimeType: 'application/json',
-      name: 'plan.json',
-    ).saveTo(location.path);
+    final bytes = utf8.encode(PlanExchange.encode(plan, tasks));
+    final name = 'BibleRecite-${_fileName(plan.title)}.json';
+    if (Platform.isAndroid) {
+      await _planJsonStoreChannel.invokeMethod<void>('saveJson', {
+        'bytes': bytes,
+        'displayName': name,
+      });
+    } else {
+      final location = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'JSON',
+            extensions: ['json'],
+            mimeTypes: ['application/json'],
+          ),
+        ],
+      );
+      if (location == null) return;
+      await XFile.fromData(
+        bytes,
+        mimeType: 'application/json',
+        name: 'plan.json',
+      ).saveTo(location.path);
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
