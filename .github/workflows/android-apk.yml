@@ -232,7 +232,9 @@ jobs:
         run: |
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           tag="build-${version}-${GITHUB_RUN_NUMBER}"
-          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' -printf '%f\n')"
+          # The release step also attaches BibleRecite-latest.apk.  The update
+          # manifest must keep referring to the immutable, versioned asset.
+          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' ! -name 'BibleRecite-latest.apk' -printf '%f\n')"
           test -n "$apk_name"
           cp "dist/$apk_name" dist/BibleRecite-latest.apk
           gh release create "$tag" dist/* \
@@ -252,7 +254,9 @@ jobs:
           version_name="${version%%+*}"
           build_number="${version##*+}"
           tag="build-${version}-${GITHUB_RUN_NUMBER}"
-          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' -printf '%f\n')"
+          # Do not select the moving latest alias: its corresponding SHA file
+          # does not exist and the signed feed must reference a fixed asset.
+          apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' ! -name 'BibleRecite-latest.apk' -printf '%f\n')"
           test -n "$apk_name"
           sha256="$(awk '{print $1}' "dist/$apk_name.sha256")"
           dart run tool/update_feed/bin/create_update_envelope.dart \
