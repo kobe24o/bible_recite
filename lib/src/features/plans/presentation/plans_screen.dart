@@ -8,6 +8,7 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
+import '../../scripture/domain/book_name_catalog.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
@@ -211,7 +212,53 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             const SizedBox(height: 4),
             Text('每天背诵安排 · ${plan.days} 天'),
             const SizedBox(height: 12),
-            for (final task in tasks)
+            for (final entry in _tasksByDay(tasks).entries)
+              _dayScheduleGroup(
+                plan: plan,
+                tasks: tasks,
+                dayTasks: entry.value,
+                catalog: catalog,
+                locale: locale,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<int, List<PlanTask>> _tasksByDay(List<PlanTask> tasks) {
+    final grouped = <int, List<PlanTask>>{};
+    for (final task in tasks) {
+      grouped.putIfAbsent(task.dayIndex, () => []).add(task);
+    }
+    return grouped;
+  }
+
+  Widget _dayScheduleGroup({
+    required MemorizationPlan plan,
+    required List<PlanTask> tasks,
+    required List<PlanTask> dayTasks,
+    required BookNameCatalog catalog,
+    required Locale locale,
+  }) {
+    final first = dayTasks.first;
+    final date = first.dueDate;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            ListTile(
+              leading: CircleAvatar(child: Text('${first.dayIndex + 1}')),
+              title: Text('第 ${first.dayIndex + 1} 天'),
+              subtitle: Text(
+                '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} · ${dayTasks.length} 段经文',
+              ),
+            ),
+            for (final task in dayTasks)
               Dismissible(
                 key: Key('plan-task-${task.id}'),
                 direction: task.completed
@@ -229,18 +276,15 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 confirmDismiss: (_) => _confirmDeleteTask(plan, task),
                 onDismissed: (_) => setState(() => _revision++),
                 child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(child: Text('${task.dayIndex + 1}')),
+                  contentPadding: const EdgeInsets.only(left: 20, right: 8),
+                  leading: const Icon(Icons.menu_book_outlined),
                   title: Text(
                     '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
                     '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
                   ),
-                  subtitle: Text(
-                    '${task.dueDate.year}-${task.dueDate.month.toString().padLeft(2, '0')}-${task.dueDate.day.toString().padLeft(2, '0')}',
-                  ),
                   trailing: task.completed
                       ? const Icon(Icons.check_circle, color: Colors.green)
-                      : null,
+                      : const Icon(Icons.chevron_right_rounded),
                   onTap: task.completed
                       ? null
                       : () async {
@@ -521,7 +565,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           : (await repository.listTasks(
               planId,
             )).where((task) => task.completed).toList(growable: false);
-      final normalized = _normalizeDraftForPendingWork(draft, completedTasks);
+      final normalized = normalizeDraftForPendingWork(draft, completedTasks);
       final plan = await buildPlanFromDraft(
         scripture,
         normalized,
@@ -533,44 +577,6 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         await repository.updatePlan(planId, plan);
       }
     });
-  }
-
-  PlanEditorDraft _normalizeDraftForPendingWork(
-    PlanEditorDraft draft,
-    List<PlanTask> completedTasks,
-  ) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final anchor = today.isAfter(draft.startDate) ? today : draft.startDate;
-    final total = draft.passages.isEmpty ? 1 : draft.passages.length;
-    final pending = (total - completedTasks.length).clamp(0, 365);
-    final completedEnd = completedTasks.isEmpty
-        ? draft.startDate
-        : draft.startDate.add(
-            Duration(
-              days: completedTasks
-                  .map((task) => task.dayIndex)
-                  .reduce((a, b) => a > b ? a : b),
-            ),
-          );
-    final pendingEnd = pending == 0
-        ? anchor
-        : anchor.add(Duration(days: pending - 1));
-    final end = [
-      draft.endDate,
-      completedEnd,
-      pendingEnd,
-    ].reduce((a, b) => a.isAfter(b) ? a : b);
-    if (end == draft.endDate) return draft;
-    return PlanEditorDraft(
-      title: draft.title,
-      translationId: draft.translationId,
-      bookId: draft.bookId,
-      startChapter: draft.startChapter,
-      endChapter: draft.endChapter,
-      startDate: draft.startDate,
-      endDate: end,
-      passages: draft.passages,
-    );
   }
 
   Future<void> _runSave(Future<void> Function() action) async {

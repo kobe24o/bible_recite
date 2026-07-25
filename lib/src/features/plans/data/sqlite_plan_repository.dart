@@ -40,8 +40,7 @@ final class SqlitePlanRepository {
         start_verse INTEGER NOT NULL CHECK(start_verse > 0),
         end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
         end_verse INTEGER NOT NULL CHECK(end_verse > 0),
-        completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
-        UNIQUE(plan_id, day_index)
+        completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1))
       )
     ''');
     _database.execute('''
@@ -164,10 +163,13 @@ final class SqlitePlanRepository {
     if (!taskColumns.contains('book_id')) {
       _database.execute('ALTER TABLE plan_task ADD COLUMN book_id TEXT');
     }
+    _migratePlanTasksForMultiplePassagesPerDay();
     _database.execute('''UPDATE plan_task
       SET book_id = (SELECT book_id FROM memorization_plan
         WHERE memorization_plan.id = plan_task.plan_id)
       WHERE book_id IS NULL''');
+    _database.execute('''CREATE INDEX IF NOT EXISTS idx_plan_task_plan_day
+      ON plan_task(plan_id, day_index)''');
     _database.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
       idx_plan_cloud_identity ON memorization_plan(source_url, external_id)
       WHERE source_url IS NOT NULL AND external_id IS NOT NULL''');
@@ -188,10 +190,55 @@ final class SqlitePlanRepository {
         'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',
       );
     }
-    _database.execute('PRAGMA user_version = 6');
+    _database.execute('PRAGMA user_version = 7');
   }
 
   final Database _database;
+
+  void _migratePlanTasksForMultiplePassagesPerDay() {
+    final definition = _database.select(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plan_task'",
+    );
+    if (definition.isEmpty ||
+        !(definition.single['sql'] as String).contains(
+          'UNIQUE(plan_id, day_index)',
+        )) {
+      return;
+    }
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute('''
+        CREATE TABLE plan_task_replacement (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER NOT NULL REFERENCES memorization_plan(id) ON DELETE CASCADE,
+          day_index INTEGER NOT NULL CHECK(day_index >= 0),
+          due_date TEXT NOT NULL,
+          book_id TEXT,
+          start_chapter INTEGER NOT NULL CHECK(start_chapter > 0),
+          start_verse INTEGER NOT NULL CHECK(start_verse > 0),
+          end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
+          end_verse INTEGER NOT NULL CHECK(end_verse > 0),
+          completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1))
+        )
+      ''');
+      _database.execute('''
+        INSERT INTO plan_task_replacement
+          (id, plan_id, day_index, due_date, book_id, start_chapter,
+           start_verse, end_chapter, end_verse, completed)
+        SELECT id, plan_id, day_index, due_date, book_id, start_chapter,
+               start_verse, end_chapter, end_verse, completed
+        FROM plan_task
+      ''');
+      _database.execute('DROP TABLE plan_task');
+      _database.execute(
+        'ALTER TABLE plan_task_replacement RENAME TO plan_task',
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
 
   Future<int> createPlan(NewMemorizationPlan plan) async {
     _database.execute('BEGIN IMMEDIATE');

@@ -56,6 +56,57 @@ void main() {
     ]);
   });
 
+  test('migrates legacy plans to allow multiple passages on one day', () async {
+    final database = sqlite3.openInMemory();
+    database.execute('''
+      CREATE TABLE plan_task (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id INTEGER NOT NULL,
+        day_index INTEGER NOT NULL,
+        due_date TEXT NOT NULL,
+        book_id TEXT,
+        start_chapter INTEGER NOT NULL,
+        start_verse INTEGER NOT NULL,
+        end_chapter INTEGER NOT NULL,
+        end_verse INTEGER NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(plan_id, day_index)
+      )
+    ''');
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+
+    final id = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '同日多段',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 25),
+        endDate: DateTime(2026, 7, 25),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 17,
+            endChapter: 3,
+            endVerse: 17,
+          ),
+        ],
+      ),
+    );
+
+    expect(await repository.listTasks(id), hasLength(2));
+  });
+
   test('appends selected passages as future days across books', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
@@ -232,9 +283,9 @@ void main() {
 
       final plan = (await repository.listPlans()).single;
       final restarted = (await repository.listTasks(id)).single;
-    expect(plan.days, 3);
-    expect(plan.startDate, DateTime(2026, 8, 1));
-    expect(plan.endDate, DateTime(2026, 8, 3));
+      expect(plan.days, 3);
+      expect(plan.startDate, DateTime(2026, 8, 1));
+      expect(plan.endDate, DateTime(2026, 8, 3));
       expect(restarted.completed, isFalse);
       expect(restarted.dueDate, DateTime(2026, 8, 1));
     },

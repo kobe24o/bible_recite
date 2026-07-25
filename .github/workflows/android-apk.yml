@@ -268,7 +268,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-            --release-notes "Current verse reference, per-verse display, and faster verified update downloads." \
+            --release-notes "计划可缩短并将多段经文合并到同一天；计划详情按天清晰分组，单节经文不会拆分。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

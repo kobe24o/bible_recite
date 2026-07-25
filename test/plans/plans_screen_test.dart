@@ -107,4 +107,75 @@ void main() {
     expect(find.byKey(const Key('locked-plan-content-note')), findsOneWidget);
     expect(find.byKey(const Key('delete-plan-button')), findsOneWidget);
   });
+
+  testWidgets('groups multiple passages scheduled for one day', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.createPlan(
+      NewMemorizationPlan(
+        title: '压缩后的计划',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 25),
+        endDate: DateTime(2026, 7, 26),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+          NewPlanTask(
+            dayIndex: 0,
+            bookId: 'GEN',
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 17,
+            endChapter: 3,
+            endVerse: 17,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PlansScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('压缩后的计划'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 天'), findsOneWidget);
+    expect(find.text('2026-07-25 · 2 段经文'), findsOneWidget);
+    expect(find.text('第 2 天'), findsOneWidget);
+  });
 }
