@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../features/update/application/update_controller.dart';
+import '../features/update/domain/update_status.dart';
+import '../features/update/presentation/update_available_notification.dart';
 import '../features/plans/application/plan_providers.dart';
 import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
@@ -20,19 +22,12 @@ class BibleReciteApp extends ConsumerStatefulWidget {
 }
 
 class _BibleReciteAppState extends ConsumerState<BibleReciteApp> {
-  Timer? _updateTimer;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(updateControllerProvider.notifier).autoCheck());
+      unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
-      _updateTimer = Timer.periodic(
-        const Duration(minutes: 30),
-        (_) =>
-            unawaited(ref.read(updateControllerProvider.notifier).autoCheck()),
-      );
     });
   }
 
@@ -41,10 +36,13 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp> {
     await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
   }
 
-  @override
-  void dispose() {
-    _updateTimer?.cancel();
-    super.dispose();
+  Future<void> _checkUpdateAtLaunch() async {
+    final controller = ref.read(updateControllerProvider.notifier);
+    await controller.autoCheck();
+    final status = ref.read(updateControllerProvider);
+    if (status case UpdateAvailable(:final manifest)) {
+      await UpdateAvailableNotification().show(manifest);
+    }
   }
 
   @override

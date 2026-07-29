@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../scripture/application/scripture_providers.dart';
@@ -352,10 +353,18 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                   ),
                   trailing: task.completed
                       ? const Icon(Icons.check_circle, color: Colors.green)
-                      : const Icon(Icons.chevron_right_rounded),
-                  onTap: task.completed
-                      ? null
-                      : () async {
+                      : Wrap(spacing: 2, children: [
+                          TextButton(
+                            key: Key('read-task-${task.id}'),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              context.push('/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}');
+                            },
+                            child: const Text('阅读'),
+                          ),
+                          TextButton(
+                            key: Key('recite-task-${task.id}'),
+                            onPressed: () async {
                           final scripture = await ref.read(
                             scriptureRepositoryProvider.future,
                           );
@@ -373,7 +382,11 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                                   RecitationPracticeScreen(request: request),
                             ),
                           );
-                        },
+                            },
+                            child: const Text('背诵'),
+                          ),
+                        ]),
+                  onTap: null,
                 ),
               ),
           ],

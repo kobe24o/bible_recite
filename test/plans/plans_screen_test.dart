@@ -42,6 +42,7 @@ void main() {
       find.byKey(const Key('import-cloud-plan-file-button')),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(find.text('自定义计划'), 240);
     expect(find.text('自定义计划'), findsOneWidget);
   });
 

@@ -36,6 +36,39 @@ void main() {
     );
     expect(reviews, hasLength(6));
     expect(reviews.map((review) => review.intervalDays), [1, 2, 4, 7, 15, 30]);
+    expect(reviews.first.startVerse, 1);
+    expect(reviews.first.endVerse, 36);
+  });
+
+  test('keeps separate passage reviews in the same chapter', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2026, 7, 16, 9);
+    await repository.updateEbbinghausSettings(
+      enabled: true,
+      passThreshold: 0.80,
+      now: base.subtract(const Duration(minutes: 1)),
+    );
+    for (final verse in [16, 17]) {
+      final resultId = await repository.saveRecitationResult(
+        _result(
+          accuracy: 1,
+          completedAt: base,
+          startVerse: verse,
+          endVerse: verse,
+          chapterVerseCount: 36,
+        ),
+      );
+      await repository.processEbbinghausResult(resultId: resultId);
+    }
+
+    final reviews = await repository.dueEbbinghausReviews(
+      base.add(const Duration(days: 1)),
+    );
+    expect(reviews, hasLength(2));
+    expect(reviews.map((review) => review.startVerse), containsAll([16, 17]));
+    expect(reviews.every((review) => review.endVerse == review.startVerse),
+        isTrue);
   });
 
   test('results before enabling or below threshold do not schedule', () async {
@@ -154,13 +187,16 @@ void main() {
 NewRecitationResult _result({
   required double accuracy,
   required DateTime completedAt,
+  int startVerse = 1,
+  int endVerse = 36,
+  int chapterVerseCount = 36,
 }) => NewRecitationResult(
   translationId: 'cmn-cu89s',
   bookId: 'JHN',
   chapter: 3,
-  startVerse: 1,
-  endVerse: 36,
-  chapterVerseCount: 36,
+  startVerse: startVerse,
+  endVerse: endVerse,
+  chapterVerseCount: chapterVerseCount,
   mode: 'continuous',
   durationSeconds: 60,
   correctCount: (accuracy * 100).round(),

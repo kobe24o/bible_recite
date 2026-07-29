@@ -102,6 +102,10 @@ final class SqlitePlanRepository {
         translation_id TEXT NOT NULL,
         book_id TEXT NOT NULL,
         chapter INTEGER NOT NULL,
+        start_chapter INTEGER NOT NULL,
+        start_verse INTEGER NOT NULL,
+        end_chapter INTEGER NOT NULL,
+        end_verse INTEGER NOT NULL,
         base_date TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'active'
           CHECK(status IN ('active', 'completed', 'restarted', 'paused')),
@@ -190,6 +194,18 @@ final class SqlitePlanRepository {
         'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',
       );
     }
+    final cycleColumns = _database.select('PRAGMA table_info(ebbinghaus_cycle)')
+        .map((row) => row['name'] as String).toSet();
+    for (final column in ['start_chapter', 'start_verse', 'end_chapter', 'end_verse']) {
+      if (!cycleColumns.contains(column)) {
+        _database.execute('ALTER TABLE ebbinghaus_cycle ADD COLUMN $column INTEGER NOT NULL DEFAULT 1');
+      }
+    }
+    _database.execute('''UPDATE ebbinghaus_cycle SET
+      start_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
+      start_verse = (SELECT start_verse FROM recitation_result WHERE id = source_result_id),
+      end_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
+      end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''');
     _database.execute('PRAGMA user_version = 7');
   }
 
@@ -684,10 +700,12 @@ final class SqlitePlanRepository {
         final active = _database.select(
           '''
           SELECT id FROM ebbinghaus_cycle
-          WHERE translation_id = ? AND book_id = ? AND chapter = ?
+          WHERE translation_id = ? AND book_id = ? AND start_chapter = ?
+            AND start_verse = ? AND end_chapter = ? AND end_verse = ?
             AND status = 'active'
         ''',
-          [result['translation_id'], result['book_id'], result['chapter']],
+          [result['translation_id'], result['book_id'], result['chapter'],
+           result['start_verse'], result['chapter'], result['end_verse']],
         );
         if (duplicate.isEmpty && active.isEmpty) {
           _insertEbbinghausCycle(result, resultId, completedAt);
@@ -705,14 +723,19 @@ final class SqlitePlanRepository {
     _database.execute(
       '''
       INSERT INTO ebbinghaus_cycle
-      (source_result_id, translation_id, book_id, chapter, base_date,
-       status, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?)
+      (source_result_id, translation_id, book_id, chapter, start_chapter,
+       start_verse, end_chapter, end_verse, base_date, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
     ''',
       [
         resultId,
         result['translation_id'],
         result['book_id'],
         result['chapter'],
+        result['chapter'],
+        result['start_verse'],
+        result['chapter'],
+        result['end_verse'],
         _date(baseDate.toLocal()),
         createdAt,
       ],
@@ -738,7 +761,8 @@ final class SqlitePlanRepository {
         .select(
           '''
           SELECT r.id, r.cycle_id, r.interval_days, r.due_date,
-            c.translation_id, c.book_id, c.chapter
+            c.translation_id, c.book_id, c.chapter, c.start_chapter,
+            c.start_verse, c.end_chapter, c.end_verse
           FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
           WHERE r.status = 'pending' AND c.status = 'active'
@@ -754,6 +778,10 @@ final class SqlitePlanRepository {
             translationId: row['translation_id'] as String,
             bookId: row['book_id'] as String,
             chapter: row['chapter'] as int,
+            startChapter: row['start_chapter'] as int,
+            startVerse: row['start_verse'] as int,
+            endChapter: row['end_chapter'] as int,
+            endVerse: row['end_verse'] as int,
             intervalDays: row['interval_days'] as int,
             dueDate: DateTime.parse(row['due_date'] as String),
             completed: false,
@@ -815,7 +843,7 @@ final class SqlitePlanRepository {
   AchievementSnapshot _achievementSnapshot() {
     final resultRows = _database.select('SELECT * FROM recitation_result');
     final sessionCount = resultRows.length;
-    var completedVerses = 0;
+    final completedVerseKeys = <String>{};
     var maxAccuracy = 0.0;
     var hasPerfectLongResult = false;
     final activeDates = <DateTime>{};
@@ -824,7 +852,9 @@ final class SqlitePlanRepository {
     for (final row in resultRows) {
       final startVerse = row['start_verse'] as int;
       final endVerse = row['end_verse'] as int;
-      completedVerses += endVerse - startVerse + 1;
+      for (var verse = startVerse; verse <= endVerse; verse++) {
+        completedVerseKeys.add('${row['translation_id']}:${row['book_id']}:${row['chapter']}:$verse');
+      }
       final accuracy = (row['accuracy'] as num).toDouble();
       if (accuracy > maxAccuracy) maxAccuracy = accuracy;
       if (accuracy >= 1 && (row['correct_count'] as int) >= 20) {
@@ -840,8 +870,12 @@ final class SqlitePlanRepository {
       chapterCoverage.putIfAbsent(key, () => <int>{}).addAll([
         for (var verse = startVerse; verse <= endVerse; verse++) verse,
       ]);
+      // A valid full-chapter claim requires a recitation that actually covered
+      // the chapter, not repeated attempts at a single verse.
       final size = row['chapter_verse_count'] as int;
-      if (size > (chapterSizes[key] ?? 0)) chapterSizes[key] = size;
+      if (startVerse == 1 && endVerse == size && size > 0) {
+        chapterSizes[key] = size;
+      }
     }
     var maxStreak = 0;
     var streak = 0;
@@ -878,7 +912,7 @@ final class SqlitePlanRepository {
     return AchievementSnapshot(
       sessionCount: sessionCount,
       activeDayStreak: maxStreak,
-      completedVerses: completedVerses,
+      completedVerses: completedVerseKeys.length,
       maxAccuracy: maxAccuracy,
       hasPerfectLongResult: hasPerfectLongResult,
       completedChapters: completedChapters,

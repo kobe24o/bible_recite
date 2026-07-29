@@ -17,6 +17,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     required this.translationId,
     required this.bookId,
     required this.chapter,
+    this.initialVerse,
     this.reviewId,
     super.key,
   });
@@ -24,6 +25,7 @@ class PassageScreen extends ConsumerStatefulWidget {
   final String translationId;
   final String bookId;
   final int chapter;
+  final int? initialVerse;
   final int? reviewId;
 
   @override
@@ -182,7 +184,8 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                 Expanded(
                   child: data.parallel == null
                       ? _SinglePassage(
-                          units: data.units,
+                        units: data.units,
+                        initialVerse: widget.initialVerse,
                           selecting: _selectingVerses,
                           selectedIndexes: _selectedVerseIndexes,
                           onLongPress: (index) => setState(() {
@@ -475,12 +478,14 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
 class _SinglePassage extends StatelessWidget {
   const _SinglePassage({
     required this.units,
+    this.initialVerse,
     required this.selecting,
     required this.selectedIndexes,
     required this.onLongPress,
     required this.onTap,
   });
   final List<VerseUnit> units;
+  final int? initialVerse;
   final bool selecting;
   final Set<int> selectedIndexes;
   final ValueChanged<int> onLongPress;
@@ -488,13 +493,20 @@ class _SinglePassage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final initialIndex = initialVerse == null ? 0 : units.indexWhere(
+      (unit) => unit.start.verse <= initialVerse! && unit.end.verse >= initialVerse!,
+    );
     return ListView.separated(
+      controller: ScrollController(initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0),
       padding: const EdgeInsets.all(20),
       itemCount: units.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) => _VerseRow(
         unit: units[index],
-        selected: selectedIndexes.contains(index),
+        selected: selectedIndexes.contains(index) ||
+            (initialVerse != null &&
+                units[index].start.verse <= initialVerse! &&
+                units[index].end.verse >= initialVerse!),
         selectable: selecting,
         onLongPress: () => onLongPress(index),
         onTap: () => onTap(index),

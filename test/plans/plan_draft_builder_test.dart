@@ -82,6 +82,7 @@ void main() {
           ),
         ],
       ),
+      now: DateTime(2026, 7, 25),
     );
 
     expect(plan.tasks, hasLength(4));

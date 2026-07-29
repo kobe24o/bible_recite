@@ -17,6 +17,10 @@ final class EbbinghausReview {
     required this.translationId,
     required this.bookId,
     required this.chapter,
+    required this.startChapter,
+    required this.startVerse,
+    required this.endChapter,
+    required this.endVerse,
     required this.intervalDays,
     required this.dueDate,
     required this.completed,
@@ -27,6 +31,10 @@ final class EbbinghausReview {
   final String translationId;
   final String bookId;
   final int chapter;
+  final int startChapter;
+  final int startVerse;
+  final int endChapter;
+  final int endVerse;
   final int intervalDays;
   final DateTime dueDate;
   final bool completed;

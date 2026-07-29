@@ -55,17 +55,18 @@ void main() {
     expect(summary.averageAccuracy, closeTo(0.9, 0.0001));
   });
 
-  test('persists achievement unlocks once and reports progress', () async {
+  test('counts each memorized verse once and requires the actual full chapter', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
-    await repository.saveRecitationResult(
+    for (var attempt = 0; attempt < 10; attempt++) {
+      await repository.saveRecitationResult(
       NewRecitationResult(
         translationId: 'cmn-cu89s',
         bookId: 'JHN',
         chapter: 3,
         startVerse: 1,
         endVerse: 1,
-        chapterVerseCount: 1,
+        chapterVerseCount: 36,
         mode: 'verse',
         durationSeconds: 10,
         correctCount: 20,
@@ -75,7 +76,8 @@ void main() {
         accuracy: 1,
         completedAt: DateTime(2026, 7, 15, 10),
       ),
-    );
+      );
+    }
 
     final first = await repository.evaluateAndUnlockAchievements(
       source: 'recitation',
@@ -85,16 +87,9 @@ void main() {
     );
     final ids = first.map((item) => item.definition.id).toSet();
 
-    expect(
-      ids,
-      containsAll([
-        'first_recitation',
-        'accuracy_80',
-        'accuracy_90',
-        'perfect_100',
-        'chapter_complete',
-      ]),
-    );
+    expect(ids, containsAll(['first_recitation', 'accuracy_80', 'accuracy_90']));
+    expect(ids, isNot(contains('verses_10')));
+    expect(ids, isNot(contains('chapter_complete')));
     expect(second, isEmpty);
     final progress = await repository.listAchievementProgress();
     expect(

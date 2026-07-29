@@ -10,6 +10,7 @@ import '../../review/domain/ebbinghaus_models.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../scripture/application/scripture_providers.dart';
+import '../../scripture/domain/scripture_models.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -128,11 +129,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   Future<void> _startReview(EbbinghausReview review) async {
     final scripture = await ref.read(scriptureRepositoryProvider.future);
-    final units = await scripture.getChapter(
+    final passage = await scripture.getPassage(
       review.translationId,
-      review.bookId,
-      review.chapter,
+      PassageRange(
+        start: (canonId: CanonId.protestant66, osisBookId: review.bookId,
+          chapter: review.startChapter, verse: review.startVerse),
+        end: (canonId: CanonId.protestant66, osisBookId: review.bookId,
+          chapter: review.endChapter, verse: review.endVerse),
+      ),
     );
+    final units = passage.units;
     if (!mounted || units.isEmpty) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -184,7 +190,7 @@ class _ReviewCard extends StatelessWidget {
       leading: const CircleAvatar(child: Icon(Icons.auto_awesome_rounded)),
       title: const Text('艾宾浩斯复习'),
       subtitle: Text(
-        '$bookName ${review.chapter}章 · 第 ${review.intervalDays} 天复习',
+        '$bookName ${review.startChapter}:${review.startVerse}–${review.endVerse} · 第 ${review.intervalDays} 天复习',
       ),
       trailing: const Icon(Icons.chevron_right_rounded),
     ),

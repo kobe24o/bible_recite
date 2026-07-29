@@ -63,25 +63,21 @@ final class DailyTaskReminderScheduler {
   Future<void> reschedule(SqlitePlanRepository repository) async {
     if (!Platform.isAndroid) return;
     await initialize();
-    await _notifications.cancelAll();
+    for (var index = 0; index < 32; index++) {
+      await _notifications.cancel(id: _notificationBaseId + index);
+    }
     final settings = await readSettings(repository);
     if (!settings.enabled || settings.intervalMinutes <= 0) return;
     final now = DateTime.now();
     final pending = await repository.dueTasks(now);
     if (pending.isEmpty) return;
-    final today = tz.TZDateTime.now(tz.local);
-    final first = _at(today, settings.startMinutes);
-    final last = _at(today, settings.endMinutes);
-    var scheduled = first.isAfter(today)
-        ? first
-        : today.add(const Duration(minutes: 1));
-    var index = 0;
-    while (!scheduled.isAfter(last) && index < 32) {
+    final slots = reminderSlots(now: now, settings: settings, maxSlots: 32);
+    for (var index = 0; index < slots.length; index++) {
       await _notifications.zonedSchedule(
         id: _notificationBaseId + index,
         title: '背诵助手',
         body: '今天还有 ${pending.length} 项背诵任务未完成',
-        scheduledDate: scheduled,
+        scheduledDate: tz.TZDateTime.from(slots[index], tz.local),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
@@ -93,8 +89,6 @@ final class DailyTaskReminderScheduler {
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
-      scheduled = scheduled.add(Duration(minutes: settings.intervalMinutes));
-      index++;
     }
   }
 
@@ -142,12 +136,26 @@ final class DailyTaskReminderScheduler {
     );
   }
 
-  tz.TZDateTime _at(tz.TZDateTime today, int minutes) => tz.TZDateTime(
-    tz.local,
-    today.year,
-    today.month,
-    today.day,
-    minutes ~/ 60,
-    minutes % 60,
-  );
+}
+
+List<DateTime> reminderSlots({
+  required DateTime now,
+  required DailyTaskReminderSettings settings,
+  required int maxSlots,
+}) {
+  if (!settings.enabled || settings.intervalMinutes <= 0 || maxSlots <= 0) {
+    return const [];
+  }
+  final slots = <DateTime>[];
+  var day = DateTime(now.year, now.month, now.day);
+  while (slots.length < maxSlots) {
+    final first = day.add(Duration(minutes: settings.startMinutes));
+    final last = day.add(Duration(minutes: settings.endMinutes));
+    for (var time = first; !time.isAfter(last); time = time.add(Duration(minutes: settings.intervalMinutes))) {
+      if (time.isAfter(now)) slots.add(time);
+      if (slots.length == maxSlots) return slots;
+    }
+    day = day.add(const Duration(days: 1));
+  }
+  return slots;
 }
