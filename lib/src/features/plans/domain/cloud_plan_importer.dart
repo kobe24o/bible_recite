@@ -47,12 +47,15 @@ final class CloudPlanImporter {
       final tasks = _tasks(template, start, end);
       final first = template.passages.first;
       final last = template.passages.last;
+      final endChapter = first.bookId == last.bookId
+          ? last.endChapter
+          : first.endChapter;
       final plan = NewMemorizationPlan(
         title: template.title,
         translationId: translation,
         bookId: first.bookId,
         startChapter: first.startChapter,
-        endChapter: last.endChapter,
+        endChapter: endChapter,
         startDate: start,
         endDate: end,
         tasks: tasks,

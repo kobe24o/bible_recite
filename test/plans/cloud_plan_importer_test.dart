@@ -101,6 +101,37 @@ void main() {
       expect((await repository.listTasks(updated.id)).last.endVerse, 8);
     },
   );
+
+  test('imports cross-book plans whose final chapter number is lower', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+
+    final result = await const CloudPlanImporter().importPushed(
+      repository: repository,
+      manifest: CloudPlanManifest.parse('''{
+        "protocolVersion":1,
+        "plans":[{
+          "id":"victory","title":"得胜宣言","push":true,"revision":1,
+          "defaultTranslationId":"cmn-cu89s",
+          "passages":[
+            {"order":1,"bookId":"LUK","startChapter":10,"startVerse":19,"endChapter":10,"endVerse":19},
+            {"order":2,"bookId":"EPH","startChapter":6,"startVerse":10,"endChapter":6,"endVerse":11}
+          ]
+        }]
+      }'''),
+      sourceUrl: 'https://example.com/cloud-plans.json',
+      today: DateTime(2026, 7, 29),
+    );
+
+    expect(result.inserted, 1);
+    final plan = (await repository.listPlans()).single;
+    expect(plan.startChapter, 10);
+    expect(plan.endChapter, 10);
+    expect(
+      (await repository.listTasks(plan.id)).map((task) => task.bookId),
+      ['LUK', 'EPH'],
+    );
+  });
 }
 
 String _manifest({required int revision, int endVerse = 5}) =>
