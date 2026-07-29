@@ -12,7 +12,8 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   final pending =
       tasks
           .where(
-            (task) => task.dayIndex >= selected.dayIndex && !task.completed,
+            (task) => task.dayIndex >= selected.dayIndex &&
+                (!task.completed || task.id == selected.id),
           )
           .toList()
         ..sort((left, right) => left.dayIndex.compareTo(right.dayIndex));

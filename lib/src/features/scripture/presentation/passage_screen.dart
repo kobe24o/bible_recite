@@ -475,7 +475,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
   }
 }
 
-class _SinglePassage extends StatelessWidget {
+class _SinglePassage extends StatefulWidget {
   const _SinglePassage({
     required this.units,
     this.initialVerse,
@@ -492,24 +492,45 @@ class _SinglePassage extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final initialIndex = initialVerse == null ? 0 : units.indexWhere(
-      (unit) => unit.start.verse <= initialVerse! && unit.end.verse >= initialVerse!,
+  State<_SinglePassage> createState() => _SinglePassageState();
+}
+
+class _SinglePassageState extends State<_SinglePassage> {
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialIndex = widget.initialVerse == null ? 0 : widget.units.indexWhere(
+      (unit) => unit.start.verse <= widget.initialVerse! && unit.end.verse >= widget.initialVerse!,
     );
+    _controller = ScrollController(initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0);
+    if (initialIndex > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_controller.hasClients) return;
+        final centered = (_controller.offset - MediaQuery.sizeOf(context).height / 2).clamp(0.0, _controller.position.maxScrollExtent);
+        _controller.jumpTo(centered);
+      });
+    }
+  }
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
     return ListView.separated(
-      controller: ScrollController(initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0),
+      controller: _controller,
       padding: const EdgeInsets.all(20),
-      itemCount: units.length,
+      itemCount: widget.units.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) => _VerseRow(
-        unit: units[index],
-        selected: selectedIndexes.contains(index) ||
-            (initialVerse != null &&
-                units[index].start.verse <= initialVerse! &&
-                units[index].end.verse >= initialVerse!),
-        selectable: selecting,
-        onLongPress: () => onLongPress(index),
-        onTap: () => onTap(index),
+        unit: widget.units[index],
+        selected: widget.selectedIndexes.contains(index) ||
+            (widget.initialVerse != null && widget.units[index].start.verse <= widget.initialVerse! && widget.units[index].end.verse >= widget.initialVerse!),
+        selectable: widget.selecting,
+        onLongPress: () => widget.onLongPress(index),
+        onTap: () => widget.onTap(index),
       ),
     );
   }
