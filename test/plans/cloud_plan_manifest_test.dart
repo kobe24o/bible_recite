@@ -4,17 +4,23 @@ import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart'
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('parses the bundled two-plan manifest with exact passage counts', () {
+  test('parses the bundled five-plan manifest with exact passage counts', () {
     final manifest = CloudPlanManifest.parse(
       File('assets/cloud_plans.json').readAsStringSync(),
     );
 
     expect(manifest.protocolVersion, 1);
-    expect(manifest.plans, hasLength(2));
-    expect(manifest.plans[0].passages, hasLength(20));
-    expect(manifest.plans[1].passages, hasLength(66));
+    expect(manifest.plans, hasLength(5));
+    final plans = {for (final plan in manifest.plans) plan.id: plan};
+    expect(plans['classic-passages']!.passages, hasLength(20));
+    expect(plans['key-verses-66']!.passages, hasLength(66));
+    expect(plans['victory-declarations']!.passages, hasLength(10));
+    expect(plans['healing-declarations']!.passages, hasLength(10));
+    expect(plans['gospel-declarations']!.passages, hasLength(10));
     expect(
-      manifest.plans[1].passages.any((p) => p.endVerse > p.startVerse),
+      plans['gospel-declarations']!.passages.any(
+        (p) => p.endVerse > p.startVerse,
+      ),
       isTrue,
     );
   });
