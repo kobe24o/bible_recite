@@ -20,7 +20,7 @@ class ScriptureBrowserScreen extends ConsumerStatefulWidget {
 class _ScriptureBrowserScreenState
     extends ConsumerState<ScriptureBrowserScreen> {
   String? _translationId;
-  bool? _newTestament;
+  bool? _newTestament = false;
   BibleBook? _book;
   int? _chapter;
 
@@ -29,141 +29,141 @@ class _ScriptureBrowserScreenState
     final repository = ref.watch(scriptureRepositoryProvider);
     final bookNames = ref.watch(bookNameCatalogProvider);
     final locale = Localizations.localeOf(context);
-    return Scaffold(
-      appBar: AppBar(
-        leading: _book == null
-            ? null
-            : IconButton(
-                tooltip: '返回书卷',
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => setState(() {
-                  _book = null;
-                  _chapter = null;
-                }),
-              ),
-        title: Text(AppLocalizations.of(context)?.bibleTitle ?? 'Bible'),
-      ),
-      body: repository.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => const _ErrorView(),
-        data: (repository) => FutureBuilder(
-          future: repository.listTranslations(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final translations = snapshot.data!;
-            final translationId = _translationId ?? translations.first.id;
-            return FutureBuilder(
-              future: repository.listBooks(translationId, CanonId.protestant66),
-              builder: (context, booksSnapshot) {
-                if (!booksSnapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final allBooks = booksSnapshot.data!
-                    .map(
-                      (book) => BibleBook(
-                        osisId: book.osisId,
-                        ordinal: book.ordinal,
-                        name: bookNames.nameFor(book.osisId, locale),
-                        chapterCount: book.chapterCount,
-                      ),
-                    )
-                    .toList(growable: false);
-                final filtered = _newTestament == null
-                    ? const <BibleBook>[]
-                    : allBooks
-                          .where(
-                            (book) => _newTestament!
-                                ? book.ordinal >= 40
-                                : book.ordinal < 40,
-                          )
-                          .toList(growable: false);
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    TranslationSelector(
-                      translations: translations,
-                      value: translationId,
-                      onChanged: (value) => setState(() {
-                        _translationId = value;
-                        _book = null;
-                        _chapter = null;
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    SegmentedButton<bool>(
-                      emptySelectionAllowed: true,
-                      segments: [
-                        ButtonSegment(
-                          value: false,
-                          label: Text(
-                            AppLocalizations.of(context)?.oldTestament ??
-                                'Old Testament',
-                          ),
+    return PopScope(
+      canPop: _book == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _book != null) {
+          setState(() {
+            _book = null;
+            _chapter = null;
+          });
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: _book == null
+              ? null
+              : IconButton(
+                  tooltip: '返回书卷',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => setState(() {
+                    _book = null;
+                    _chapter = null;
+                  }),
+                ),
+          title: Text(AppLocalizations.of(context)?.bibleTitle ?? 'Bible'),
+        ),
+        body: repository.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => const _ErrorView(),
+          data: (repository) => FutureBuilder(
+            future: repository.listTranslations(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final translations = snapshot.data!;
+              final translationId = _translationId ?? translations.first.id;
+              return FutureBuilder(
+                future: repository.listBooks(
+                  translationId,
+                  CanonId.protestant66,
+                ),
+                builder: (context, booksSnapshot) {
+                  if (!booksSnapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final allBooks = booksSnapshot.data!
+                      .map(
+                        (book) => BibleBook(
+                          osisId: book.osisId,
+                          ordinal: book.ordinal,
+                          name: bookNames.nameFor(book.osisId, locale),
+                          chapterCount: book.chapterCount,
                         ),
-                        ButtonSegment(
-                          value: true,
-                          label: Text(
-                            AppLocalizations.of(context)?.newTestament ??
-                                'New Testament',
-                          ),
-                        ),
-                      ],
-                      selected: _newTestament == null ? {} : {_newTestament!},
-                      onSelectionChanged: (selection) => setState(() {
-                        _newTestament = selection.firstOrNull;
-                        _book = null;
-                        _chapter = null;
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_newTestament != null && _book == null)
-                      BookGrid(
-                        books: filtered,
-                        selectedBookId: _book?.osisId,
-                        onSelected: (book) => setState(() {
-                          _book = book;
+                      )
+                      .toList(growable: false);
+                  final filtered = _newTestament == null
+                      ? const <BibleBook>[]
+                      : allBooks
+                            .where(
+                              (book) => _newTestament!
+                                  ? book.ordinal >= 40
+                                  : book.ordinal < 40,
+                            )
+                            .toList(growable: false);
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      TranslationSelector(
+                        translations: translations,
+                        value: translationId,
+                        onChanged: (value) => setState(() {
+                          _translationId = value;
+                          _book = null;
                           _chapter = null;
                         }),
                       ),
-                    if (_book != null) ...[
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _book!.name,
-                              style: Theme.of(context).textTheme.titleLarge,
+                      const SizedBox(height: 16),
+                      SegmentedButton<bool>(
+                        emptySelectionAllowed: true,
+                        segments: [
+                          ButtonSegment(
+                            value: false,
+                            label: Text(
+                              AppLocalizations.of(context)?.oldTestament ??
+                                  'Old Testament',
                             ),
                           ),
-                          TextButton.icon(
-                            onPressed: () => setState(() {
-                              _book = null;
-                              _chapter = null;
-                            }),
-                            icon: const Icon(Icons.menu_book_outlined),
-                            label: const Text('切换书卷'),
+                          ButtonSegment(
+                            value: true,
+                            label: Text(
+                              AppLocalizations.of(context)?.newTestament ??
+                                  'New Testament',
+                            ),
                           ),
                         ],
+                        selected: _newTestament == null ? {} : {_newTestament!},
+                        onSelectionChanged: (selection) => setState(() {
+                          _newTestament = selection.firstOrNull;
+                          _book = null;
+                          _chapter = null;
+                        }),
                       ),
-                      const SizedBox(height: 8),
-                      ChapterGrid(
-                        chapterCount: _book!.chapterCount,
-                        selectedChapter: _chapter,
-                        onSelected: (chapter) {
-                          setState(() => _chapter = chapter);
-                          context.push(
-                            '/bible/$translationId/${_book!.osisId}/$chapter',
-                          );
-                        },
-                      ),
+                      const SizedBox(height: 16),
+                      if (_newTestament != null && _book == null)
+                        BookGrid(
+                          books: filtered,
+                          selectedBookId: _book?.osisId,
+                          onSelected: (book) => setState(() {
+                            _book = book;
+                            _chapter = null;
+                          }),
+                        ),
+                      if (_book != null) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          _book!.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        ChapterGrid(
+                          chapterCount: _book!.chapterCount,
+                          selectedChapter: _chapter,
+                          onSelected: (chapter) {
+                            setState(() => _chapter = chapter);
+                            context.push(
+                              '/bible/$translationId/${_book!.osisId}/$chapter',
+                            );
+                          },
+                        ),
+                      ],
                     ],
-                  ],
-                );
-              },
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );

@@ -194,18 +194,29 @@ final class SqlitePlanRepository {
         'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',
       );
     }
-    final cycleColumns = _database.select('PRAGMA table_info(ebbinghaus_cycle)')
-        .map((row) => row['name'] as String).toSet();
-    for (final column in ['start_chapter', 'start_verse', 'end_chapter', 'end_verse']) {
+    final cycleColumns = _database
+        .select('PRAGMA table_info(ebbinghaus_cycle)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    for (final column in [
+      'start_chapter',
+      'start_verse',
+      'end_chapter',
+      'end_verse',
+    ]) {
       if (!cycleColumns.contains(column)) {
-        _database.execute('ALTER TABLE ebbinghaus_cycle ADD COLUMN $column INTEGER NOT NULL DEFAULT 1');
+        _database.execute(
+          'ALTER TABLE ebbinghaus_cycle ADD COLUMN $column INTEGER NOT NULL DEFAULT 1',
+        );
       }
     }
-    _database.execute('''UPDATE ebbinghaus_cycle SET
+    _database.execute(
+      '''UPDATE ebbinghaus_cycle SET
       start_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
       start_verse = (SELECT start_verse FROM recitation_result WHERE id = source_result_id),
       end_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
-      end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''');
+      end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''',
+    );
     _database.execute('PRAGMA user_version = 7');
   }
 
@@ -647,7 +658,7 @@ final class SqlitePlanRepository {
       if (reviewId != null) {
         final rows = _database.select(
           '''
-          SELECT r.id, r.cycle_id FROM ebbinghaus_review r
+          SELECT r.id, r.cycle_id, r.interval_days FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
           WHERE r.id = ? AND r.status = 'pending' AND c.status = 'active'
         ''',
@@ -660,6 +671,27 @@ final class SqlitePlanRepository {
               "UPDATE ebbinghaus_review SET status = 'completed', result_id = ? "
               'WHERE id = ?',
               [resultId, reviewId],
+            );
+            // A later review supersedes all overdue earlier steps for the
+            // same passage, including cycles created by older app versions.
+            _database.execute(
+              '''
+              UPDATE ebbinghaus_review
+              SET status = 'cancelled'
+              WHERE status = 'pending' AND interval_days <= ?
+                AND cycle_id IN (
+                  SELECT other.id FROM ebbinghaus_cycle other
+                  JOIN ebbinghaus_cycle current ON current.id = ?
+                  WHERE other.status = 'active'
+                    AND other.translation_id = current.translation_id
+                    AND other.book_id = current.book_id
+                    AND other.start_chapter = current.start_chapter
+                    AND other.start_verse = current.start_verse
+                    AND other.end_chapter = current.end_chapter
+                    AND other.end_verse = current.end_verse
+                )
+            ''',
+              [rows.single['interval_days'] as int, cycleId],
             );
             final remaining =
                 _database.select(
@@ -704,8 +736,14 @@ final class SqlitePlanRepository {
             AND start_verse = ? AND end_chapter = ? AND end_verse = ?
             AND status = 'active'
         ''',
-          [result['translation_id'], result['book_id'], result['chapter'],
-           result['start_verse'], result['chapter'], result['end_verse']],
+          [
+            result['translation_id'],
+            result['book_id'],
+            result['chapter'],
+            result['start_verse'],
+            result['chapter'],
+            result['end_verse'],
+          ],
         );
         if (duplicate.isEmpty && active.isEmpty) {
           _insertEbbinghausCycle(result, resultId, completedAt);
@@ -767,7 +805,7 @@ final class SqlitePlanRepository {
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
           WHERE r.status = 'pending' AND c.status = 'active'
             AND r.due_date <= ?
-          ORDER BY r.due_date, r.id
+          ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',
           [_date(date)],
         )
@@ -787,6 +825,21 @@ final class SqlitePlanRepository {
             completed: false,
           ),
         )
+        .fold(<String, EbbinghausReview>{}, (reviews, review) {
+          // Only the furthest overdue step belongs in the review list for a
+          // passage. Earlier steps are covered by completing that one.
+          final key = [
+            review.translationId,
+            review.bookId,
+            review.startChapter,
+            review.startVerse,
+            review.endChapter,
+            review.endVerse,
+          ].join(':');
+          reviews.putIfAbsent(key, () => review);
+          return reviews;
+        })
+        .values
         .toList(growable: false);
   }
 
@@ -853,7 +906,9 @@ final class SqlitePlanRepository {
       final startVerse = row['start_verse'] as int;
       final endVerse = row['end_verse'] as int;
       for (var verse = startVerse; verse <= endVerse; verse++) {
-        completedVerseKeys.add('${row['translation_id']}:${row['book_id']}:${row['chapter']}:$verse');
+        completedVerseKeys.add(
+          '${row['translation_id']}:${row['book_id']}:${row['chapter']}:$verse',
+        );
       }
       final accuracy = (row['accuracy'] as num).toDouble();
       if (accuracy > maxAccuracy) maxAccuracy = accuracy;

@@ -168,8 +168,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         ),
         subtitle: Text(
           locked
-              ? '${plan.totalTasks} 段经文 · ${_translationLabel(plan.translationId)} · '
-                    '${localizations.daysCount(plan.days)}'
+              ? '${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
+                    '${_translationLabel(plan.translationId)} · ${localizations.daysCount(plan.days)}'
               : '${plan.bookId} ${plan.startChapter}–${plan.endChapter}章 · '
                     '${plan.completedTasks}/${plan.totalTasks} · '
                     '${_translationLabel(plan.translationId)}',
@@ -344,49 +344,66 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 ),
                 confirmDismiss: (_) => _confirmDeleteTask(plan, task),
                 onDismissed: (_) => setState(() => _revision++),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.only(left: 20, right: 8),
-                  leading: const Icon(Icons.menu_book_outlined),
-                  title: Text(
-                    '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
-                    '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
-                  ),
-                  trailing: Wrap(spacing: 2, children: [
-                          if (task.completed)
-                            const Icon(Icons.check_circle, color: Colors.green),
+                child: Stack(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.only(
+                        left: 20,
+                        right: task.completed ? 34 : 8,
+                      ),
+                      leading: const Icon(Icons.menu_book_outlined),
+                      title: Text(
+                        '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
+                        '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
+                      ),
+                      trailing: Wrap(
+                        spacing: 2,
+                        children: [
                           TextButton(
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
                               Navigator.of(context).pop();
-                              context.push('/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}');
+                              context.push(
+                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}',
+                              );
                             },
                             child: const Text('阅读'),
                           ),
                           TextButton(
                             key: Key('recite-task-${task.id}'),
                             onPressed: () async {
-                          final scripture = await ref.read(
-                            scriptureRepositoryProvider.future,
-                          );
-                          final request = await buildPlanRecitationRequest(
-                            scripture: scripture,
-                            plan: plan,
-                            tasks: tasks,
-                            selected: task,
-                          );
-                          if (!mounted || request == null) return;
-                          Navigator.of(context).pop();
-                          await Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  RecitationPracticeScreen(request: request),
-                            ),
-                          );
+                              final scripture = await ref.read(
+                                scriptureRepositoryProvider.future,
+                              );
+                              final request = await buildPlanRecitationRequest(
+                                scripture: scripture,
+                                plan: plan,
+                                tasks: tasks,
+                                selected: task,
+                              );
+                              if (!mounted || request == null) return;
+                              Navigator.of(context).pop();
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => RecitationPracticeScreen(
+                                    request: request,
+                                  ),
+                                ),
+                              );
                             },
                             child: const Text('背诵'),
                           ),
-                        ]),
-                  onTap: null,
+                        ],
+                      ),
+                      onTap: null,
+                    ),
+                    if (task.completed)
+                      const Positioned(
+                        top: 6,
+                        right: 8,
+                        child: Icon(Icons.check_circle, color: Colors.green),
+                      ),
+                  ],
                 ),
               ),
           ],

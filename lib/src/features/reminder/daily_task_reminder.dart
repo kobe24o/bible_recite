@@ -77,6 +77,13 @@ final class DailyTaskReminderScheduler {
     final now = DateTime.now();
     final pending = await repository.dueTasks(now);
     if (pending.isEmpty) return;
+    // Inexact alarms can be deferred while Android is idle. Ask only when a
+    // reminder is actually needed, then the app lifecycle callback will
+    // schedule the alarms as soon as the user returns from Android settings.
+    if (await android?.canScheduleExactNotifications() == false) {
+      await android?.requestExactAlarmsPermission();
+      return;
+    }
     final slots = reminderSlots(now: now, settings: settings, maxSlots: 32);
     for (var index = 0; index < slots.length; index++) {
       await _notifications.zonedSchedule(
@@ -94,7 +101,7 @@ final class DailyTaskReminderScheduler {
             playSound: true,
           ),
         ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     }
   }
@@ -142,7 +149,6 @@ final class DailyTaskReminderScheduler {
       settings.intervalMinutes.toString(),
     );
   }
-
 }
 
 List<DateTime> reminderSlots({
@@ -158,7 +164,11 @@ List<DateTime> reminderSlots({
   while (slots.length < maxSlots) {
     final first = day.add(Duration(minutes: settings.startMinutes));
     final last = day.add(Duration(minutes: settings.endMinutes));
-    for (var time = first; !time.isAfter(last); time = time.add(Duration(minutes: settings.intervalMinutes))) {
+    for (
+      var time = first;
+      !time.isAfter(last);
+      time = time.add(Duration(minutes: settings.intervalMinutes))
+    ) {
       if (time.isAfter(now)) slots.add(time);
       if (slots.length == maxSlots) return slots;
     }

@@ -37,6 +37,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('World English Bible'), findsOneWidget);
+    expect(find.text('创世记'), findsOneWidget);
+    expect(find.byType(BookGrid), findsOneWidget);
     await tester.tap(find.text('新约'));
     await tester.pumpAndSettle();
     expect(find.text('约翰福音'), findsOneWidget);

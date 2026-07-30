@@ -15,7 +15,7 @@ void main() {
     expect(settings.enabledAt, isNull);
   });
 
-  test('a passing result creates six idempotent review dates', () async {
+  test('keeps only the latest overdue review for a passage', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     final base = DateTime(2026, 7, 16, 9);
@@ -34,10 +34,22 @@ void main() {
     final reviews = await repository.dueEbbinghausReviews(
       base.add(const Duration(days: 30)),
     );
-    expect(reviews, hasLength(6));
-    expect(reviews.map((review) => review.intervalDays), [1, 2, 4, 7, 15, 30]);
+    expect(reviews, hasLength(1));
+    expect(reviews.single.intervalDays, 30);
     expect(reviews.first.startVerse, 1);
     expect(reviews.first.endVerse, 36);
+
+    final completedReviewId = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base.add(const Duration(days: 30))),
+    );
+    await repository.processEbbinghausResult(
+      resultId: completedReviewId,
+      reviewId: reviews.single.id,
+    );
+    expect(
+      await repository.dueEbbinghausReviews(base.add(const Duration(days: 31))),
+      isEmpty,
+    );
   });
 
   test('keeps separate passage reviews in the same chapter', () async {
@@ -67,8 +79,10 @@ void main() {
     );
     expect(reviews, hasLength(2));
     expect(reviews.map((review) => review.startVerse), containsAll([16, 17]));
-    expect(reviews.every((review) => review.endVerse == review.startVerse),
-        isTrue);
+    expect(
+      reviews.every((review) => review.endVerse == review.startVerse),
+      isTrue,
+    );
   });
 
   test('results before enabling or below threshold do not schedule', () async {
@@ -132,8 +146,8 @@ void main() {
       final restarted = await repository.dueEbbinghausReviews(
         failedAt.add(const Duration(days: 30)),
       );
-      expect(restarted, hasLength(6));
-      expect(restarted.first.dueDate, DateTime(2026, 7, 18));
+      expect(restarted, hasLength(1));
+      expect(restarted.single.dueDate, DateTime(2026, 8, 16));
     },
   );
 
@@ -178,7 +192,7 @@ void main() {
         await repository.dueEbbinghausReviews(
           base.add(const Duration(days: 31)),
         ),
-        hasLength(6),
+        hasLength(1),
       );
     },
   );

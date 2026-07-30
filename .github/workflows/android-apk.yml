@@ -241,7 +241,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
-            --notes "Validated Android APK with stable signing fingerprint. The iOS simulator archive is for CI verification and is not installable on physical devices."
+            --notes "艾宾浩斯重复经节仅保留最大复习天数；云端计划显示 x/y 进度，完成对钩移至右上角；圣经页默认旧约并支持系统返回；今日背诵提醒改为精确待机唤醒排程。"
 
       - name: Publish signed update feed
         env:
@@ -268,7 +268,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-            --release-notes "修复 Android 计划 JSON 导出保存，并优化导出、编辑与再次执行按钮布局。" \
+            --release-notes "艾宾浩斯重复经节仅保留最大复习天数；云端计划显示 x/y 进度，完成对钩移至右上角；圣经页默认旧约并支持系统返回；今日背诵提醒改为精确待机唤醒排程。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

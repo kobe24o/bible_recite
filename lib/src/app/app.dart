@@ -21,7 +21,8 @@ class BibleReciteApp extends ConsumerStatefulWidget {
   ConsumerState<BibleReciteApp> createState() => _BibleReciteAppState();
 }
 
-class _BibleReciteAppState extends ConsumerState<BibleReciteApp> {
+class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -29,6 +30,20 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp> {
       unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
     });
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshDailyReminders());
+    }
   }
 
   Future<void> _refreshDailyReminders() async {

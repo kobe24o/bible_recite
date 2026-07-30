@@ -101,6 +101,7 @@ void main() {
 
     expect(find.byKey(Key('plan-actions-$planId')), findsOneWidget);
     expect(find.text('云端'), findsOneWidget);
+    expect(find.textContaining('0/1'), findsOneWidget);
     await tester.tap(find.byKey(Key('plan-actions-$planId')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑计划'));
@@ -189,31 +190,53 @@ void main() {
     addTearDown(repository.close);
     final planId = await repository.createPlan(
       NewMemorizationPlan(
-        title: '已完成计划', translationId: 'eng-web', bookId: 'JHN',
-        startChapter: 3, endChapter: 3,
-        startDate: DateTime(2026, 7, 30), endDate: DateTime(2026, 7, 30),
-        tasks: const [NewPlanTask(dayIndex: 0, startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16)],
+        title: '已完成计划',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 30),
+        endDate: DateTime(2026, 7, 30),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
       ),
     );
     final task = (await repository.listTasks(planId)).single;
     await repository.setTaskCompleted(task.id, true);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        planRepositoryProvider.overrideWith((ref) async => repository),
-        scriptureRepositoryProvider.overrideWith((ref) async => FakeRepositoryForPassage()),
-      ],
-      child: const MaterialApp(
-        locale: Locale('zh'),
-        localizationsDelegates: [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: PlansScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PlansScreen(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('已完成计划'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(Key('read-task-${task.id}')), findsOneWidget);
     expect(find.byKey(Key('recite-task-${task.id}')), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
 }
