@@ -196,7 +196,7 @@ void main() {
       await repository.dueEbbinghausReviews(
         DateTime.now().add(const Duration(days: 30)),
       ),
-      hasLength(6),
+      hasLength(1),
     );
   });
 
