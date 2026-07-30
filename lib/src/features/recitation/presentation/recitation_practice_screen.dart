@@ -74,6 +74,7 @@ class _RecitationPracticeScreenState
   bool _preparing = false;
   bool _revealed = false;
   bool _finished = false;
+  bool _celebrating = false;
   RecitationAlignment? _finishedAlignment;
   int _currentVerse = 0;
   DateTime? _startedAt;
@@ -222,8 +223,11 @@ class _RecitationPracticeScreenState
       } catch (error) {
         if (mounted) setState(() => _error = '背诵已保存，但复习排期失败：$error');
       }
+      var allTodayCompleted = false;
       if (widget.request.planTaskId != null) {
         await repository.setTaskCompleted(widget.request.planTaskId!, true);
+        allTodayCompleted = (await repository.dueTasks(DateTime.now())).isEmpty;
+        if (allTodayCompleted) unawaited(_celebrateCompletion());
         await ref
             .read(dailyTaskReminderSchedulerProvider)
             .reschedule(repository);
@@ -259,6 +263,13 @@ class _RecitationPracticeScreenState
     } catch (error) {
       if (mounted) setState(() => _error = '保存背诵统计失败：$error');
     }
+  }
+
+  Future<void> _celebrateCompletion() async {
+    if (!mounted) return;
+    setState(() => _celebrating = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _celebrating = false);
   }
 
   void _nextVerse() {
@@ -301,243 +312,265 @@ class _RecitationPracticeScreenState
               '${_referenceFor(units.last, bookNames, locale)}';
     return Scaffold(
       appBar: AppBar(title: Text(chinese ? '离线背诵' : 'Offline recitation')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+      body: Stack(
         children: [
-          Row(
+          ListView(
+            padding: const EdgeInsets.all(20),
             children: [
-              const Icon(Icons.offline_bolt_rounded, color: Colors.green),
-              const SizedBox(width: 8),
-              Text(chinese ? '完全离线识别' : 'Fully offline recognition'),
+              Row(
+                children: [
+                  const Icon(Icons.offline_bolt_rounded, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(chinese ? '完全离线识别' : 'Fully offline recognition'),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                verseMode
+                    ? (chinese
+                          ? '第 ${_currentVerse + 1} / ${units.length} 节'
+                          : 'Verse ${_currentVerse + 1} / ${units.length}')
+                    : (chinese
+                          ? '连续背诵 · ${units.length} 节'
+                          : 'Continuous · ${units.length} verses'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                chapterLabel,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                verseMode
+                    ? (chinese
+                          ? '当前背诵：$currentReference'
+                          : 'Reciting: $currentReference')
+                    : (chinese
+                          ? '本次经文：$currentReference'
+                          : 'Passage: $currentReference'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: _revealed
+                      ? units.length == 1
+                            ? Text(
+                                _target,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              )
+                            : Column(
+                                children: [
+                                  for (final unit in units) ...[
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Theme.of(context).dividerColor,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 82,
+                                            child: Text(
+                                              _referenceFor(
+                                                unit,
+                                                bookNames,
+                                                locale,
+                                              ),
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.labelLarge,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              unit.text,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyLarge,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (unit != units.last)
+                                      const SizedBox(height: 10),
+                                  ],
+                                ],
+                              )
+                      : Text(
+                          chinese ? '经文已隐藏，点击提示可查看。' : 'Scripture hidden.',
+                          textAlign: TextAlign.center,
+                        ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(() => _revealed = !_revealed),
+                icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility),
+                label: Text(chinese ? '显示／隐藏经文' : 'Show / hide scripture'),
+              ),
+              const SizedBox(height: 16),
+              Text(chinese ? '实时背诵结果' : 'Live recitation result'),
+              const SizedBox(height: 8),
+              Container(
+                constraints: const BoxConstraints(minHeight: 110),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: _transcript.isEmpty && !_finished
+                    ? Text(
+                        chinese ? '点击麦克风开始背诵' : 'Tap the microphone to start',
+                      )
+                    : RichText(
+                        key: const Key('alignment-output'),
+                        text: TextSpan(
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          children: [
+                            for (final token in alignment.tokens)
+                              TextSpan(
+                                text: token.text,
+                                style: TextStyle(
+                                  color: _colorFor(context, token.kind),
+                                  fontWeight:
+                                      token.kind ==
+                                              RecitationTokenKind.correct ||
+                                          token.kind ==
+                                              RecitationTokenKind
+                                                  .phoneticCorrect
+                                      ? FontWeight.w600
+                                      : FontWeight.w700,
+                                  decoration:
+                                      token.kind == RecitationTokenKind.omitted
+                                      ? TextDecoration.underline
+                                      : null,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+              if (_recording || _transcript.isNotEmpty || _finished) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    _Legend(
+                      color: Colors.green,
+                      label: chinese ? '正确' : 'Correct',
+                    ),
+                    if (_finished && alignment.phoneticCorrectCount > 0)
+                      _Legend(
+                        color: Colors.teal,
+                        label: chinese ? '同音修正' : 'Phonetic correction',
+                      ),
+                    _Legend(
+                      color: Colors.red,
+                      label: chinese ? '错误／漏字' : 'Wrong / missing',
+                    ),
+                    _Legend(
+                      color: Colors.orange,
+                      label: chinese ? '顺序错误' : 'Out of order',
+                    ),
+                  ],
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              if (_inputLabel != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      _bluetoothInput
+                          ? Icons.bluetooth_audio_rounded
+                          : Icons.phone_android_rounded,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        chinese
+                            ? '录音输入：$_inputLabel'
+                            : 'Audio input: $_inputLabel',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (_finished) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.analytics_outlined),
+                  title: Text(
+                    chinese
+                        ? '本次正确率 ${(alignment.accuracy * 100).round()}%'
+                        : 'Accuracy ${(alignment.accuracy * 100).round()}%',
+                  ),
+                  subtitle: Text(
+                    chinese
+                        ? '原字正确 ${alignment.exactCorrectCount} · 错误 ${alignment.incorrectCount} · '
+                              '${alignment.phoneticCorrectCount > 0 ? '同音修正 ${alignment.phoneticCorrectCount} · ' : ''}'
+                              '漏字 ${alignment.omittedCount} · 错序 ${alignment.reorderedCount}'
+                        : 'Exact ${alignment.exactCorrectCount} · Wrong ${alignment.incorrectCount} · '
+                              '${alignment.phoneticCorrectCount > 0 ? 'Phonetic ${alignment.phoneticCorrectCount} · ' : ''}'
+                              'Missing ${alignment.omittedCount} · Reordered ${alignment.reorderedCount}',
+                  ),
+                ),
+                if (widget.request.next != null ||
+                    (verseMode && _currentVerse + 1 < units.length))
+                  OutlinedButton.icon(
+                    key: const Key('next-verse-button'),
+                    onPressed: _nextVerse,
+                    icon: const Icon(Icons.navigate_next_rounded),
+                    label: Text(
+                      widget.request.next != null
+                          ? (chinese ? '下一项计划' : 'Next planned passage')
+                          : (chinese ? '下一节' : 'Next verse'),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                key: const Key('record-button'),
+                onPressed: _preparing ? null : _toggleRecording,
+                icon: _preparing
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
+                label: Text(
+                  _preparing
+                      ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
+                      : _recording
+                      ? (chinese ? '结束背诵' : 'Finish')
+                      : (chinese ? '开始录音' : 'Start recording'),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            verseMode
-                ? (chinese
-                      ? '第 ${_currentVerse + 1} / ${units.length} 节'
-                      : 'Verse ${_currentVerse + 1} / ${units.length}')
-                : (chinese
-                      ? '连续背诵 · ${units.length} 节'
-                      : 'Continuous · ${units.length} verses'),
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(chapterLabel, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            verseMode
-                ? (chinese
-                      ? '当前背诵：$currentReference'
-                      : 'Reciting: $currentReference')
-                : (chinese
-                      ? '本次经文：$currentReference'
-                      : 'Passage: $currentReference'),
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _revealed
-                  ? units.length == 1
-                        ? Text(
-                            _target,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          )
-                        : Column(
-                            children: [
-                              for (final unit in units) ...[
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Theme.of(context).dividerColor,
-                                    ),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        width: 82,
-                                        child: Text(
-                                          _referenceFor(
-                                            unit,
-                                            bookNames,
-                                            locale,
-                                          ),
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelLarge,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          unit.text,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodyLarge,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (unit != units.last)
-                                  const SizedBox(height: 10),
-                              ],
-                            ],
-                          )
-                  : Text(
-                      chinese ? '经文已隐藏，点击提示可查看。' : 'Scripture hidden.',
-                      textAlign: TextAlign.center,
-                    ),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: () => setState(() => _revealed = !_revealed),
-            icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility),
-            label: Text(chinese ? '显示／隐藏经文' : 'Show / hide scripture'),
-          ),
-          const SizedBox(height: 16),
-          Text(chinese ? '实时背诵结果' : 'Live recitation result'),
-          const SizedBox(height: 8),
-          Container(
-            constraints: const BoxConstraints(minHeight: 110),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: _transcript.isEmpty && !_finished
-                ? Text(chinese ? '点击麦克风开始背诵' : 'Tap the microphone to start')
-                : RichText(
-                    key: const Key('alignment-output'),
-                    text: TextSpan(
-                      style: Theme.of(context).textTheme.bodyLarge,
-                      children: [
-                        for (final token in alignment.tokens)
-                          TextSpan(
-                            text: token.text,
-                            style: TextStyle(
-                              color: _colorFor(context, token.kind),
-                              fontWeight:
-                                  token.kind == RecitationTokenKind.correct ||
-                                      token.kind ==
-                                          RecitationTokenKind.phoneticCorrect
-                                  ? FontWeight.w600
-                                  : FontWeight.w700,
-                              decoration:
-                                  token.kind == RecitationTokenKind.omitted
-                                  ? TextDecoration.underline
-                                  : null,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-          ),
-          if (_recording || _transcript.isNotEmpty || _finished) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 12,
-              children: [
-                _Legend(color: Colors.green, label: chinese ? '正确' : 'Correct'),
-                if (_finished && alignment.phoneticCorrectCount > 0)
-                  _Legend(
-                    color: Colors.teal,
-                    label: chinese ? '同音修正' : 'Phonetic correction',
-                  ),
-                _Legend(
-                  color: Colors.red,
-                  label: chinese ? '错误／漏字' : 'Wrong / missing',
-                ),
-                _Legend(
-                  color: Colors.orange,
-                  label: chinese ? '顺序错误' : 'Out of order',
-                ),
-              ],
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-          if (_inputLabel != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  _bluetoothInput
-                      ? Icons.bluetooth_audio_rounded
-                      : Icons.phone_android_rounded,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    chinese ? '录音输入：$_inputLabel' : 'Audio input: $_inputLabel',
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (_finished) ...[
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.analytics_outlined),
-              title: Text(
-                chinese
-                    ? '本次正确率 ${(alignment.accuracy * 100).round()}%'
-                    : 'Accuracy ${(alignment.accuracy * 100).round()}%',
-              ),
-              subtitle: Text(
-                chinese
-                    ? '原字正确 ${alignment.exactCorrectCount} · 错误 ${alignment.incorrectCount} · '
-                          '${alignment.phoneticCorrectCount > 0 ? '同音修正 ${alignment.phoneticCorrectCount} · ' : ''}'
-                          '漏字 ${alignment.omittedCount} · 错序 ${alignment.reorderedCount}'
-                    : 'Exact ${alignment.exactCorrectCount} · Wrong ${alignment.incorrectCount} · '
-                          '${alignment.phoneticCorrectCount > 0 ? 'Phonetic ${alignment.phoneticCorrectCount} · ' : ''}'
-                          'Missing ${alignment.omittedCount} · Reordered ${alignment.reorderedCount}',
+          if (_celebrating)
+            const Positioned.fill(
+              child: _CompletionConfetti(
+                key: Key('recitation-completion-confetti'),
               ),
             ),
-            if (widget.request.next != null ||
-                (verseMode && _currentVerse + 1 < units.length))
-              OutlinedButton.icon(
-                key: const Key('next-verse-button'),
-                onPressed: _nextVerse,
-                icon: const Icon(Icons.navigate_next_rounded),
-                label: Text(
-                  widget.request.next != null
-                      ? (chinese ? '下一项计划' : 'Next planned passage')
-                      : (chinese ? '下一节' : 'Next verse'),
-                ),
-              ),
-          ],
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            key: const Key('record-button'),
-            onPressed: _preparing ? null : _toggleRecording,
-            icon: _preparing
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
-            label: Text(
-              _preparing
-                  ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
-                  : _recording
-                  ? (chinese ? '结束背诵' : 'Finish')
-                  : (chinese ? '开始录音' : 'Start recording'),
-            ),
-          ),
         ],
       ),
     );
@@ -576,6 +609,56 @@ class _RecitationPracticeScreenState
     if (_ownsRecognizer) unawaited(_recognizer.dispose());
     super.dispose();
   }
+}
+
+class _CompletionConfetti extends StatefulWidget {
+  const _CompletionConfetti({super.key});
+
+  @override
+  State<_CompletionConfetti> createState() => _CompletionConfettiState();
+}
+
+class _CompletionConfettiState extends State<_CompletionConfetti>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+  )..forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: AnimatedBuilder(
+      animation: _controller,
+      builder: (_, _) => Stack(
+        children: [
+          for (var index = 0; index < 28; index++)
+            Positioned(
+              left: (index * 53.0) % MediaQuery.sizeOf(context).width,
+              top: -20 + _controller.value * (180 + (index % 5) * 90),
+              child: Transform.rotate(
+                angle: _controller.value * 8 + index,
+                child: Icon(
+                  Icons.star_rounded,
+                  color: [
+                    Colors.amber,
+                    Colors.pink,
+                    Colors.lightBlue,
+                    Colors.green,
+                  ][index % 4],
+                  size: 12 + index % 10,
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _Legend extends StatelessWidget {

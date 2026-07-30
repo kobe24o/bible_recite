@@ -8,6 +8,7 @@ import 'package:bible_recite/src/features/recitation/presentation/recitation_pra
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -191,7 +192,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
-
     expect(
       await repository.dueEbbinghausReviews(
         DateTime.now().add(const Duration(days: 30)),
@@ -199,6 +199,79 @@ void main() {
       hasLength(1),
     );
   });
+
+  testWidgets(
+    'finishing the last task due today celebrates on the recitation page',
+    (tester) async {
+      final recognizer = FakeRecognizer();
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final today = DateTime.now();
+      final planId = await repository.createPlan(
+        NewMemorizationPlan(
+          title: '今日任务',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          endChapter: 3,
+          startDate: today,
+          endDate: today,
+          tasks: const [
+            NewPlanTask(
+              dayIndex: 0,
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 16,
+            ),
+          ],
+        ),
+      );
+      final task = (await repository.listTasks(planId)).single;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.continuous,
+                planTaskId: task.id,
+                units: [_unit(16, '神爱世人')],
+              ),
+              recognizer: recognizer,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      recognizer.emit(const RecognitionFinal('神爱世人'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect((await repository.listTasks(planId)).single.completed, isTrue);
+      expect(
+        find.byKey(const Key('recitation-completion-confetti')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
 
   testWidgets('finished Chinese recitation records phonetic corrections', (
     tester,
