@@ -25,6 +25,19 @@ void main() {
     expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
   });
 
+  testWidgets('routes the update notification payload after the app is ready', (
+    tester,
+  ) async {
+    appRouter.go('/');
+    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pump();
+
+    UpdateAvailableNotification.handlePayload('open-update-about');
+    await tester.pump();
+
+    expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
+  });
+
   setUp(() => appRouter.go('/'));
   tearDown(() => appRouter.go('/'));
 

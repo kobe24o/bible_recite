@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../../app/router.dart';
@@ -27,8 +28,15 @@ final class UpdateAvailableNotification {
     }
   }
 
-  static void _handleNotificationResponse(NotificationResponse response) {
-    if (response.payload == _openAboutPayload) openUpdatePage();
+  static void _handleNotificationResponse(NotificationResponse response) =>
+      handlePayload(response.payload);
+
+  /// Defers routing until after the app's router has attached during a
+  /// notification-driven cold start or resume.
+  static void handlePayload(String? payload) {
+    if (payload != _openAboutPayload) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => openUpdatePage());
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   static void openUpdatePage() => appRouter.go('/about');

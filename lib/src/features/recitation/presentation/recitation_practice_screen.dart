@@ -10,6 +10,7 @@ import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
+import '../../../widgets/completion_confetti.dart';
 import '../application/recitation_scoring_provider.dart';
 import '../application/recitation_recognizer_provider.dart';
 import '../domain/exact_text_comparator.dart';
@@ -567,7 +568,7 @@ class _RecitationPracticeScreenState
           ),
           if (_celebrating)
             const Positioned.fill(
-              child: _CompletionConfetti(
+              child: CompletionConfetti(
                 key: Key('recitation-completion-confetti'),
               ),
             ),
@@ -609,56 +610,6 @@ class _RecitationPracticeScreenState
     if (_ownsRecognizer) unawaited(_recognizer.dispose());
     super.dispose();
   }
-}
-
-class _CompletionConfetti extends StatefulWidget {
-  const _CompletionConfetti({super.key});
-
-  @override
-  State<_CompletionConfetti> createState() => _CompletionConfettiState();
-}
-
-class _CompletionConfettiState extends State<_CompletionConfetti>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-  )..forward();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: AnimatedBuilder(
-      animation: _controller,
-      builder: (_, _) => Stack(
-        children: [
-          for (var index = 0; index < 28; index++)
-            Positioned(
-              left: (index * 53.0) % MediaQuery.sizeOf(context).width,
-              top: -20 + _controller.value * (180 + (index % 5) * 90),
-              child: Transform.rotate(
-                angle: _controller.value * 8 + index,
-                child: Icon(
-                  Icons.star_rounded,
-                  color: [
-                    Colors.amber,
-                    Colors.pink,
-                    Colors.lightBlue,
-                    Colors.green,
-                  ][index % 4],
-                  size: 12 + index % 10,
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _Legend extends StatelessWidget {

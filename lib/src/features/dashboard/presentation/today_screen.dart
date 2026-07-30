@@ -11,6 +11,7 @@ import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
+import '../../../widgets/completion_confetti.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -116,7 +117,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           ),
           if (_celebrating)
             const Positioned.fill(
-              child: _CompletionConfetti(key: Key('completion-confetti')),
+              child: CompletionConfetti(key: Key('completion-confetti')),
             ),
         ],
       ),
@@ -282,54 +283,6 @@ class _TaskCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CompletionConfetti extends StatefulWidget {
-  const _CompletionConfetti({super.key});
-  @override
-  State<_CompletionConfetti> createState() => _CompletionConfettiState();
-}
-
-class _CompletionConfettiState extends State<_CompletionConfetti>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-  )..forward();
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: AnimatedBuilder(
-      animation: _controller,
-      builder: (_, _) => Stack(
-        children: [
-          for (var index = 0; index < 28; index++)
-            Positioned(
-              left: (index * 53.0) % MediaQuery.sizeOf(context).width,
-              top: -20 + _controller.value * (180 + (index % 5) * 90),
-              child: Transform.rotate(
-                angle: _controller.value * 8 + index,
-                child: Icon(
-                  Icons.star_rounded,
-                  color: [
-                    Colors.amber,
-                    Colors.pink,
-                    Colors.lightBlue,
-                    Colors.green,
-                  ][index % 4],
-                  size: 12 + index % 10,
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _EmptyToday extends StatelessWidget {

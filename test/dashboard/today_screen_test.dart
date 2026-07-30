@@ -192,6 +192,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byKey(const Key('completion-confetti')), findsOneWidget);
+    expect(
+      find.byKey(const Key('completion-confetti-particles')),
+      findsOneWidget,
+    );
     await tester.pump(const Duration(seconds: 2));
   });
 }
