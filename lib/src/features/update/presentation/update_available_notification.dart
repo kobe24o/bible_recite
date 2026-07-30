@@ -2,23 +2,45 @@ import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../../app/router.dart';
 import '../domain/update_manifest.dart';
 
 final class UpdateAvailableNotification {
   static const _id = 7200;
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  static const _openAboutPayload = 'open-update-about';
+  static final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
 
-  Future<void> show(UpdateManifest manifest) async {
-    if (!Platform.isAndroid) return;
+  static Future<void> initialize() async {
+    if (!Platform.isAndroid || _initialized) return;
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher_bible'),
       ),
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
     );
+    _initialized = true;
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp == true) {
+      _handleNotificationResponse(launchDetails!.notificationResponse!);
+    }
+  }
+
+  static void _handleNotificationResponse(NotificationResponse response) {
+    if (response.payload == _openAboutPayload) openUpdatePage();
+  }
+
+  static void openUpdatePage() => appRouter.go('/about');
+
+  Future<void> show(UpdateManifest manifest) async {
+    if (!Platform.isAndroid) return;
+    await initialize();
     await _plugin.show(
       id: _id,
       title: 'Bible Recite 有新版本',
       body: '发现 ${manifest.version}，打开应用即可下载更新。',
+      payload: _openAboutPayload,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'app_updates',

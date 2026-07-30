@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../scripture/scripture_browser_screen_test.dart'
@@ -238,5 +239,75 @@ void main() {
     expect(find.byKey(Key('read-task-${task.id}')), findsOneWidget);
     expect(find.byKey(Key('recite-task-${task.id}')), findsOneWidget);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
+  });
+
+  testWidgets('returns from reading to the open plan detail sheet', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '继续查看计划',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 30),
+        endDate: DateTime(2026, 7, 30),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      ),
+    );
+    final task = (await repository.listTasks(planId)).single;
+    final router = GoRouter(
+      routes: [
+        GoRoute(path: '/', builder: (_, _) => const PlansScreen()),
+        GoRoute(
+          path: '/bible/:translation/:book/:chapter',
+          builder: (_, _) => const Scaffold(body: Text('经文阅读页')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('继续查看计划'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('read-task-${task.id}')));
+    await tester.pumpAndSettle();
+    expect(find.text('经文阅读页'), findsOneWidget);
+
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('每天背诵安排 · 1 天'), findsOneWidget);
+    expect(find.byKey(Key('recite-task-${task.id}')), findsOneWidget);
   });
 }

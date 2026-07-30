@@ -362,7 +362,6 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                           TextButton(
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
-                              Navigator.of(context).pop();
                               context.push(
                                 '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}',
                               );
@@ -382,7 +381,6 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                                 selected: task,
                               );
                               if (!mounted || request == null) return;
-                              Navigator.of(context).pop();
                               await Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => RecitationPracticeScreen(

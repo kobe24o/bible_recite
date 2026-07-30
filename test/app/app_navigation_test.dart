@@ -2,6 +2,7 @@ import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/app/router.dart';
 import 'package:bible_recite/src/features/update/application/update_providers.dart';
 import 'package:bible_recite/src/features/update/presentation/about_screen.dart';
+import 'package:bible_recite/src/features/update/presentation/update_available_notification.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,19 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  testWidgets('opens About when the update notification is selected', (
+    tester,
+  ) async {
+    appRouter.go('/');
+    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pump();
+
+    UpdateAvailableNotification.openUpdatePage();
+    await tester.pump();
+
+    expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
+  });
+
   setUp(() => appRouter.go('/'));
   tearDown(() => appRouter.go('/'));
 
@@ -113,10 +127,7 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       3,
     );
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('about-open')),
-      120,
-    );
+    await tester.scrollUntilVisible(find.byKey(const Key('about-open')), 120);
     await tester.tap(find.byKey(const Key('about-open')));
     await tester.pumpAndSettle();
 

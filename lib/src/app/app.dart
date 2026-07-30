@@ -52,6 +52,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   }
 
   Future<void> _checkUpdateAtLaunch() async {
+    await UpdateAvailableNotification.initialize();
     final controller = ref.read(updateControllerProvider.notifier);
     await controller.autoCheck();
     final status = ref.read(updateControllerProvider);
