@@ -140,4 +140,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('待完成'), findsOneWidget);
   });
+
+  testWidgets('shows confetti after completing the last task due today', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final today = DateTime.now();
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '今日完成撒花',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 1,
+        endChapter: 1,
+        startDate: today,
+        endDate: today,
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+          ),
+        ],
+      ),
+    );
+    final task = (await repository.listTasks(planId)).single;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: TodayScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(Key('complete-task-${task.id}')));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('completion-confetti')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+  });
 }

@@ -30,84 +30,95 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final bookNames = ref.watch(bookNameCatalogProvider);
     return Scaffold(
       appBar: AppBar(title: Text(localizations.todayTitle)),
-      body: repository.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => _EmptyToday(localizations: localizations),
-        data: (repository) => FutureBuilder<_TodayData>(
-          key: ValueKey(_revision),
-          future: _load(repository),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final data = snapshot.data!;
-            if (data.tasks.isEmpty && data.reviews.isEmpty) {
-              return _EmptyToday(localizations: localizations);
-            }
-            final pending = data.tasks
-                .where((task) => !task.completed)
-                .toList(growable: false);
-            final completed = data.tasks
-                .where((task) => task.completed)
-                .toList(growable: false);
-            final chinese =
-                Localizations.localeOf(context).languageCode == 'zh';
-            return Stack(children: [
-              ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (pending.isNotEmpty || data.reviews.isNotEmpty) ...[
-                  Text(
-                    chinese ? '待完成' : 'To do',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  for (final review in data.reviews)
-                    _ReviewCard(
-                      review: review,
-                      bookName: bookNames.nameFor(
-                        review.bookId,
-                        Localizations.localeOf(context),
+      body: Stack(
+        children: [
+          repository.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => _EmptyToday(localizations: localizations),
+            data: (repository) => FutureBuilder<_TodayData>(
+              key: ValueKey(_revision),
+              future: _load(repository),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final data = snapshot.data!;
+                if (data.tasks.isEmpty && data.reviews.isEmpty) {
+                  return _EmptyToday(localizations: localizations);
+                }
+                final pending = data.tasks
+                    .where((task) => !task.completed)
+                    .toList(growable: false);
+                final completed = data.tasks
+                    .where((task) => task.completed)
+                    .toList(growable: false);
+                final chinese =
+                    Localizations.localeOf(context).languageCode == 'zh';
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (pending.isNotEmpty || data.reviews.isNotEmpty) ...[
+                      Text(
+                        chinese ? '待完成' : 'To do',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      onStart: () => _startReview(review),
-                    ),
-                  for (final task in pending)
-                    _TaskCard(
-                      task: task,
-                      plan: data.plans[task.planId],
-                      completed: false,
-                      onChanged: () => setState(() => _revision++),
-                      onAllTodayCompleted: _celebrate,
-                      repository: repository,
-                      onStart: () =>
-                          _startTask(task, data.plans[task.planId], repository),
-                    ),
-                ],
-                if (completed.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    chinese ? '今日已完成' : 'Completed today',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  for (final task in completed)
-                    _TaskCard(
-                      task: task,
-                      plan: data.plans[task.planId],
-                      completed: true,
-                      onChanged: () => setState(() => _revision++),
-                      onAllTodayCompleted: _celebrate,
-                      repository: repository,
-                      onStart: () =>
-                          _startTask(task, data.plans[task.planId], repository),
-                    ),
-                ],
-              ],
+                      const SizedBox(height: 8),
+                      for (final review in data.reviews)
+                        _ReviewCard(
+                          review: review,
+                          bookName: bookNames.nameFor(
+                            review.bookId,
+                            Localizations.localeOf(context),
+                          ),
+                          onStart: () => _startReview(review),
+                        ),
+                      for (final task in pending)
+                        _TaskCard(
+                          task: task,
+                          plan: data.plans[task.planId],
+                          completed: false,
+                          onChanged: () => setState(() => _revision++),
+                          onAllTodayCompleted: _celebrate,
+                          repository: repository,
+                          onStart: () => _startTask(
+                            task,
+                            data.plans[task.planId],
+                            repository,
+                          ),
+                        ),
+                    ],
+                    if (completed.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        chinese ? '今日已完成' : 'Completed today',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      for (final task in completed)
+                        _TaskCard(
+                          task: task,
+                          plan: data.plans[task.planId],
+                          completed: true,
+                          onChanged: () => setState(() => _revision++),
+                          onAllTodayCompleted: _celebrate,
+                          repository: repository,
+                          onStart: () => _startTask(
+                            task,
+                            data.plans[task.planId],
+                            repository,
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
             ),
-              if (_celebrating) const _CompletionConfetti(),
-            ]);
-          },
-        ),
+          ),
+          if (_celebrating)
+            const Positioned.fill(
+              child: _CompletionConfetti(key: Key('completion-confetti')),
+            ),
+        ],
       ),
     );
   }
@@ -145,10 +156,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final passage = await scripture.getPassage(
       review.translationId,
       PassageRange(
-        start: (canonId: CanonId.protestant66, osisBookId: review.bookId,
-          chapter: review.startChapter, verse: review.startVerse),
-        end: (canonId: CanonId.protestant66, osisBookId: review.bookId,
-          chapter: review.endChapter, verse: review.endVerse),
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: review.bookId,
+          chapter: review.startChapter,
+          verse: review.startVerse,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: review.bookId,
+          chapter: review.endChapter,
+          verse: review.endVerse,
+        ),
       ),
     );
     final units = passage.units;
@@ -266,31 +285,49 @@ class _TaskCard extends StatelessWidget {
 }
 
 class _CompletionConfetti extends StatefulWidget {
-  const _CompletionConfetti();
-  @override State<_CompletionConfetti> createState() => _CompletionConfettiState();
+  const _CompletionConfetti({super.key});
+  @override
+  State<_CompletionConfetti> createState() => _CompletionConfettiState();
 }
 
 class _CompletionConfettiState extends State<_CompletionConfetti>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
-    vsync: this, duration: const Duration(seconds: 2),
+    vsync: this,
+    duration: const Duration(seconds: 2),
   )..forward();
-  @override void dispose() { _controller.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => IgnorePointer(
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
     child: AnimatedBuilder(
       animation: _controller,
-      builder: (_, _) => Stack(children: [
-        for (var index = 0; index < 28; index++)
-          Positioned(
-            left: (index * 53.0) % MediaQuery.sizeOf(context).width,
-            top: -20 + _controller.value * (180 + (index % 5) * 90),
-            child: Transform.rotate(
-              angle: _controller.value * 8 + index,
-              child: Icon(Icons.star_rounded,
-                color: [Colors.amber, Colors.pink, Colors.lightBlue, Colors.green][index % 4], size: 12 + index % 10),
+      builder: (_, _) => Stack(
+        children: [
+          for (var index = 0; index < 28; index++)
+            Positioned(
+              left: (index * 53.0) % MediaQuery.sizeOf(context).width,
+              top: -20 + _controller.value * (180 + (index % 5) * 90),
+              child: Transform.rotate(
+                angle: _controller.value * 8 + index,
+                child: Icon(
+                  Icons.star_rounded,
+                  color: [
+                    Colors.amber,
+                    Colors.pink,
+                    Colors.lightBlue,
+                    Colors.green,
+                  ][index % 4],
+                  size: 12 + index % 10,
+                ),
+              ),
             ),
-          ),
-      ]),
+        ],
+      ),
     ),
   );
 }
