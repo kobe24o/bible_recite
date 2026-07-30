@@ -126,7 +126,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   void _celebrate() {
     setState(() => _celebrating = true);
-    Future<void>.delayed(const Duration(seconds: 2), () {
+    Future<void>.delayed(const Duration(seconds: 5), () {
       if (mounted) setState(() => _celebrating = false);
     });
   }

@@ -269,7 +269,7 @@ class _RecitationPracticeScreenState
   Future<void> _celebrateCompletion() async {
     if (!mounted) return;
     setState(() => _celebrating = true);
-    await Future<void>.delayed(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(seconds: 5));
     if (mounted) setState(() => _celebrating = false);
   }
 
