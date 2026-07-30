@@ -63,6 +63,12 @@ final class DailyTaskReminderScheduler {
   Future<void> reschedule(SqlitePlanRepository repository) async {
     if (!Platform.isAndroid) return;
     await initialize();
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    final allowed = await android?.areNotificationsEnabled();
+    if (allowed == false) return;
     for (var index = 0; index < 32; index++) {
       await _notifications.cancel(id: _notificationBaseId + index);
     }
@@ -83,8 +89,9 @@ final class DailyTaskReminderScheduler {
             _channelId,
             '今日背诵提醒',
             channelDescription: '提醒完成当天的背诵计划',
-            importance: Importance.defaultImportance,
-            priority: Priority.defaultPriority,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

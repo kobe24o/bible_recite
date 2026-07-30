@@ -21,6 +21,7 @@ class TodayScreen extends ConsumerStatefulWidget {
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
   int _revision = 0;
+  bool _celebrating = false;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +52,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 .toList(growable: false);
             final chinese =
                 Localizations.localeOf(context).languageCode == 'zh';
-            return ListView(
+            return Stack(children: [
+              ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 if (pending.isNotEmpty || data.reviews.isNotEmpty) ...[
@@ -75,6 +77,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       plan: data.plans[task.planId],
                       completed: false,
                       onChanged: () => setState(() => _revision++),
+                      onAllTodayCompleted: _celebrate,
                       repository: repository,
                       onStart: () =>
                           _startTask(task, data.plans[task.planId], repository),
@@ -93,17 +96,27 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       plan: data.plans[task.planId],
                       completed: true,
                       onChanged: () => setState(() => _revision++),
+                      onAllTodayCompleted: _celebrate,
                       repository: repository,
                       onStart: () =>
                           _startTask(task, data.plans[task.planId], repository),
                     ),
                 ],
               ],
-            );
+            ),
+              if (_celebrating) const _CompletionConfetti(),
+            ]);
           },
         ),
       ),
     );
+  }
+
+  void _celebrate() {
+    setState(() => _celebrating = true);
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _celebrating = false);
+    });
   }
 
   Future<void> _startTask(
@@ -205,6 +218,7 @@ class _TaskCard extends StatelessWidget {
     required this.onChanged,
     required this.repository,
     required this.onStart,
+    required this.onAllTodayCompleted,
   });
 
   final PlanTask task;
@@ -213,6 +227,7 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onChanged;
   final SqlitePlanRepository repository;
   final Future<void> Function() onStart;
+  final VoidCallback onAllTodayCompleted;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +250,10 @@ class _TaskCard extends StatelessWidget {
           tooltip: completed ? '撤销完成' : '完成',
           onPressed: () async {
             await repository.setTaskCompleted(task.id, !completed);
+            if (!completed) {
+              final remaining = await repository.dueTasks(DateTime.now());
+              if (remaining.isEmpty) onAllTodayCompleted();
+            }
             onChanged();
           },
           icon: Icon(
@@ -244,6 +263,36 @@ class _TaskCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CompletionConfetti extends StatefulWidget {
+  const _CompletionConfetti();
+  @override State<_CompletionConfetti> createState() => _CompletionConfettiState();
+}
+
+class _CompletionConfettiState extends State<_CompletionConfetti>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this, duration: const Duration(seconds: 2),
+  )..forward();
+  @override void dispose() { _controller.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => IgnorePointer(
+    child: AnimatedBuilder(
+      animation: _controller,
+      builder: (_, _) => Stack(children: [
+        for (var index = 0; index < 28; index++)
+          Positioned(
+            left: (index * 53.0) % MediaQuery.sizeOf(context).width,
+            top: -20 + _controller.value * (180 + (index % 5) * 90),
+            child: Transform.rotate(
+              angle: _controller.value * 8 + index,
+              child: Icon(Icons.star_rounded,
+                color: [Colors.amber, Colors.pink, Colors.lightBlue, Colors.green][index % 4], size: 12 + index % 10),
+            ),
+          ),
+      ]),
+    ),
+  );
 }
 
 class _EmptyToday extends StatelessWidget {

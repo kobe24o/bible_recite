@@ -352,6 +352,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                     '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
                   ),
                   trailing: Wrap(spacing: 2, children: [
+                          if (task.completed)
+                            const Icon(Icons.check_circle, color: Colors.green),
                           TextButton(
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
