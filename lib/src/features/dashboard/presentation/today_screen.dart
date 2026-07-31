@@ -213,7 +213,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       DateTime.now(),
       includeCompleted: true,
     );
-    final reviews = await repository.dueEbbinghausReviews(DateTime.now());
+    final reviews = await repository.dueEbbinghausReviews(
+      DateTime.now(),
+      includeCompleted: true,
+    );
     return _TodayData(
       plans: {for (final plan in plans) plan.id: plan},
       tasks: tasks,
@@ -237,12 +240,18 @@ class _ReviewCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     child: ListTile(
       onTap: onStart,
-      leading: const CircleAvatar(child: Icon(Icons.auto_awesome_rounded)),
+      leading: CircleAvatar(
+        child: Icon(
+          review.completed ? Icons.check_rounded : Icons.auto_awesome_rounded,
+        ),
+      ),
       title: const Text('艾宾浩斯复习'),
       subtitle: Text(
         '$bookName ${review.startChapter}:${review.startVerse}–${review.endVerse} · 第 ${review.intervalDays} 天复习',
       ),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: review.completed
+          ? const Icon(Icons.check_circle_rounded, color: Colors.green)
+          : const Icon(Icons.chevron_right_rounded),
     ),
   );
 }

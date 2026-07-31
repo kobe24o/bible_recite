@@ -792,7 +792,10 @@ final class SqlitePlanRepository {
     }
   }
 
-  Future<List<EbbinghausReview>> dueEbbinghausReviews(DateTime date) async {
+  Future<List<EbbinghausReview>> dueEbbinghausReviews(
+    DateTime date, {
+    bool includeCompleted = false,
+  }) async {
     final settings = await getEbbinghausSettings();
     if (!settings.enabled) return const [];
     return _database
@@ -803,11 +806,13 @@ final class SqlitePlanRepository {
             c.start_verse, c.end_chapter, c.end_verse
           FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
-          WHERE r.status = 'pending' AND c.status = 'active'
-            AND r.due_date <= ?
+          WHERE c.status = 'active' AND (
+            (r.status = 'pending' AND r.due_date <= ?)
+            OR (? = 1 AND r.status = 'completed' AND r.due_date = ?)
+          )
           ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',
-          [_date(date)],
+          [_date(date), includeCompleted ? 1 : 0, _date(date)],
         )
         .map(
           (row) => EbbinghausReview(
@@ -822,7 +827,7 @@ final class SqlitePlanRepository {
             endVerse: row['end_verse'] as int,
             intervalDays: row['interval_days'] as int,
             dueDate: DateTime.parse(row['due_date'] as String),
-            completed: false,
+            completed: row['status'] == 'completed',
           ),
         )
         .fold(<String, EbbinghausReview>{}, (reviews, review) {
