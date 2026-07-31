@@ -79,7 +79,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           plan: data.plans[task.planId],
                           completed: false,
                           onChanged: () => setState(() => _revision++),
-                          onAllTodayCompleted: _celebrate,
+                          onAllTodayCompleted: () async {
+                            if (await _allTodayCompleted(repository)) {
+                              _celebrate();
+                            }
+                          },
                           repository: repository,
                           onStart: () => _startTask(
                             task,
@@ -101,7 +105,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           plan: data.plans[task.planId],
                           completed: true,
                           onChanged: () => setState(() => _revision++),
-                          onAllTodayCompleted: _celebrate,
+                          onAllTodayCompleted: () async {
+                            if (await _allTodayCompleted(repository)) {
+                              _celebrate();
+                            }
+                          },
                           repository: repository,
                           onStart: () => _startTask(
                             task,
@@ -126,7 +134,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   void _celebrate() {
     setState(() => _celebrating = true);
-    Future<void>.delayed(const Duration(seconds: 5), () {
+    Future<void>.delayed(const Duration(seconds: 8), () {
       if (mounted) setState(() => _celebrating = false);
     });
   }
@@ -188,7 +196,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       ),
     );
     if (mounted) setState(() => _revision++);
+    if (await _allTodayCompleted(
+      await ref.read(planRepositoryProvider.future),
+    )) {
+      _celebrate();
+    }
   }
+
+  Future<bool> _allTodayCompleted(SqlitePlanRepository repository) async =>
+      (await repository.dueTasks(DateTime.now())).isEmpty &&
+      (await repository.dueEbbinghausReviews(DateTime.now())).isEmpty;
 
   Future<_TodayData> _load(SqlitePlanRepository repository) async {
     final plans = await repository.listPlans();
@@ -247,7 +264,7 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onChanged;
   final SqlitePlanRepository repository;
   final Future<void> Function() onStart;
-  final VoidCallback onAllTodayCompleted;
+  final Future<void> Function() onAllTodayCompleted;
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +289,7 @@ class _TaskCard extends StatelessWidget {
             await repository.setTaskCompleted(task.id, !completed);
             if (!completed) {
               final remaining = await repository.dueTasks(DateTime.now());
-              if (remaining.isEmpty) onAllTodayCompleted();
+              if (remaining.isEmpty) await onAllTodayCompleted();
             }
             onChanged();
           },

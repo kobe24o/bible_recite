@@ -36,7 +36,9 @@ final class DailyTaskReminderScheduler {
   DailyTaskReminderScheduler({FlutterLocalNotificationsPlugin? notifications})
     : _notifications = notifications ?? FlutterLocalNotificationsPlugin();
 
-  static const _channelId = 'daily_task_reminders';
+  // A new channel restores high-priority delivery on devices where users or
+  // OEM settings previously downgraded the old channel.
+  static const _channelId = 'daily_task_reminders_v2';
   static const _notificationBaseId = 7100;
   final FlutterLocalNotificationsPlugin _notifications;
   bool _initialized = false;

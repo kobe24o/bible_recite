@@ -14,7 +14,7 @@ class _CompletionConfettiState extends State<CompletionConfetti>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 5),
+    duration: const Duration(seconds: 8),
   )..forward();
 
   @override

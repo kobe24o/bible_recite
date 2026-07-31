@@ -227,7 +227,9 @@ class _RecitationPracticeScreenState
       var allTodayCompleted = false;
       if (widget.request.planTaskId != null) {
         await repository.setTaskCompleted(widget.request.planTaskId!, true);
-        allTodayCompleted = (await repository.dueTasks(DateTime.now())).isEmpty;
+        allTodayCompleted =
+            (await repository.dueTasks(DateTime.now())).isEmpty &&
+            (await repository.dueEbbinghausReviews(DateTime.now())).isEmpty;
         if (allTodayCompleted) unawaited(_celebrateCompletion());
         await ref
             .read(dailyTaskReminderSchedulerProvider)
@@ -269,7 +271,7 @@ class _RecitationPracticeScreenState
   Future<void> _celebrateCompletion() async {
     if (!mounted) return;
     setState(() => _celebrating = true);
-    await Future<void>.delayed(const Duration(seconds: 5));
+    await Future<void>.delayed(const Duration(seconds: 8));
     if (mounted) setState(() => _celebrating = false);
   }
 

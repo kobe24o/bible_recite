@@ -422,24 +422,8 @@ class _DailyReminderCardState extends ConsumerState<_DailyReminderCard> {
               enabled: settings.enabled,
               title: const Text('提醒间隔'),
               subtitle: Text(_formatInterval(settings.intervalMinutes)),
-              trailing: DropdownButton<int>(
-                value: settings.intervalMinutes,
-                items: [
-                  for (final hours in List<int>.generate(13, (index) => index))
-                    for (final minutes in const [0, 15, 30, 45])
-                      if (hours > 0 || minutes > 0)
-                        DropdownMenuItem(
-                          value: hours * 60 + minutes,
-                          child: Text(_formatInterval(hours * 60 + minutes)),
-                        ),
-                ],
-                onChanged: settings.enabled
-                    ? (value) {
-                        if (value != null)
-                          _save(settings.copyWith(intervalMinutes: value));
-                      }
-                    : null,
-              ),
+              trailing: const Icon(Icons.tune_rounded),
+              onTap: settings.enabled ? () => _pickInterval(settings) : null,
             ),
           ],
         ),
@@ -461,6 +445,72 @@ class _DailyReminderCardState extends ConsumerState<_DailyReminderCard> {
           : settings.copyWith(endMinutes: value),
     );
   }
+
+  Future<void> _pickInterval(DailyTaskReminderSettings settings) async {
+    var hours = settings.intervalMinutes ~/ 60;
+    var minutes = settings.intervalMinutes % 60;
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => SafeArea(
+          child: SizedBox(
+            height: 300,
+            child: Column(
+              children: [
+                const ListTile(title: Text('提醒间隔')),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _wheel(
+                          13,
+                          hours,
+                          '小时',
+                          (value) => setModalState(() => hours = value),
+                        ),
+                      ),
+                      Expanded(
+                        child: _wheel(
+                          60,
+                          minutes,
+                          '分钟',
+                          (value) => setModalState(() => minutes = value),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: hours == 0 && minutes == 0
+                      ? null
+                      : () => Navigator.pop(context, hours * 60 + minutes),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected != null)
+      await _save(settings.copyWith(intervalMinutes: selected));
+  }
+
+  Widget _wheel(
+    int count,
+    int initial,
+    String unit,
+    ValueChanged<int> onChanged,
+  ) => ListWheelScrollView.useDelegate(
+    controller: FixedExtentScrollController(initialItem: initial),
+    itemExtent: 42,
+    physics: const FixedExtentScrollPhysics(),
+    onSelectedItemChanged: onChanged,
+    childDelegate: ListWheelChildBuilderDelegate(
+      childCount: count,
+      builder: (_, index) => Center(child: Text('$index $unit')),
+    ),
+  );
 
   Future<void> _save(DailyTaskReminderSettings settings) async {
     if (settings.endMinutes < settings.startMinutes) return;

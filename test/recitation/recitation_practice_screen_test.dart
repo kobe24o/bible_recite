@@ -269,7 +269,7 @@ void main() {
         find.byKey(const Key('recitation-completion-confetti')),
         findsOneWidget,
       );
-      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 8));
     },
   );
 
