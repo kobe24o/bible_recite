@@ -60,4 +60,24 @@ final class UpdateAvailableNotification {
       ),
     );
   }
+
+  Future<void> showDownloaded(UpdateManifest manifest) async {
+    if (!Platform.isAndroid) return;
+    await initialize();
+    await _plugin.show(
+      id: _id,
+      title: 'Bible Recite 更新已下载',
+      body: '${manifest.version} 已在 Wi-Fi 下下载完成，点此安装。',
+      payload: _openAboutPayload,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'app_updates',
+          '应用更新',
+          channelDescription: '发现新版本时通知',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+    );
+  }
 }

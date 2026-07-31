@@ -801,14 +801,16 @@ final class SqlitePlanRepository {
     return _database
         .select(
           '''
-          SELECT r.id, r.cycle_id, r.interval_days, r.due_date,
+          SELECT r.id, r.cycle_id, r.interval_days, r.due_date, r.status,
             c.translation_id, c.book_id, c.chapter, c.start_chapter,
             c.start_verse, c.end_chapter, c.end_verse
           FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
+          LEFT JOIN recitation_result result ON result.id = r.result_id
           WHERE c.status = 'active' AND (
             (r.status = 'pending' AND r.due_date <= ?)
-            OR (? = 1 AND r.status = 'completed' AND r.due_date = ?)
+            OR (? = 1 AND r.status = 'completed'
+              AND date(result.completed_at, 'localtime') = ?)
           )
           ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',

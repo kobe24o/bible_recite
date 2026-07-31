@@ -23,6 +23,8 @@ class BibleReciteApp extends ConsumerStatefulWidget {
 
 class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     with WidgetsBindingObserver {
+  Timer? _updateTimer;
+
   @override
   void initState() {
     super.initState();
@@ -30,11 +32,15 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
     });
+    _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      unawaited(_checkUpdateAtLaunch());
+    });
     WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -43,6 +49,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshDailyReminders());
+      unawaited(_checkUpdateAtLaunch());
     }
   }
 
@@ -58,6 +65,8 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     final status = ref.read(updateControllerProvider);
     if (status case UpdateAvailable(:final manifest)) {
       await UpdateAvailableNotification().show(manifest);
+    } else if (status case ReadyToInstall(:final manifest)) {
+      await UpdateAvailableNotification().showDownloaded(manifest);
     }
   }
 

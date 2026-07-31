@@ -77,8 +77,10 @@ final class DailyTaskReminderScheduler {
     final settings = await readSettings(repository);
     if (!settings.enabled || settings.intervalMinutes <= 0) return;
     final now = DateTime.now();
-    final pending = await repository.dueTasks(now);
-    if (pending.isEmpty) return;
+    final pendingTasks = await repository.dueTasks(now);
+    final pendingReviews = await repository.dueEbbinghausReviews(now);
+    final pendingCount = pendingTasks.length + pendingReviews.length;
+    if (pendingCount == 0) return;
     // Inexact alarms can be deferred while Android is idle. Ask only when a
     // reminder is actually needed, then the app lifecycle callback will
     // schedule the alarms as soon as the user returns from Android settings.
@@ -91,7 +93,7 @@ final class DailyTaskReminderScheduler {
       await _notifications.zonedSchedule(
         id: _notificationBaseId + index,
         title: '背诵助手',
-        body: '今天还有 ${pending.length} 项背诵任务未完成',
+        body: '今天还有 $pendingCount 项背诵任务未完成',
         scheduledDate: tz.TZDateTime.from(slots[index], tz.local),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(

@@ -83,7 +83,8 @@ final class UpdateController extends Notifier<UpdateStatus> {
   }) async {
     if (!_isAndroid || (_operationActive && !allowActiveDownload)) return;
     try {
-      if (await ref.read(updateNetworkTransportProvider) == 'wifi') {
+      final readTransport = ref.read(updateNetworkTransportProvider);
+      if (await readTransport() == 'wifi') {
         _operationActive = true;
         await _downloadAndVerify(manifest);
       }

@@ -43,6 +43,23 @@ void main() {
     availableHarness.dispose();
   });
 
+  test('automatic check downloads an available update only on Wi-Fi', () async {
+    final wifiHarness = _Harness(root: root, networkTransport: 'wifi');
+
+    await wifiHarness.controller.autoCheck();
+
+    expect(wifiHarness.downloadCalls, 1);
+    expect(wifiHarness.controller.state, isA<ReadyToInstall>());
+    wifiHarness.dispose();
+
+    final cellularHarness = _Harness(root: root, networkTransport: 'cellular');
+    await cellularHarness.controller.autoCheck();
+
+    expect(cellularHarness.downloadCalls, 0);
+    expect(cellularHarness.controller.state, isA<UpdateAvailable>());
+    cellularHarness.dispose();
+  });
+
   test('check maps technical errors to a stable reason code', () async {
     final harness = _Harness(
       root: root,

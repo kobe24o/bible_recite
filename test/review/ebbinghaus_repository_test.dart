@@ -52,6 +52,42 @@ void main() {
     );
   });
 
+  test(
+    'retains an overdue review completed today in the completed list',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final startedAt = DateTime(2026, 7, 28, 9);
+      final today = DateTime(2026, 7, 31, 9);
+      await repository.updateEbbinghausSettings(
+        enabled: true,
+        passThreshold: 0.80,
+        now: startedAt.subtract(const Duration(minutes: 1)),
+      );
+      final initialId = await repository.saveRecitationResult(
+        _result(accuracy: 1, completedAt: startedAt),
+      );
+      await repository.processEbbinghausResult(resultId: initialId);
+      final overdue = (await repository.dueEbbinghausReviews(today)).single;
+
+      final completedId = await repository.saveRecitationResult(
+        _result(accuracy: 1, completedAt: today),
+      );
+      await repository.processEbbinghausResult(
+        resultId: completedId,
+        reviewId: overdue.id,
+      );
+
+      final completed = await repository.dueEbbinghausReviews(
+        today,
+        includeCompleted: true,
+      );
+      expect(completed, hasLength(1));
+      expect(completed.single.id, overdue.id);
+      expect(completed.single.completed, isTrue);
+    },
+  );
+
   test('keeps separate passage reviews in the same chapter', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);

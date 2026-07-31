@@ -53,18 +53,24 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 final completed = data.tasks
                     .where((task) => task.completed)
                     .toList(growable: false);
+                final pendingReviews = data.reviews
+                    .where((review) => !review.completed)
+                    .toList(growable: false);
+                final completedReviews = data.reviews
+                    .where((review) => review.completed)
+                    .toList(growable: false);
                 final chinese =
                     Localizations.localeOf(context).languageCode == 'zh';
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    if (pending.isNotEmpty || data.reviews.isNotEmpty) ...[
+                    if (pending.isNotEmpty || pendingReviews.isNotEmpty) ...[
                       Text(
                         chinese ? '待完成' : 'To do',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-                      for (final review in data.reviews)
+                      for (final review in pendingReviews)
                         _ReviewCard(
                           review: review,
                           bookName: bookNames.nameFor(
@@ -92,13 +98,23 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           ),
                         ),
                     ],
-                    if (completed.isNotEmpty) ...[
+                    if (completed.isNotEmpty ||
+                        completedReviews.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
                         chinese ? '今日已完成' : 'Completed today',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
+                      for (final review in completedReviews)
+                        _ReviewCard(
+                          review: review,
+                          bookName: bookNames.nameFor(
+                            review.bookId,
+                            Localizations.localeOf(context),
+                          ),
+                          onStart: () => _startReview(review),
+                        ),
                       for (final task in completed)
                         _TaskCard(
                           task: task,
