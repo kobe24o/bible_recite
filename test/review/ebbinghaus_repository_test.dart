@@ -46,6 +46,13 @@ void main() {
       resultId: completedReviewId,
       reviewId: reviews.single.id,
     );
+    final completedToday = await repository.dueEbbinghausReviews(
+      base.add(const Duration(days: 30)),
+      includeCompleted: true,
+    );
+    expect(completedToday, hasLength(1));
+    expect(completedToday.single.id, reviews.single.id);
+    expect(completedToday.single.completed, isTrue);
     expect(
       await repository.dueEbbinghausReviews(base.add(const Duration(days: 31))),
       isEmpty,

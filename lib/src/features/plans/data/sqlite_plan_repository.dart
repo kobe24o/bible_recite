@@ -807,8 +807,9 @@ final class SqlitePlanRepository {
           FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
           LEFT JOIN recitation_result result ON result.id = r.result_id
-          WHERE c.status = 'active' AND (
-            (r.status = 'pending' AND r.due_date <= ?)
+          WHERE (
+            (c.status = 'active' AND r.status = 'pending'
+              AND r.due_date <= ?)
             OR (? = 1 AND r.status = 'completed'
               AND date(result.completed_at, 'localtime') = ?)
           )
