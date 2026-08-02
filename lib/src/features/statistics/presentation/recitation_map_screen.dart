@@ -29,6 +29,7 @@ class RecitationMapScreen extends ConsumerStatefulWidget {
 
 class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
   late Future<_MapData> _future;
+  int? _loadedRevision;
   _MapSort _chapterSort = _MapSort.defaultOrder;
 
   @override
@@ -91,7 +92,7 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
         ],
       ),
       body: FutureBuilder<_MapData>(
-        future: _future,
+        future: _futureFor(ref.watch(recitationDataRevisionProvider)),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -109,15 +110,26 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
     ),
   );
 
-  String _title() => widget.chapter != null
-      ? '第 ${widget.chapter} 章'
-      : widget.bookId != null
-      ? '背诵地图 · 章节'
-      : widget.testament == null
-      ? '背诵地图'
-      : widget.testament == 'old'
-      ? '旧约'
-      : '新约';
+  Future<_MapData> _futureFor(int revision) {
+    if (_loadedRevision != revision) {
+      _loadedRevision = revision;
+      _future = _load();
+    }
+    return _future;
+  }
+
+  String _title() {
+    if (widget.bookId != null) {
+      final names = ref.read(bookNameCatalogProvider);
+      final book =
+          '${names.nameFor(widget.bookId!, const Locale('zh', 'CN'))} · ${names.nameFor(widget.bookId!, const Locale('en'))}';
+      return widget.chapter == null
+          ? '$book · 章节'
+          : '$book · 第 ${widget.chapter} 章';
+    }
+    if (widget.testament == null) return '背诵地图';
+    return widget.testament == 'old' ? '旧约' : '新约';
+  }
 
   Widget _testaments(BuildContext context, _MapData data) => ListView(
     padding: const EdgeInsets.all(16),

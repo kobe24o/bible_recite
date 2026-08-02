@@ -245,6 +245,7 @@ class _RecitationPracticeScreenState
       final unlocked = await repository.evaluateAndUnlockAchievements(
         source: 'recitation',
       );
+      ref.read(recitationDataRevisionProvider.notifier).refresh();
       for (final achievement in unlocked) {
         if (!mounted) break;
         unawaited(HapticFeedback.lightImpact().catchError((_) {}));

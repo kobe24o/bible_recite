@@ -60,3 +60,15 @@ final planRepositoryProvider = FutureProvider<SqlitePlanRepository>((
   ref.onDispose(repository.close);
   return repository;
 });
+
+/// Incremented after a recitation writes to SQLite so visible dashboards
+/// refresh immediately without requiring the user to leave and return.
+final recitationDataRevisionProvider =
+    NotifierProvider<RecitationDataRevision, int>(RecitationDataRevision.new);
+
+final class RecitationDataRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void refresh() => state++;
+}

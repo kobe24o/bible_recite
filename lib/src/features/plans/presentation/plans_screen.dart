@@ -42,6 +42,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    final recitationRevision = ref.watch(recitationDataRevisionProvider);
     final repository = ref.watch(planRepositoryProvider);
     final bundled = ref.watch(bundledCloudPlanManifestProvider);
     return Scaffold(
@@ -83,7 +84,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             loading: () => const SizedBox.shrink(),
             error: (_, _) => const SizedBox.shrink(),
             data: (repository) => FutureBuilder<List<MemorizationPlan>>(
-              key: ValueKey(_revision),
+              key: ValueKey('$_revision-$recitationRevision'),
               future: repository.listPlans(),
               builder: (context, snapshot) {
                 final plans = snapshot.data ?? const <MemorizationPlan>[];

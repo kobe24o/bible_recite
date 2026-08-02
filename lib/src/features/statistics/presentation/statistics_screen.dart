@@ -37,6 +37,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    ref.watch(recitationDataRevisionProvider);
     final repository = ref.watch(planRepositoryProvider);
     final locale = Localizations.localeOf(context);
     final chinese = locale.languageCode == 'zh';
