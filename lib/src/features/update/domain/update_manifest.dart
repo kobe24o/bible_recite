@@ -83,6 +83,40 @@ final class UpdateManifest {
       ),
     );
   }
+
+  /// Stores only an already signature-verified manifest beside its staged APK.
+  /// It is validated again before a cold-start installer launch.
+  factory UpdateManifest.fromStoredJson(Map<String, Object?> json) =>
+      UpdateManifest._(
+        version: AppVersion.parse(
+          _requiredString(json, 'versionName'),
+          _requiredString(json, 'buildNumber'),
+        ),
+        sourceCommit: _requiredString(json, 'sourceCommit'),
+        publishedAt: DateTime.parse(_requiredString(json, 'publishedAt')),
+        releaseNotes: _requiredString(json, 'releaseNotes', allowEmpty: true),
+        releasePageUrl: _httpsUri(_requiredString(json, 'releasePageUrl')),
+        android: AndroidUpdateAsset._fromJson(
+          _jsonObject(_requiredValue(json, 'android')),
+        ),
+      );
+
+  Map<String, Object?> toStoredJson() => {
+    'versionName': '${version.major}.${version.minor}.${version.patch}',
+    'buildNumber': version.buildNumber.toString(),
+    'sourceCommit': sourceCommit,
+    'publishedAt': publishedAt.toIso8601String(),
+    'releaseNotes': releaseNotes,
+    'releasePageUrl': releasePageUrl.toString(),
+    'android': {
+      'packageName': android.packageName,
+      'fileName': android.fileName,
+      'size': android.size,
+      'sha256': android.sha256,
+      'signingCertificateSha256': android.signingCertificateSha256,
+      'urls': android.urls.map((url) => url.toString()).toList(),
+    },
+  };
 }
 
 final class AndroidUpdateAsset {

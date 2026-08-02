@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +31,58 @@ final class UpdateController extends Notifier<UpdateStatus> {
   }
 
   Future<void> autoCheck() => check(automatic: true);
+
+  /// Rehydrates a verified staged APK after the process was killed. The local
+  /// record is never trusted on its own: file hash, package and certificate
+  /// are checked again before it can become installable.
+  Future<void> restoreReadyUpdate() async {
+    if (!_isAndroid || state is! UpdateIdle) return;
+    try {
+      final temporary = await ref.read(updateTemporaryDirectoryProvider.future);
+      final updates = Directory(
+        '${temporary.path}${Platform.pathSeparator}updates',
+      );
+      final record = File(
+        '${updates.path}${Platform.pathSeparator}.ready-update.json',
+      );
+      if (!await record.exists()) return;
+      final json = jsonDecode(await record.readAsString());
+      if (json is! Map)
+        throw const FormatException('Invalid staged update record');
+      final values = <String, Object?>{
+        for (final entry in json.entries)
+          if (entry.key is String) entry.key as String: entry.value,
+      };
+      final path = values.remove('path');
+      if (path is! String)
+        throw const FormatException('Missing staged update path');
+      final file = File(path);
+      if (file.parent.path != updates.path || !await file.exists()) {
+        throw const FileSystemException('Staged update is unavailable');
+      }
+      final manifest = UpdateManifest.fromStoredJson(values);
+      final verifyFile = ref.read(updateFileVerificationProvider);
+      await verifyFile(file, manifest.android);
+      final installed = await ref.read(installedAppVersionProvider.future);
+      final inspect = ref.read(updateApkInspectionProvider);
+      final verifyPackage = ref.read(updatePackageVerificationProvider);
+      await verifyPackage(await inspect(file), manifest, installed);
+      if (_mounted) {
+        _installedVersion = installed;
+        _emit(ReadyToInstall(manifest: manifest, file: file));
+      }
+    } catch (_) {
+      // A stale record must not block normal update discovery or installation.
+      try {
+        final temporary = await ref.read(
+          updateTemporaryDirectoryProvider.future,
+        );
+        await File(
+          '${temporary.path}${Platform.pathSeparator}updates${Platform.pathSeparator}.ready-update.json',
+        ).delete();
+      } catch (_) {}
+    }
+  }
 
   Future<void> check({bool automatic = false}) async {
     if (_checking || !_mounted) {
@@ -390,6 +444,7 @@ final class UpdateController extends Notifier<UpdateStatus> {
       if (!_mounted) {
         return;
       }
+      unawaited(_saveReadyUpdate(manifest, staged));
       _emit(ReadyToInstall(manifest: manifest, file: staged));
     } on DownloadCancelled {
       await _bestEffortCleanup(cleanup, downloadedFile);
@@ -419,6 +474,18 @@ final class UpdateController extends Notifier<UpdateStatus> {
       if (identical(_downloadCancellation, cancellation)) {
         _downloadCancellation = null;
       }
+    }
+  }
+
+  Future<void> _saveReadyUpdate(UpdateManifest manifest, File file) async {
+    try {
+      final record = File(
+        '${file.parent.path}${Platform.pathSeparator}.ready-update.json',
+      );
+      final values = manifest.toStoredJson()..['path'] = file.path;
+      await record.writeAsString(jsonEncode(values), flush: true);
+    } catch (_) {
+      // The in-memory ready state remains usable; persistence is best effort.
     }
   }
 

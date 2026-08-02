@@ -85,7 +85,7 @@ final class UpdateAvailableNotification {
       id: _id,
       title: 'Bible Recite 更新已下载',
       body: '${manifest.version} 已在 Wi-Fi 下下载完成，点此安装。',
-      payload: _openAboutPayload,
+      payload: _installDownloadedPayload,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'app_updates',
