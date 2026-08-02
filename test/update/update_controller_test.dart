@@ -60,6 +60,20 @@ void main() {
     cellularHarness.dispose();
   });
 
+  test(
+    'automatic recheck retains an already verified Wi-Fi download',
+    () async {
+      final harness = _Harness(root: root, networkTransport: 'wifi');
+
+      await harness.controller.autoCheck();
+      await harness.controller.autoCheck();
+
+      expect(harness.downloadCalls, 1);
+      expect(harness.controller.state, isA<ReadyToInstall>());
+      harness.dispose();
+    },
+  );
+
   test('check maps technical errors to a stable reason code', () async {
     final harness = _Harness(
       root: root,

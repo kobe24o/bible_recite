@@ -6,6 +6,9 @@ final class NewRecitationResult {
     required this.startVerse,
     required this.endVerse,
     this.chapterVerseCount = 0,
+    this.planId,
+    this.startedAt,
+    this.verseMetrics = const [],
     required this.mode,
     required this.durationSeconds,
     required this.correctCount,
@@ -23,6 +26,9 @@ final class NewRecitationResult {
   final int startVerse;
   final int endVerse;
   final int chapterVerseCount;
+  final int? planId;
+  final DateTime? startedAt;
+  final List<NewRecitationVerseMetric> verseMetrics;
   final String mode;
   final int durationSeconds;
   final int correctCount;
@@ -34,6 +40,24 @@ final class NewRecitationResult {
   final DateTime completedAt;
 }
 
+/// The durable lowest-granularity metric. Higher-level plan, chapter and book
+/// dashboards aggregate these rows instead of guessing a passage total.
+final class NewRecitationVerseMetric {
+  const NewRecitationVerseMetric({
+    required this.bookId,
+    required this.chapter,
+    required this.verse,
+    required this.accuracy,
+    required this.durationSeconds,
+  });
+
+  final String bookId;
+  final int chapter;
+  final int verse;
+  final double accuracy;
+  final int durationSeconds;
+}
+
 final class RecitationResult extends NewRecitationResult {
   const RecitationResult({
     required this.id,
@@ -43,6 +67,8 @@ final class RecitationResult extends NewRecitationResult {
     required super.startVerse,
     required super.endVerse,
     super.chapterVerseCount,
+    super.planId,
+    super.startedAt,
     required super.mode,
     required super.durationSeconds,
     required super.correctCount,
@@ -67,4 +93,24 @@ final class RecitationSummary {
   final int totalVerses;
   final int totalSeconds;
   final double averageAccuracy;
+}
+
+final class RecitationVerseMetric {
+  const RecitationVerseMetric({
+    required this.translationId,
+    required this.bookId,
+    required this.chapter,
+    required this.verse,
+    required this.sessions,
+    required this.averageAccuracy,
+    required this.totalSeconds,
+  });
+
+  final String translationId;
+  final String bookId;
+  final int chapter;
+  final int verse;
+  final int sessions;
+  final double averageAccuracy;
+  final int totalSeconds;
 }

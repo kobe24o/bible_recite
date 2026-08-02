@@ -29,7 +29,7 @@ class PlansScreen extends ConsumerStatefulWidget {
   ConsumerState<PlansScreen> createState() => _PlansScreenState();
 }
 
-enum _PlanAction { export, edit, restart, pause }
+enum _PlanAction { export, edit, restart, pause, resume }
 
 class _PlansScreenState extends ConsumerState<PlansScreen> {
   static const _planJsonStoreChannel = MethodChannel(
@@ -147,6 +147,18 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final locked = plan.contentLocked;
     final completed =
         plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks;
+    final progress = plan.paused
+        ? '已暂停：不再推送每日计划和艾宾浩斯复习'
+        : locked
+        ? '${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
+              '${_translationLabel(plan.translationId)} · ${localizations.daysCount(plan.days)}'
+        : '${plan.bookId} ${plan.startChapter}–${plan.endChapter}章 · '
+              '${plan.completedTasks}/${plan.totalTasks} · '
+              '${_translationLabel(plan.translationId)}';
+    final statistics = plan.recitationSessions == 0
+        ? '该计划尚无背诵记录'
+        : '已背诵 ${plan.recitationSessions} 次 · 平均正确率 '
+              '${(plan.averageAccuracy * 100).round()}% · 累计 ${_formatDuration(plan.totalRecitationSeconds)}';
     return Card(
       color: plan.paused
           ? Theme.of(context).colorScheme.surfaceContainerHighest
@@ -178,16 +190,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
               ),
           ],
         ),
-        subtitle: Text(
-          plan.paused
-              ? '已暂停：不再推送每日计划和艾宾浩斯复习'
-              : locked
-              ? '${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
-                    '${_translationLabel(plan.translationId)} · ${localizations.daysCount(plan.days)}'
-              : '${plan.bookId} ${plan.startChapter}–${plan.endChapter}章 · '
-                    '${plan.completedTasks}/${plan.totalTasks} · '
-                    '${_translationLabel(plan.translationId)}',
-        ),
+        subtitle: Text('$progress\n$statistics'),
+        isThreeLine: true,
+        subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
         trailing: PopupMenuButton<_PlanAction>(
           key: Key('plan-actions-${plan.id}'),
           tooltip: '计划操作',
@@ -203,6 +208,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       await _restartPlan(plan);
                     case _PlanAction.pause:
                       await _pausePlan(plan);
+                    case _PlanAction.resume:
+                      await _resumePlan(plan);
                   }
                 },
           itemBuilder: (context) => [
@@ -219,6 +226,14 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 child: ListTile(
                   leading: Icon(Icons.pause_circle_outline_rounded),
                   title: Text('暂停计划'),
+                ),
+              ),
+            if (plan.paused)
+              const PopupMenuItem(
+                value: _PlanAction.resume,
+                child: ListTile(
+                  leading: Icon(Icons.play_circle_outline_rounded),
+                  title: Text('继续计划'),
                 ),
               ),
             const PopupMenuItem(
@@ -243,6 +258,12 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     );
   }
 
+  String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return minutes == 0 ? '$remainder 秒' : '$minutes 分 $remainder 秒';
+  }
+
   Future<void> _restartPlan(MemorizationPlan plan) async {
     await _runSave(() async {
       final repository = await ref.read(planRepositoryProvider.future);
@@ -254,6 +275,13 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     await _runSave(() async {
       final repository = await ref.read(planRepositoryProvider.future);
       await repository.pausePlan(plan.id);
+    });
+  }
+
+  Future<void> _resumePlan(MemorizationPlan plan) async {
+    await _runSave(() async {
+      final repository = await ref.read(planRepositoryProvider.future);
+      await repository.resumePlan(plan.id);
     });
   }
 

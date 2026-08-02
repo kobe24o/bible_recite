@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -9,9 +10,15 @@ import '../domain/update_manifest.dart';
 final class UpdateAvailableNotification {
   static const _id = 7200;
   static const _openAboutPayload = 'open-update-about';
+  static const _installDownloadedPayload = 'install-downloaded-update';
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static Future<void> Function()? _onDownloadedTap;
+
+  static void setDownloadedTapHandler(Future<void> Function() handler) {
+    _onDownloadedTap = handler;
+  }
 
   static Future<void> initialize() async {
     if (!Platform.isAndroid || _initialized) return;
@@ -34,7 +41,17 @@ final class UpdateAvailableNotification {
   /// Defers routing until after the app's router has attached during a
   /// notification-driven cold start or resume.
   static void handlePayload(String? payload) {
-    if (payload != _openAboutPayload) return;
+    if (payload == _installDownloadedPayload) {
+      final handler = _onDownloadedTap;
+      if (handler != null) {
+        unawaited(handler());
+        return;
+      }
+      // A cold start cannot restore the in-memory staged-file state. Keep the
+      // existing About fallback rather than discarding the notification tap.
+    } else if (payload != _openAboutPayload) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => openUpdatePage());
     WidgetsBinding.instance.scheduleFrame();
   }
@@ -48,7 +65,7 @@ final class UpdateAvailableNotification {
       id: _id,
       title: 'Bible Recite 有新版本',
       body: '发现 ${manifest.version}，打开应用即可下载更新。',
-      payload: _openAboutPayload,
+      payload: _installDownloadedPayload,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'app_updates',

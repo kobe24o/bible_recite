@@ -61,6 +61,8 @@ final class SqlitePlanRepository {
         omitted_count INTEGER NOT NULL,
         reordered_count INTEGER NOT NULL,
         accuracy REAL NOT NULL,
+        plan_id INTEGER REFERENCES memorization_plan(id) ON DELETE SET NULL,
+        started_at TEXT,
         completed_at TEXT NOT NULL
       )
     ''');
@@ -71,6 +73,26 @@ final class SqlitePlanRepository {
         source TEXT NOT NULL
       )
     ''');
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS recitation_verse_metric (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recitation_result_id INTEGER NOT NULL
+          REFERENCES recitation_result(id) ON DELETE CASCADE,
+        plan_id INTEGER REFERENCES memorization_plan(id) ON DELETE SET NULL,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter INTEGER NOT NULL,
+        verse INTEGER NOT NULL,
+        accuracy REAL NOT NULL,
+        duration_seconds INTEGER NOT NULL,
+        started_at TEXT,
+        completed_at TEXT NOT NULL
+      )
+    ''');
+    _database.execute(
+      '''CREATE INDEX IF NOT EXISTS idx_recitation_verse_metric_scope
+      ON recitation_verse_metric(plan_id, translation_id, book_id, chapter, verse)''',
+    );
     _database.execute('''
       CREATE TABLE IF NOT EXISTS app_setting (
         setting_key TEXT PRIMARY KEY,
@@ -198,6 +220,16 @@ final class SqlitePlanRepository {
     if (!resultColumns.contains('phonetic_correct_count')) {
       _database.execute(
         'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!resultColumns.contains('plan_id')) {
+      _database.execute(
+        'ALTER TABLE recitation_result ADD COLUMN plan_id INTEGER',
+      );
+    }
+    if (!resultColumns.contains('started_at')) {
+      _database.execute(
+        'ALTER TABLE recitation_result ADD COLUMN started_at TEXT',
       );
     }
     final cycleColumns = _database
@@ -332,7 +364,10 @@ final class SqlitePlanRepository {
         .select('''
       SELECT p.*,
         COUNT(t.id) AS total_tasks,
-        COALESCE(SUM(t.completed), 0) AS completed_tasks
+        COALESCE(SUM(t.completed), 0) AS completed_tasks,
+        (SELECT COUNT(*) FROM recitation_result r WHERE r.plan_id = p.id) AS recitation_sessions,
+        COALESCE((SELECT AVG(r.accuracy) FROM recitation_result r WHERE r.plan_id = p.id), 0) AS average_accuracy,
+        COALESCE((SELECT SUM(r.duration_seconds) FROM recitation_result r WHERE r.plan_id = p.id), 0) AS total_recitation_seconds
       FROM memorization_plan p
       LEFT JOIN plan_task t ON t.plan_id = p.id
       GROUP BY p.id
@@ -546,6 +581,29 @@ final class SqlitePlanRepository {
     );
   }
 
+  Future<void> resumePlan(int planId) async {
+    _database.execute(
+      "UPDATE memorization_plan SET status = 'active' WHERE id = ?",
+      [planId],
+    );
+    final settings = await getEbbinghausSettings();
+    if (!settings.enabled) return;
+    _database.execute(
+      '''
+      UPDATE ebbinghaus_cycle SET status = 'active'
+      WHERE status = 'paused' AND EXISTS (
+        SELECT 1 FROM plan_task t WHERE t.plan_id = ?
+          AND t.book_id = ebbinghaus_cycle.book_id
+          AND t.start_chapter = ebbinghaus_cycle.start_chapter
+          AND t.start_verse = ebbinghaus_cycle.start_verse
+          AND t.end_chapter = ebbinghaus_cycle.end_chapter
+          AND t.end_verse = ebbinghaus_cycle.end_verse
+      )
+    ''',
+      [planId],
+    );
+  }
+
   Future<void> restartPlan(int planId, {DateTime? startDate}) async {
     final start = DateTime(
       (startDate ?? DateTime.now()).year,
@@ -596,8 +654,8 @@ final class SqlitePlanRepository {
       (translation_id, book_id, chapter, start_verse, end_verse,
        chapter_verse_count, mode,
        duration_seconds, correct_count, phonetic_correct_count, incorrect_count,
-       omitted_count, reordered_count, accuracy, completed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+       omitted_count, reordered_count, accuracy, plan_id, started_at, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         result.translationId,
         result.bookId,
@@ -613,10 +671,33 @@ final class SqlitePlanRepository {
         result.omittedCount,
         result.reorderedCount,
         result.accuracy,
+        result.planId,
+        result.startedAt?.toUtc().toIso8601String(),
         result.completedAt.toUtc().toIso8601String(),
       ],
     );
-    return _database.lastInsertRowId;
+    final resultId = _database.lastInsertRowId;
+    for (final metric in result.verseMetrics) {
+      _database.execute(
+        '''INSERT INTO recitation_verse_metric
+        (recitation_result_id, plan_id, translation_id, book_id, chapter,
+         verse, accuracy, duration_seconds, started_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        [
+          resultId,
+          result.planId,
+          result.translationId,
+          metric.bookId,
+          metric.chapter,
+          metric.verse,
+          metric.accuracy,
+          metric.durationSeconds,
+          result.startedAt?.toUtc().toIso8601String(),
+          result.completedAt.toUtc().toIso8601String(),
+        ],
+      );
+    }
+    return resultId;
   }
 
   Future<EbbinghausSettings> getEbbinghausSettings() async {
@@ -842,6 +923,16 @@ final class SqlitePlanRepository {
             OR (? = 1 AND r.status = 'completed'
               AND date(result.completed_at, 'localtime') = ?)
           )
+          AND NOT EXISTS (
+            SELECT 1 FROM plan_task t
+            JOIN memorization_plan p ON p.id = t.plan_id
+            WHERE p.status = 'paused'
+              AND t.book_id = c.book_id
+              AND t.start_chapter = c.start_chapter
+              AND t.start_verse = c.start_verse
+              AND t.end_chapter = c.end_chapter
+              AND t.end_verse = c.end_verse
+          )
           ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',
           [_date(date), includeCompleted ? 1 : 0, _date(date)],
@@ -1023,6 +1114,49 @@ final class SqlitePlanRepository {
         .toList(growable: false);
   }
 
+  Future<List<RecitationVerseMetric>> listRecitationVerseMetrics({
+    String? translationId,
+    String? bookId,
+    int? chapter,
+  }) async {
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (translationId != null) {
+      clauses.add('translation_id = ?');
+      args.add(translationId);
+    }
+    if (bookId != null) {
+      clauses.add('book_id = ?');
+      args.add(bookId);
+    }
+    if (chapter != null) {
+      clauses.add('chapter = ?');
+      args.add(chapter);
+    }
+    final where = clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}';
+    return _database
+        .select('''
+      SELECT translation_id, book_id, chapter, verse,
+        COUNT(*) AS sessions, AVG(accuracy) AS average_accuracy,
+        SUM(duration_seconds) AS total_seconds
+      FROM recitation_verse_metric $where
+      GROUP BY translation_id, book_id, chapter, verse
+      ORDER BY translation_id, book_id, chapter, verse
+    ''', args)
+        .map(
+          (row) => RecitationVerseMetric(
+            translationId: row['translation_id'] as String,
+            bookId: row['book_id'] as String,
+            chapter: row['chapter'] as int,
+            verse: row['verse'] as int,
+            sessions: row['sessions'] as int,
+            averageAccuracy: (row['average_accuracy'] as num).toDouble(),
+            totalSeconds: row['total_seconds'] as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Future<RecitationSummary> getRecitationSummary() async {
     final row = _database.select('''
       WITH RECURSIVE covered(translation_id, book_id, chapter, verse, end_verse) AS (
@@ -1073,6 +1207,9 @@ final class SqlitePlanRepository {
     revision: row['revision'] as int,
     contentLocked: (row['content_locked'] as int) == 1,
     paused: (row['status'] as String? ?? 'active') == 'paused',
+    recitationSessions: (row['recitation_sessions'] as int?) ?? 0,
+    averageAccuracy: (row['average_accuracy'] as num?)?.toDouble() ?? 0,
+    totalRecitationSeconds: (row['total_recitation_seconds'] as int?) ?? 0,
   );
 
   PlanTask _taskFromRow(Row row) => PlanTask(
@@ -1096,6 +1233,10 @@ final class SqlitePlanRepository {
     startVerse: row['start_verse'] as int,
     endVerse: row['end_verse'] as int,
     chapterVerseCount: row['chapter_verse_count'] as int,
+    planId: row['plan_id'] as int?,
+    startedAt: row['started_at'] == null
+        ? null
+        : DateTime.parse(row['started_at'] as String).toLocal(),
     mode: row['mode'] as String,
     durationSeconds: row['duration_seconds'] as int,
     correctCount: row['correct_count'] as int,

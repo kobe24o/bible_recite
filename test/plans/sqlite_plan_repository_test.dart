@@ -302,6 +302,18 @@ void main() {
     expect((await repository.listPlans()).single.paused, isTrue);
   });
 
+  test('resumed plans provide daily tasks again', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(_plan());
+    await repository.pausePlan(id);
+
+    await repository.resumePlan(id);
+
+    expect(await repository.dueTasks(DateTime(2026, 7, 15)), hasLength(1));
+    expect((await repository.listPlans()).single.paused, isFalse);
+  });
+
   test(
     'today includes overdue work but not completed tasks from older days',
     () async {

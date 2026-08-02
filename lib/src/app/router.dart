@@ -8,6 +8,7 @@ import '../features/scripture/presentation/passage_screen.dart';
 import '../features/scripture/presentation/scripture_browser_screen.dart';
 import '../features/scripture/presentation/scripture_sources_screen.dart';
 import '../features/statistics/presentation/statistics_screen.dart';
+import '../features/statistics/presentation/recitation_map_screen.dart';
 import 'responsive_shell.dart';
 
 final appRouter = GoRouter(
@@ -52,6 +53,17 @@ final appRouter = GoRouter(
       path: '/statistics',
       builder: (context, state) =>
           const ResponsiveShell(child: StatisticsScreen()),
+    ),
+    GoRoute(
+      path: '/statistics/map',
+      builder: (context, state) => ResponsiveShell(
+        child: RecitationMapScreen(
+          translationId: state.uri.queryParameters['translation'],
+          testament: state.uri.queryParameters['testament'],
+          bookId: state.uri.queryParameters['book'],
+          chapter: int.tryParse(state.uri.queryParameters['chapter'] ?? ''),
+        ),
+      ),
     ),
     GoRoute(
       path: '/about',

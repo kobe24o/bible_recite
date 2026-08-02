@@ -101,6 +101,9 @@ final class MemorizationPlan {
     required this.revision,
     required this.contentLocked,
     this.paused = false,
+    this.recitationSessions = 0,
+    this.averageAccuracy = 0,
+    this.totalRecitationSeconds = 0,
   });
 
   final int id;
@@ -120,6 +123,9 @@ final class MemorizationPlan {
   final int revision;
   final bool contentLocked;
   final bool paused;
+  final int recitationSessions;
+  final double averageAccuracy;
+  final int totalRecitationSeconds;
 }
 
 final class PlanTask {

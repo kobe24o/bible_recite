@@ -31,6 +31,7 @@ final class RecitationRequest {
     required this.units,
     this.reviewId,
     this.planTaskId,
+    this.planId,
     this.next,
   });
 
@@ -41,6 +42,7 @@ final class RecitationRequest {
   final List<VerseUnit> units;
   final int? reviewId;
   final int? planTaskId;
+  final int? planId;
   final RecitationRequest? next;
 }
 
@@ -194,7 +196,9 @@ class _RecitationPracticeScreenState
     final verseMode = widget.request.mode == RecitationMode.verse;
     final startUnit = verseMode ? units[_currentVerse] : units.first;
     final endUnit = verseMode ? units[_currentVerse] : units.last;
-    final elapsed = DateTime.now().difference(_startedAt ?? DateTime.now());
+    final startedAt = _startedAt ?? DateTime.now();
+    final elapsed = DateTime.now().difference(startedAt);
+    final scoredUnits = verseMode ? [units[_currentVerse]] : units;
     try {
       final repository = await ref.read(planRepositoryProvider.future);
       final resultId = await repository.saveRecitationResult(
@@ -213,6 +217,9 @@ class _RecitationPracticeScreenState
           reorderedCount: alignment.reorderedCount,
           accuracy: alignment.accuracy,
           chapterVerseCount: units.length,
+          planId: widget.request.planId,
+          startedAt: startedAt,
+          verseMetrics: _verseMetrics(scoredUnits, alignment.accuracy, elapsed),
           completedAt: DateTime.now(),
         ),
       );
@@ -266,6 +273,38 @@ class _RecitationPracticeScreenState
     } catch (error) {
       if (mounted) setState(() => _error = '保存背诵统计失败：$error');
     }
+  }
+
+  List<NewRecitationVerseMetric> _verseMetrics(
+    List<VerseUnit> units,
+    double accuracy,
+    Duration elapsed,
+  ) {
+    final totalWeight = units.fold<int>(
+      0,
+      (total, unit) => total + unit.text.runes.length,
+    );
+    var assignedSeconds = 0;
+    return [
+      for (var index = 0; index < units.length; index++)
+        NewRecitationVerseMetric(
+          bookId: units[index].start.osisBookId,
+          chapter: units[index].start.chapter,
+          verse: units[index].start.verse,
+          accuracy: accuracy,
+          durationSeconds: index == units.length - 1
+              ? elapsed.inSeconds - assignedSeconds
+              : (() {
+                  final seconds = totalWeight == 0
+                      ? 0
+                      : (elapsed.inSeconds *
+                            units[index].text.runes.length ~/
+                            totalWeight);
+                  assignedSeconds += seconds;
+                  return seconds;
+                })(),
+        ),
+    ];
   }
 
   Future<void> _celebrateCompletion() async {

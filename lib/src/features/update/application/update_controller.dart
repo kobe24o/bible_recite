@@ -35,8 +35,11 @@ final class UpdateController extends Notifier<UpdateStatus> {
       return;
     }
     _checking = true;
+    final statusBeforeCheck = state;
     final downloading = state is UpdateDownloading;
-    if (!downloading) _emit(const UpdateChecking());
+    if (!downloading && statusBeforeCheck is! ReadyToInstall) {
+      _emit(const UpdateChecking());
+    }
     try {
       final loader = ref.read(updateManifestLoaderProvider);
       final manifest = await loader();
@@ -49,6 +52,13 @@ final class UpdateController extends Notifier<UpdateStatus> {
         return;
       }
       _installedVersion = installed;
+      if (statusBeforeCheck is ReadyToInstall &&
+          statusBeforeCheck.manifest.version == manifest.version) {
+        // The staged APK was already verified. Rechecking the feed while the
+        // user opens About or resumes the app must keep that installer-ready
+        // file instead of downloading the identical version again.
+        return;
+      }
       if (!manifest.version.isNewerThan(installed)) {
         if (!downloading) _emit(UpdateCurrent(installedVersion: installed));
       } else if (downloading) {

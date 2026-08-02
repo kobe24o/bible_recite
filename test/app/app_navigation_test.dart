@@ -38,6 +38,21 @@ void main() {
     expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
   });
 
+  testWidgets(
+    'downloaded-update notification uses the registered installer action',
+    (tester) async {
+      var installs = 0;
+      UpdateAvailableNotification.setDownloadedTapHandler(() async {
+        installs++;
+      });
+
+      UpdateAvailableNotification.handlePayload('install-downloaded-update');
+      await tester.pump();
+
+      expect(installs, 1);
+    },
+  );
+
   setUp(() => appRouter.go('/'));
   tearDown(() => appRouter.go('/'));
 

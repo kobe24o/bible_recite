@@ -1,4 +1,5 @@
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -125,6 +126,48 @@ void main() {
     expect(
       reviews.every((review) => review.endVerse == review.startVerse),
       isTrue,
+    );
+  });
+
+  test('paused plan hides its matching Ebbinghaus review', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2026, 7, 16, 9);
+    await repository.updateEbbinghausSettings(
+      enabled: true,
+      passThreshold: 0.80,
+      now: base.subtract(const Duration(minutes: 1)),
+    );
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '暂停测试',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 16),
+        endDate: DateTime(2026, 7, 16),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 1,
+            endChapter: 3,
+            endVerse: 36,
+          ),
+        ],
+      ),
+    );
+    final resultId = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base),
+    );
+    await repository.processEbbinghausResult(resultId: resultId);
+
+    await repository.pausePlan(planId);
+
+    expect(
+      await repository.dueEbbinghausReviews(base.add(const Duration(days: 1))),
+      isEmpty,
     );
   });
 

@@ -45,6 +45,7 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
       mode: RecitationMode.continuous,
       units: passage.units,
       planTaskId: task.id,
+      planId: plan.id,
       next: next,
     );
   }
