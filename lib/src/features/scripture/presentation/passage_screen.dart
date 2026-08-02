@@ -18,6 +18,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     required this.bookId,
     required this.chapter,
     this.initialVerse,
+    this.initialEndVerse,
     this.reviewId,
     super.key,
   });
@@ -26,6 +27,7 @@ class PassageScreen extends ConsumerStatefulWidget {
   final String bookId;
   final int chapter;
   final int? initialVerse;
+  final int? initialEndVerse;
   final int? reviewId;
 
   @override
@@ -184,8 +186,9 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                 Expanded(
                   child: data.parallel == null
                       ? _SinglePassage(
-                        units: data.units,
-                        initialVerse: widget.initialVerse,
+                          units: data.units,
+                          initialVerse: widget.initialVerse,
+                          initialEndVerse: widget.initialEndVerse,
                           selecting: _selectingVerses,
                           selectedIndexes: _selectedVerseIndexes,
                           onLongPress: (index) => setState(() {
@@ -479,6 +482,7 @@ class _SinglePassage extends StatefulWidget {
   const _SinglePassage({
     required this.units,
     this.initialVerse,
+    this.initialEndVerse,
     required this.selecting,
     required this.selectedIndexes,
     required this.onLongPress,
@@ -486,6 +490,7 @@ class _SinglePassage extends StatefulWidget {
   });
   final List<VerseUnit> units;
   final int? initialVerse;
+  final int? initialEndVerse;
   final bool selecting;
   final Set<int> selectedIndexes;
   final ValueChanged<int> onLongPress;
@@ -501,21 +506,34 @@ class _SinglePassageState extends State<_SinglePassage> {
   @override
   void initState() {
     super.initState();
-    final initialIndex = widget.initialVerse == null ? 0 : widget.units.indexWhere(
-      (unit) => unit.start.verse <= widget.initialVerse! && unit.end.verse >= widget.initialVerse!,
+    final initialIndex = widget.initialVerse == null
+        ? 0
+        : widget.units.indexWhere(
+            (unit) =>
+                unit.start.verse <= widget.initialVerse! &&
+                unit.end.verse >= widget.initialVerse!,
+          );
+    _controller = ScrollController(
+      initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0,
     );
-    _controller = ScrollController(initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0);
     if (initialIndex > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_controller.hasClients) return;
-        final centered = (_controller.offset - MediaQuery.sizeOf(context).height / 2).clamp(0.0, _controller.position.maxScrollExtent);
+        final centered =
+            (_controller.offset - MediaQuery.sizeOf(context).height / 2).clamp(
+              0.0,
+              _controller.position.maxScrollExtent,
+            );
         _controller.jumpTo(centered);
       });
     }
   }
 
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -526,8 +544,12 @@ class _SinglePassageState extends State<_SinglePassage> {
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) => _VerseRow(
         unit: widget.units[index],
-        selected: widget.selectedIndexes.contains(index) ||
-            (widget.initialVerse != null && widget.units[index].start.verse <= widget.initialVerse! && widget.units[index].end.verse >= widget.initialVerse!),
+        selected:
+            widget.selectedIndexes.contains(index) ||
+            (widget.initialVerse != null &&
+                widget.units[index].start.verse <=
+                    (widget.initialEndVerse ?? widget.initialVerse!) &&
+                widget.units[index].end.verse >= widget.initialVerse!),
         selectable: widget.selecting,
         onLongPress: () => widget.onLongPress(index),
         onTap: () => widget.onTap(index),

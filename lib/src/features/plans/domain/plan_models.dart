@@ -100,6 +100,7 @@ final class MemorizationPlan {
     required this.externalId,
     required this.revision,
     required this.contentLocked,
+    this.paused = false,
   });
 
   final int id;
@@ -118,6 +119,7 @@ final class MemorizationPlan {
   final String? externalId;
   final int revision;
   final bool contentLocked;
+  final bool paused;
 }
 
 final class PlanTask {

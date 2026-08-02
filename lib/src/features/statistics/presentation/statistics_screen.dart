@@ -15,7 +15,6 @@ import '../../plans/data/sqlite_plan_repository.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
-import '../../scripture/application/scripture_providers.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 
@@ -27,7 +26,6 @@ class StatisticsScreen extends ConsumerStatefulWidget {
 }
 
 class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
-  bool _recentExpanded = false;
   final GlobalKey _shareQrKey = GlobalKey();
 
   static const _androidDownloadUrl =
@@ -40,7 +38,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     final repository = ref.watch(planRepositoryProvider);
-    final names = ref.watch(bookNameCatalogProvider);
     final locale = Localizations.localeOf(context);
     final chinese = locale.languageCode == 'zh';
     return Scaffold(
@@ -164,52 +161,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       itemBuilder: (context, index) =>
                           _AchievementCard(progress: data.achievements[index]),
                     ),
-                    const SizedBox(height: 24),
-                    Text(
-                      chinese ? '最近背诵' : 'Recent recitations',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    for (final result
-                        in _recentExpanded
-                            ? data.results
-                            : data.results.take(5))
-                      Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            child: Text('${(result.accuracy * 100).round()}'),
-                          ),
-                          title: Text(
-                            '${names.nameFor(result.bookId, locale)} '
-                            '${result.chapter}:${result.startVerse}–${result.endVerse}',
-                          ),
-                          subtitle: Text(
-                            chinese
-                                ? '${result.mode == 'verse' ? '逐节' : '连续'} · '
-                                      '${result.durationSeconds} 秒 · '
-                                      '${result.phoneticCorrectCount > 0 ? '同音修正 ${result.phoneticCorrectCount} · ' : ''}'
-                                      '错 ${result.incorrectCount} 漏 ${result.omittedCount} '
-                                      '错序 ${result.reorderedCount}'
-                                : '${result.mode} · ${result.durationSeconds}s',
-                          ),
-                        ),
-                      ),
-                    if (data.results.length > 5)
-                      TextButton.icon(
-                        key: const Key('toggle-recent-recitation'),
-                        onPressed: () =>
-                            setState(() => _recentExpanded = !_recentExpanded),
-                        icon: Icon(
-                          _recentExpanded
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                        ),
-                        label: Text(
-                          chinese
-                              ? (_recentExpanded ? '收起最近背诵' : '查看全部背诵')
-                              : (_recentExpanded ? 'Show less' : 'Show all'),
-                        ),
-                      ),
                   ],
                 ],
               ),

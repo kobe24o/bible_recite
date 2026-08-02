@@ -29,7 +29,7 @@ class PlansScreen extends ConsumerStatefulWidget {
   ConsumerState<PlansScreen> createState() => _PlansScreenState();
 }
 
-enum _PlanAction { export, edit, restart }
+enum _PlanAction { export, edit, restart, pause }
 
 class _PlansScreenState extends ConsumerState<PlansScreen> {
   static const _planJsonStoreChannel = MethodChannel(
@@ -37,6 +37,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   );
   int _revision = 0;
   bool _working = false;
+  CloudPlanManifest? _syncedManifest;
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +110,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             error: (error, _) => Text('无法加载预置计划：$error'),
             data: (manifest) => Column(
               children: [
-                for (final template in manifest.plans)
+                for (final template in (_syncedManifest ?? manifest).plans)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Card(
@@ -147,6 +148,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final completed =
         plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks;
     return Card(
+      color: plan.paused
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
       child: ListTile(
         leading: Icon(
           plan.sourceKind == PlanSourceKind.cloud
@@ -164,10 +168,20 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                   label: Text('云端'),
                 ),
               ),
+            if (plan.paused)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text('已暂停'),
+                ),
+              ),
           ],
         ),
         subtitle: Text(
-          locked
+          plan.paused
+              ? '已暂停：不再推送每日计划和艾宾浩斯复习'
+              : locked
               ? '${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
                     '${_translationLabel(plan.translationId)} · ${localizations.daysCount(plan.days)}'
               : '${plan.bookId} ${plan.startChapter}–${plan.endChapter}章 · '
@@ -187,6 +201,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       await _editPlan(plan);
                     case _PlanAction.restart:
                       await _restartPlan(plan);
+                    case _PlanAction.pause:
+                      await _pausePlan(plan);
                   }
                 },
           itemBuilder: (context) => [
@@ -197,6 +213,14 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 title: Text('导出计划 JSON'),
               ),
             ),
+            if (!plan.paused && !completed)
+              const PopupMenuItem(
+                value: _PlanAction.pause,
+                child: ListTile(
+                  leading: Icon(Icons.pause_circle_outline_rounded),
+                  title: Text('暂停计划'),
+                ),
+              ),
             const PopupMenuItem(
               value: _PlanAction.edit,
               child: ListTile(
@@ -223,6 +247,13 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     await _runSave(() async {
       final repository = await ref.read(planRepositoryProvider.future);
       await repository.restartPlan(plan.id);
+    });
+  }
+
+  Future<void> _pausePlan(MemorizationPlan plan) async {
+    await _runSave(() async {
+      final repository = await ref.read(planRepositoryProvider.future);
+      await repository.pausePlan(plan.id);
     });
   }
 
@@ -363,7 +394,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
                               context.push(
-                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}',
+                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}&endVerse=${task.endVerse}',
                               );
                             },
                             child: const Text('阅读'),
@@ -705,27 +736,13 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         'cloud_plan_source_url',
         defaultCloudPlanSourceUrl,
       );
-      final uri = Uri.parse(source);
       final manifest = await ref
           .read(cloudPlanFeedClientProvider)
           .fetchFirst(cloudPlanSourceCandidates(source));
-      final result = await ref
-          .read(cloudPlanImporterProvider)
-          .importPushed(
-            repository: repository,
-            manifest: manifest,
-            sourceUrl: uri.toString(),
-            today: _today(),
-          );
       if (!mounted) return;
-      setState(() => _revision++);
+      setState(() => _syncedManifest = manifest);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '同步完成：新增 ${result.inserted}，更新 ${result.updated}，'
-            '无需更新 ${result.unchanged}',
-          ),
-        ),
+        SnackBar(content: Text('同步完成：${manifest.plans.length} 个计划已更新到预置计划')),
       );
     } catch (error) {
       if (mounted) {

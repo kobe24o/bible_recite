@@ -26,6 +26,7 @@ final class SqlitePlanRepository {
         external_id TEXT,
         revision INTEGER NOT NULL DEFAULT 0,
         content_locked INTEGER NOT NULL DEFAULT 0 CHECK(content_locked IN (0, 1)),
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
         created_at TEXT NOT NULL
       )
     ''');
@@ -158,6 +159,11 @@ final class SqlitePlanRepository {
     if (!columns.contains('content_locked')) {
       _database.execute(
         'ALTER TABLE memorization_plan ADD COLUMN content_locked INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!columns.contains('status')) {
+      _database.execute(
+        "ALTER TABLE memorization_plan ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
       );
     }
     final taskColumns = _database
@@ -439,12 +445,14 @@ final class SqlitePlanRepository {
     return _database
         .select(
           includeCompleted
-              ? '''SELECT * FROM plan_task
-                WHERE (completed = 0 AND due_date <= ?)
-                   OR (completed = 1 AND due_date = ?)
+              ? '''SELECT t.* FROM plan_task t
+                JOIN memorization_plan p ON p.id = t.plan_id
+                WHERE p.status = 'active' AND ((t.completed = 0 AND t.due_date <= ?)
+                   OR (t.completed = 1 AND t.due_date = ?))
                 ORDER BY completed, due_date, id'''
-              : '''SELECT * FROM plan_task
-                WHERE completed = 0 AND due_date <= ?
+              : '''SELECT t.* FROM plan_task t
+                JOIN memorization_plan p ON p.id = t.plan_id
+                WHERE p.status = 'active' AND t.completed = 0 AND t.due_date <= ?
                 ORDER BY due_date, id''',
           includeCompleted ? [value, value] : [value],
         )
@@ -515,6 +523,27 @@ final class SqlitePlanRepository {
 
   Future<void> deletePlan(int planId) async {
     _database.execute('DELETE FROM memorization_plan WHERE id = ?', [planId]);
+  }
+
+  Future<void> pausePlan(int planId) async {
+    _database.execute(
+      "UPDATE memorization_plan SET status = 'paused' WHERE id = ?",
+      [planId],
+    );
+    _database.execute(
+      '''
+      UPDATE ebbinghaus_cycle SET status = 'paused'
+      WHERE status = 'active' AND EXISTS (
+        SELECT 1 FROM plan_task t WHERE t.plan_id = ?
+          AND t.book_id = ebbinghaus_cycle.book_id
+          AND t.start_chapter = ebbinghaus_cycle.start_chapter
+          AND t.start_verse = ebbinghaus_cycle.start_verse
+          AND t.end_chapter = ebbinghaus_cycle.end_chapter
+          AND t.end_verse = ebbinghaus_cycle.end_verse
+      )
+    ''',
+      [planId],
+    );
   }
 
   Future<void> restartPlan(int planId, {DateTime? startDate}) async {
@@ -996,8 +1025,17 @@ final class SqlitePlanRepository {
 
   Future<RecitationSummary> getRecitationSummary() async {
     final row = _database.select('''
+      WITH RECURSIVE covered(translation_id, book_id, chapter, verse, end_verse) AS (
+        SELECT translation_id, book_id, chapter, start_verse, end_verse
+        FROM recitation_result
+        UNION
+        SELECT translation_id, book_id, chapter, verse + 1, end_verse
+        FROM covered WHERE verse < end_verse
+      )
       SELECT COUNT(*) AS total_sessions,
-        COALESCE(SUM(end_verse - start_verse + 1), 0) AS total_verses,
+        (SELECT COUNT(*) FROM (
+          SELECT DISTINCT translation_id, book_id, chapter, verse FROM covered
+        )) AS total_verses,
         COALESCE(SUM(duration_seconds), 0) AS total_seconds,
         COALESCE(AVG(accuracy), 0) AS average_accuracy
       FROM recitation_result
@@ -1034,6 +1072,7 @@ final class SqlitePlanRepository {
     externalId: row['external_id'] as String?,
     revision: row['revision'] as int,
     contentLocked: (row['content_locked'] as int) == 1,
+    paused: (row['status'] as String? ?? 'active') == 'paused',
   );
 
   PlanTask _taskFromRow(Row row) => PlanTask(

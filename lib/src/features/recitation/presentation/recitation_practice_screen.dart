@@ -73,7 +73,7 @@ class _RecitationPracticeScreenState
   bool _bluetoothInput = false;
   bool _recording = false;
   bool _preparing = false;
-  bool _revealed = false;
+  bool _revealed = true;
   bool _finished = false;
   bool _celebrating = false;
   RecitationAlignment? _finishedAlignment;
@@ -291,7 +291,7 @@ class _RecitationPracticeScreenState
       _transcript = '';
       _finished = false;
       _finishedAlignment = null;
-      _revealed = false;
+      _revealed = true;
       _error = null;
     });
   }
@@ -309,6 +309,7 @@ class _RecitationPracticeScreenState
     final units = _presentUnits;
     final alignment = _alignment;
     final verseMode = widget.request.mode == RecitationMode.verse;
+    final displayedUnits = verseMode ? [units[_currentVerse]] : units;
     final currentReference = verseMode
         ? _referenceFor(units[_currentVerse], bookNames, locale)
         : '${_referenceFor(units.first, bookNames, locale)} – '
@@ -359,14 +360,14 @@ class _RecitationPracticeScreenState
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: _revealed
-                      ? units.length == 1
+                      ? displayedUnits.length == 1
                             ? Text(
                                 _target,
                                 style: Theme.of(context).textTheme.bodyLarge,
                               )
                             : Column(
                                 children: [
-                                  for (final unit in units) ...[
+                                  for (final unit in displayedUnits) ...[
                                     Container(
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(12),
@@ -405,7 +406,7 @@ class _RecitationPracticeScreenState
                                         ],
                                       ),
                                     ),
-                                    if (unit != units.last)
+                                    if (unit != displayedUnits.last)
                                       const SizedBox(height: 10),
                                   ],
                                 ],

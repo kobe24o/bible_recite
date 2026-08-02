@@ -46,6 +46,7 @@ void main() {
     expect(find.text('第 1 / 2 节'), findsOneWidget);
     expect(find.text('当前背诵：约翰福音 3:16'), findsOneWidget);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('record-button')));
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
     recognizer.emit(const RecognitionPartial('神爱'));
@@ -95,8 +96,6 @@ void main() {
 
     expect(find.text('连续背诵 · 2 节'), findsOneWidget);
     expect(find.byKey(const Key('next-verse-button')), findsNothing);
-    await tester.tap(find.text('显示／隐藏经文'));
-    await tester.pump();
     expect(find.text('约翰福音 3:16'), findsWidgets);
     expect(find.text('约翰福音 3:17'), findsWidgets);
   });

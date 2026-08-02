@@ -29,6 +29,9 @@ final appRouter = GoRouter(
           bookId: state.pathParameters['book']!,
           chapter: int.parse(state.pathParameters['chapter']!),
           initialVerse: int.tryParse(state.uri.queryParameters['verse'] ?? ''),
+          initialEndVerse: int.tryParse(
+            state.uri.queryParameters['endVerse'] ?? '',
+          ),
           reviewId: state.extra is int ? state.extra! as int : null,
         ),
       ),

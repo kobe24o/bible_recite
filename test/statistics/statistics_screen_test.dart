@@ -36,7 +36,7 @@ void main() {
     expect(settings.passThreshold, 0.85);
   });
 
-  testWidgets('shows summary cards and recent recitation results', (
+  testWidgets('shows summary cards without recent recitation results', (
     tester,
   ) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
@@ -62,7 +62,7 @@ void main() {
 
     expect(find.text('背诵 1 次'), findsOneWidget);
     expect(find.text('平均正确率 80%'), findsOneWidget);
-    expect(find.textContaining('约翰福音 3:16–17'), findsOneWidget);
+    expect(find.text('最近背诵'), findsNothing);
     expect(find.text('我的成就'), findsOneWidget);
     expect(find.text('初次开口'), findsOneWidget);
     expect(
