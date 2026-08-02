@@ -62,41 +62,50 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(_title()),
-      actions: [
-        if (widget.bookId != null && widget.chapter == null)
-          PopupMenuButton<_MapSort>(
-            icon: const Icon(Icons.sort_rounded),
-            onSelected: (value) => setState(() => _chapterSort = value),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: _MapSort.defaultOrder,
-                child: Text('恢复默认排序'),
-              ),
-              PopupMenuItem(value: _MapSort.accuracy, child: Text('按准确率排序')),
-              PopupMenuItem(value: _MapSort.duration, child: Text('按时长排序')),
-              PopupMenuItem(value: _MapSort.completion, child: Text('按完成率排序')),
-            ],
-          ),
-      ],
-    ),
-    body: FutureBuilder<_MapData>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final data = snapshot.data!;
-        if (data.metrics.isEmpty) {
-          return const Center(child: Text('完成一次背诵后，这里会生成你的背诵地图。'));
-        }
-        if (widget.testament == null) return _testaments(context, data);
-        if (widget.bookId == null) return _books(context, data);
-        if (widget.chapter == null) return _chapters(context, data);
-        return _verses(context, data);
-      },
+  Widget build(BuildContext context) => PopScope(
+    canPop: context.canPop(),
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) context.go('/statistics');
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: Text(_title()),
+        actions: [
+          if (widget.bookId != null && widget.chapter == null)
+            PopupMenuButton<_MapSort>(
+              icon: const Icon(Icons.sort_rounded),
+              onSelected: (value) => setState(() => _chapterSort = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: _MapSort.defaultOrder,
+                  child: Text('恢复默认排序'),
+                ),
+                PopupMenuItem(value: _MapSort.accuracy, child: Text('按准确率排序')),
+                PopupMenuItem(value: _MapSort.duration, child: Text('按时长排序')),
+                PopupMenuItem(
+                  value: _MapSort.completion,
+                  child: Text('按完成率排序'),
+                ),
+              ],
+            ),
+        ],
+      ),
+      body: FutureBuilder<_MapData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final data = snapshot.data!;
+          if (data.metrics.isEmpty) {
+            return const Center(child: Text('完成一次背诵后，这里会生成你的背诵地图。'));
+          }
+          if (widget.testament == null) return _testaments(context, data);
+          if (widget.bookId == null) return _books(context, data);
+          if (widget.chapter == null) return _chapters(context, data);
+          return _verses(context, data);
+        },
+      ),
     ),
   );
 
@@ -149,7 +158,7 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
         return _MapRow(
           icon: Icons.book_outlined,
           title:
-              '${book.name} · ${names.nameFor(book.osisId, const Locale('en'))}',
+              '${names.nameFor(book.osisId, const Locale('zh', 'CN'))} · ${names.nameFor(book.osisId, const Locale('en'))}',
           summary: data.summaryForBook(book),
           total: book.chapterCount,
           onTap: () => context.push(

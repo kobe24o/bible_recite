@@ -91,22 +91,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 12),
                   Card(
                     child: ListTile(
-                      key: const Key('about-open'),
-                      leading: const Icon(Icons.info_outline_rounded),
-                      title: Text(localizations.aboutTitle),
-                      onTap: () => context.go('/about'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
                       key: const Key('recitation-timeline-open'),
                       leading: const Icon(Icons.timeline_rounded),
                       title: Text(chinese ? '学习轨迹' : 'Learning timeline'),
                       subtitle: Text(
                         chinese ? '按周、月、季、年回顾背诵' : 'Review practice over time',
                       ),
-                      onTap: () => context.go('/statistics/timeline'),
+                      onTap: () => context.push('/statistics/timeline'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -120,7 +111,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ? '按卷、章、节查看进度和质量'
                             : 'Explore progress by book, chapter and verse',
                       ),
-                      onTap: () => context.go('/statistics/map'),
+                      onTap: () => context.push('/statistics/map'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -133,6 +124,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         chinese ? '生成下载二维码' : 'Generate a download QR code',
                       ),
                       onTap: _showSharePlatforms,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      key: const Key('about-open'),
+                      leading: const Icon(Icons.info_outline_rounded),
+                      title: Text(localizations.aboutTitle),
+                      onTap: () => context.go('/about'),
                     ),
                   ),
                   const SizedBox(height: 24),
