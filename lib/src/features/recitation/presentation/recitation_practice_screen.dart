@@ -303,6 +303,7 @@ class _RecitationPracticeScreenState
                   assignedSeconds += seconds;
                   return seconds;
                 })(),
+          characterCount: units[index].text.runes.length,
         ),
     ];
   }

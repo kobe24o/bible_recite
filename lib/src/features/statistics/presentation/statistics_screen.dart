@@ -100,6 +100,18 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 12),
                   Card(
                     child: ListTile(
+                      key: const Key('recitation-timeline-open'),
+                      leading: const Icon(Icons.timeline_rounded),
+                      title: Text(chinese ? '学习轨迹' : 'Learning timeline'),
+                      subtitle: Text(
+                        chinese ? '按周、月、季、年回顾背诵' : 'Review practice over time',
+                      ),
+                      onTap: () => context.go('/statistics/timeline'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
                       key: const Key('recitation-map-open'),
                       leading: const Icon(Icons.map_outlined),
                       title: Text(chinese ? '背诵地图' : 'Recitation map'),

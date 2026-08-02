@@ -9,6 +9,7 @@ import '../features/scripture/presentation/scripture_browser_screen.dart';
 import '../features/scripture/presentation/scripture_sources_screen.dart';
 import '../features/statistics/presentation/statistics_screen.dart';
 import '../features/statistics/presentation/recitation_map_screen.dart';
+import '../features/statistics/presentation/recitation_timeline_screen.dart';
 import 'responsive_shell.dart';
 
 final appRouter = GoRouter(
@@ -64,6 +65,11 @@ final appRouter = GoRouter(
           chapter: int.tryParse(state.uri.queryParameters['chapter'] ?? ''),
         ),
       ),
+    ),
+    GoRoute(
+      path: '/statistics/timeline',
+      builder: (context, state) =>
+          const ResponsiveShell(child: RecitationTimelineScreen()),
     ),
     GoRoute(
       path: '/about',

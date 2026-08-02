@@ -49,6 +49,7 @@ final class NewRecitationVerseMetric {
     required this.verse,
     required this.accuracy,
     required this.durationSeconds,
+    this.characterCount = 0,
   });
 
   final String bookId;
@@ -56,6 +57,7 @@ final class NewRecitationVerseMetric {
   final int verse;
   final double accuracy;
   final int durationSeconds;
+  final int characterCount;
 }
 
 final class RecitationResult extends NewRecitationResult {
@@ -104,6 +106,7 @@ final class RecitationVerseMetric {
     required this.sessions,
     required this.averageAccuracy,
     required this.totalSeconds,
+    required this.characterCount,
   });
 
   final String translationId;
@@ -113,4 +116,20 @@ final class RecitationVerseMetric {
   final int sessions;
   final double averageAccuracy;
   final int totalSeconds;
+  final int characterCount;
+}
+
+final class RecitationTimelinePoint {
+  const RecitationTimelinePoint(
+    this.label,
+    this.verses,
+    this.characters,
+    this.accuracy,
+    this.seconds,
+  );
+  final String label;
+  final int verses;
+  final int characters;
+  final double accuracy;
+  final int seconds;
 }

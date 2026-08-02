@@ -55,6 +55,7 @@ final class SqlitePlanRepository {
         chapter_verse_count INTEGER NOT NULL DEFAULT 0,
         mode TEXT NOT NULL,
         duration_seconds INTEGER NOT NULL,
+        character_count INTEGER NOT NULL DEFAULT 0,
         correct_count INTEGER NOT NULL,
         phonetic_correct_count INTEGER NOT NULL DEFAULT 0,
         incorrect_count INTEGER NOT NULL,
@@ -93,6 +94,15 @@ final class SqlitePlanRepository {
       '''CREATE INDEX IF NOT EXISTS idx_recitation_verse_metric_scope
       ON recitation_verse_metric(plan_id, translation_id, book_id, chapter, verse)''',
     );
+    final metricColumns = _database
+        .select('PRAGMA table_info(recitation_verse_metric)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!metricColumns.contains('character_count')) {
+      _database.execute(
+        'ALTER TABLE recitation_verse_metric ADD COLUMN character_count INTEGER NOT NULL DEFAULT 0',
+      );
+    }
     _database.execute('''
       CREATE TABLE IF NOT EXISTS app_setting (
         setting_key TEXT PRIMARY KEY,
@@ -681,8 +691,8 @@ final class SqlitePlanRepository {
       _database.execute(
         '''INSERT INTO recitation_verse_metric
         (recitation_result_id, plan_id, translation_id, book_id, chapter,
-         verse, accuracy, duration_seconds, started_at, completed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+         verse, accuracy, duration_seconds, character_count, started_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         [
           resultId,
           result.planId,
@@ -692,6 +702,7 @@ final class SqlitePlanRepository {
           metric.verse,
           metric.accuracy,
           metric.durationSeconds,
+          metric.characterCount,
           result.startedAt?.toUtc().toIso8601String(),
           result.completedAt.toUtc().toIso8601String(),
         ],
@@ -1138,7 +1149,7 @@ final class SqlitePlanRepository {
         .select('''
       SELECT translation_id, book_id, chapter, verse,
         COUNT(*) AS sessions, AVG(accuracy) AS average_accuracy,
-        SUM(duration_seconds) AS total_seconds
+        SUM(duration_seconds) AS total_seconds, SUM(character_count) AS character_count
       FROM recitation_verse_metric $where
       GROUP BY translation_id, book_id, chapter, verse
       ORDER BY translation_id, book_id, chapter, verse
@@ -1152,6 +1163,34 @@ final class SqlitePlanRepository {
             sessions: row['sessions'] as int,
             averageAccuracy: (row['average_accuracy'] as num).toDouble(),
             totalSeconds: row['total_seconds'] as int,
+            characterCount: row['character_count'] as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<RecitationTimelinePoint>> listRecitationTimeline(
+    String period,
+  ) async {
+    final bucket = switch (period) {
+      'week' => "strftime('%Y-W%W', completed_at, 'localtime')",
+      'month' => "strftime('%Y-%m', completed_at, 'localtime')",
+      'quarter' =>
+        "strftime('%Y', completed_at, 'localtime') || '-Q' || ((cast(strftime('%m', completed_at, 'localtime') as integer) - 1) / 3 + 1)",
+      _ => "strftime('%Y', completed_at, 'localtime')",
+    };
+    return _database
+        .select('''SELECT $bucket AS label, COUNT(*) AS verses,
+      SUM(character_count) AS characters, AVG(accuracy) AS accuracy,
+      SUM(duration_seconds) AS seconds FROM recitation_verse_metric
+      GROUP BY label ORDER BY label''')
+        .map(
+          (row) => RecitationTimelinePoint(
+            row['label'] as String,
+            row['verses'] as int,
+            row['characters'] as int,
+            (row['accuracy'] as num).toDouble(),
+            row['seconds'] as int,
           ),
         )
         .toList(growable: false);
