@@ -7,6 +7,7 @@ import '../../plans/application/plan_providers.dart';
 import '../../plans/domain/plan_models.dart';
 import '../application/scripture_providers.dart';
 import '../domain/scripture_models.dart';
+import '../domain/book_name_catalog.dart';
 import '../domain/scripture_repository.dart';
 import '../domain/scripture_search.dart';
 import 'book_grid.dart';
@@ -204,43 +205,60 @@ class _ScriptureBrowserScreenState
         query: trimmed,
         translationId: translation,
         scripture: scripture,
-        onOpen: (unit) {
-          Navigator.pop(context);
-          this.context.push(
+        bookNames: ref.read(bookNameCatalogProvider),
+        onOpen: (unit) async {
+          await this.context.push(
             '/bible/$translation/${unit.start.osisBookId}/${unit.start.chapter}?verse=${unit.start.verse}&endVerse=${unit.end.verse}',
           );
         },
-        onAdd: _addSearchVerseToPlan,
+        onAdd: _addSearchVersesToPlan,
       ),
     );
   }
 
-  Future<void> _addSearchVerseToPlan(VerseUnit unit) async {
+  Future<void> _addSearchVersesToPlan(List<VerseUnit> units) async {
+    if (units.isEmpty) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            const ListTile(title: Text('加入背诵计划')),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline_rounded),
+              title: const Text('新建计划'),
+              onTap: () => Navigator.pop(context, 'new'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add_rounded),
+              title: const Text('加入已有计划'),
+              onTap: () => Navigator.pop(context, 'existing'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == 'existing') return _appendSearchVersesToPlan(units);
+    if (action != 'new') return;
     final today = DateTime.now();
     final start = DateTime(today.year, today.month, today.day);
     final catalog = ref.read(bookNameCatalogProvider);
-    final title =
-        '${catalog.chapterLabel(unit.start.osisBookId, unit.start.chapter, Localizations.localeOf(context))} 背诵计划';
+    final first = units.first;
+    final title = units.length == 1
+        ? '${catalog.chapterLabel(first.start.osisBookId, first.start.chapter, Localizations.localeOf(context))} 背诵计划'
+        : '搜索经文背诵计划';
     final repository = await ref.read(planRepositoryProvider.future);
     await repository.createPlan(
       NewMemorizationPlan(
         title: title,
-        translationId: unit.translationId,
-        bookId: unit.start.osisBookId,
-        startChapter: unit.start.chapter,
-        endChapter: unit.end.chapter,
+        translationId: first.translationId,
+        bookId: first.start.osisBookId,
+        startChapter: first.start.chapter,
+        endChapter: first.end.chapter,
         startDate: start,
-        endDate: start,
-        tasks: [
-          NewPlanTask(
-            dayIndex: 0,
-            bookId: unit.start.osisBookId,
-            startChapter: unit.start.chapter,
-            startVerse: unit.start.verse,
-            endChapter: unit.end.chapter,
-            endVerse: unit.end.verse,
-          ),
-        ],
+        endDate: start.add(Duration(days: units.length - 1)),
+        tasks: _searchTasks(units),
       ),
     );
     if (mounted) {
@@ -249,26 +267,84 @@ class _ScriptureBrowserScreenState
       ).showSnackBar(const SnackBar(content: Text('已新建背诵计划')));
     }
   }
+
+  Future<void> _appendSearchVersesToPlan(List<VerseUnit> units) async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    final plans = (await repository.listPlans())
+        .where((plan) => !plan.contentLocked)
+        .toList(growable: false);
+    if (!mounted) return;
+    final plan = await showModalBottomSheet<MemorizationPlan>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('选择要加入的背诵计划')),
+            for (final item in plans)
+              ListTile(
+                title: Text(item.title),
+                subtitle: Text('目前 ${item.totalTasks} 段经文'),
+                onTap: () => Navigator.pop(context, item),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (plan == null) return;
+    await repository.appendDailyTasks(plan, _searchTasks(units));
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已加入“${plan.title}”')));
+    }
+  }
+
+  List<NewPlanTask> _searchTasks(List<VerseUnit> units) => [
+    for (var index = 0; index < units.length; index++)
+      NewPlanTask(
+        dayIndex: index,
+        bookId: units[index].start.osisBookId,
+        startChapter: units[index].start.chapter,
+        startVerse: units[index].start.verse,
+        endChapter: units[index].end.chapter,
+        endVerse: units[index].end.verse,
+      ),
+  ];
 }
 
-class _SearchResultsSheet extends StatelessWidget {
+class _SearchResultsSheet extends StatefulWidget {
   const _SearchResultsSheet({
     required this.query,
     required this.translationId,
     required this.scripture,
     required this.onOpen,
+    required this.bookNames,
     required this.onAdd,
   });
   final String query;
   final String translationId;
   final ScriptureRepository scripture;
-  final ValueChanged<VerseUnit> onOpen;
-  final Future<void> Function(VerseUnit) onAdd;
+  final Future<void> Function(VerseUnit) onOpen;
+  final Future<void> Function(List<VerseUnit>) onAdd;
+  final BookNameCatalog bookNames;
+  @override
+  State<_SearchResultsSheet> createState() => _SearchResultsSheetState();
+}
+
+class _SearchResultsSheetState extends State<_SearchResultsSheet> {
+  final Set<int> _selected = <int>{};
+  bool get _selecting => _selected.isNotEmpty;
+
   @override
   Widget build(BuildContext context) => SizedBox(
     height: MediaQuery.sizeOf(context).height * .72,
     child: FutureBuilder<List<VerseUnit>>(
-      future: scripture.searchExactVerses(translationId, query),
+      future: widget.scripture.searchExactVerses(
+        widget.translationId,
+        widget.query,
+      ),
       builder: (context, snapshot) {
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
@@ -278,24 +354,43 @@ class _SearchResultsSheet extends StatelessWidget {
           itemBuilder: (context, index) {
             if (index == 0)
               return ListTile(
-                title: Text('“$query” · ${units.length} 条结果'),
-                subtitle: const Text('点击阅读定位；长按加入计划'),
+                title: Text(
+                  _selecting
+                      ? '已选择 ${_selected.length} 节'
+                      : '“${widget.query}” · ${units.length} 条结果',
+                ),
+                subtitle: Text(_selecting ? '点击结果可继续选择' : '点击阅读定位；长按多选'),
+                trailing: _selecting
+                    ? FilledButton.icon(
+                        onPressed: () => widget.onAdd([
+                          for (final index in _selected) units[index],
+                        ]),
+                        icon: const Icon(Icons.playlist_add_rounded),
+                        label: const Text('加入背诵计划'),
+                      )
+                    : null,
               );
             final unit = units[index - 1];
             return ListTile(
+              selected: _selected.contains(index - 1),
               title: Text(
-                '${unit.start.osisBookId} ${unit.start.chapter}:${unit.start.verse}',
+                '${widget.bookNames.nameFor(unit.start.osisBookId, const Locale('zh', 'CN'))} ${unit.start.chapter}:${unit.start.verse}',
               ),
               subtitle: Text(
                 unit.text,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              onTap: () => onOpen(unit),
-              onLongPress: () async {
-                await onAdd(unit);
-                if (context.mounted) Navigator.pop(context);
+              onTap: () {
+                if (!_selecting) {
+                  widget.onOpen(unit);
+                  return;
+                }
+                setState(() {
+                  if (!_selected.add(index - 1)) _selected.remove(index - 1);
+                });
               },
+              onLongPress: () => setState(() => _selected.add(index - 1)),
             );
           },
         );

@@ -448,6 +448,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                                   ),
                                 ),
                               );
+                              if (mounted) setState(() => _revision++);
                             },
                             child: const Text('背诵'),
                           ),
