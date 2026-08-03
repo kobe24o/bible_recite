@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +31,48 @@ class _ScriptureBrowserScreenState
   BibleBook? _book;
   int? _chapter;
   final TextEditingController _searchController = TextEditingController();
+  List<String> _recentSearches = const [];
+  bool _showRecentSearches = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentSearches();
+  }
+
+  Future<void> _loadRecentSearches() async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    try {
+      final raw = await repository.getSetting(
+        'recent_scripture_searches',
+        '[]',
+      );
+      final values = jsonDecode(raw);
+      if (values is! List || !mounted) return;
+      setState(
+        () => _recentSearches = [
+          for (final value in values)
+            if (value is String && value.trim().isNotEmpty) value,
+        ].take(5).toList(growable: false),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _rememberSearch(String query) async {
+    final searches = [
+      query,
+      ..._recentSearches.where((item) => item != query),
+    ].take(5).toList(growable: false);
+    setState(() {
+      _recentSearches = searches;
+      _showRecentSearches = false;
+    });
+    final repository = await ref.read(planRepositoryProvider.future);
+    await repository.setSetting(
+      'recent_scripture_searches',
+      jsonEncode(searches),
+    );
+  }
 
   @override
   void dispose() {
@@ -179,11 +223,42 @@ class _ScriptureBrowserScreenState
         ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: SearchBar(
-            controller: _searchController,
-            hintText: '搜索经文（精准匹配）',
-            leading: const Icon(Icons.search_rounded),
-            onSubmitted: (query) => _showSearchResults(query),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchBar(
+                controller: _searchController,
+                hintText: '搜索经文（精准匹配）',
+                leading: const Icon(Icons.search_rounded),
+                onTap: () => setState(() => _showRecentSearches = true),
+                onSubmitted: (query) => _showSearchResults(query),
+              ),
+              if (_showRecentSearches && _recentSearches.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '最近搜索',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final query in _recentSearches)
+                      ActionChip(
+                        label: Text(query),
+                        onPressed: () {
+                          _searchController.text = query;
+                          _showSearchResults(query);
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -193,6 +268,7 @@ class _ScriptureBrowserScreenState
   Future<void> _showSearchResults(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
+    await _rememberSearch(trimmed);
     final scripture = await ref.read(scriptureRepositoryProvider.future);
     final translations = await scripture.listTranslations();
     final translation = _translationId ?? translations.first.id;
@@ -338,63 +414,94 @@ class _SearchResultsSheetState extends State<_SearchResultsSheet> {
   bool get _selecting => _selected.isNotEmpty;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: MediaQuery.sizeOf(context).height * .72,
-    child: FutureBuilder<List<VerseUnit>>(
-      future: widget.scripture.searchExactVerses(
-        widget.translationId,
-        widget.query,
-      ),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData)
-          return const Center(child: CircularProgressIndicator());
-        final units = snapshot.data!;
-        return ListView.builder(
-          itemCount: units.length + 1,
-          itemBuilder: (context, index) {
-            if (index == 0)
-              return ListTile(
-                title: Text(
-                  _selecting
-                      ? '已选择 ${_selected.length} 节'
-                      : '“${widget.query}” · ${units.length} 条结果',
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_selecting,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) setState(_selected.clear);
+    },
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * .72,
+      child: FutureBuilder<List<VerseUnit>>(
+        future: widget.scripture.searchExactVerses(
+          widget.translationId,
+          widget.query,
+        ),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData)
+            return const Center(child: CircularProgressIndicator());
+          final units = snapshot.data!;
+          return Column(
+            children: [
+              Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: ListTile(
+                  title: Text(
+                    _selecting
+                        ? '已选择 ${_selected.length} 节'
+                        : '“${widget.query}” · ${units.length} 条结果',
+                  ),
+                  subtitle: Text(
+                    _selecting ? '点击结果可继续选择；返回取消多选' : '点击阅读定位；长按多选',
+                  ),
+                  trailing: _selecting
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: '取消选择',
+                              onPressed: () => setState(_selected.clear),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                            FilledButton.icon(
+                              onPressed: () => widget.onAdd([
+                                for (
+                                  var index = 0;
+                                  index < units.length;
+                                  index++
+                                )
+                                  if (_selected.contains(index)) units[index],
+                              ]),
+                              icon: const Icon(Icons.playlist_add_rounded),
+                              label: const Text('加入背诵计划'),
+                            ),
+                          ],
+                        )
+                      : null,
                 ),
-                subtitle: Text(_selecting ? '点击结果可继续选择' : '点击阅读定位；长按多选'),
-                trailing: _selecting
-                    ? FilledButton.icon(
-                        onPressed: () => widget.onAdd([
-                          for (final index in _selected) units[index],
-                        ]),
-                        icon: const Icon(Icons.playlist_add_rounded),
-                        label: const Text('加入背诵计划'),
-                      )
-                    : null,
-              );
-            final unit = units[index - 1];
-            return ListTile(
-              selected: _selected.contains(index - 1),
-              title: Text(
-                '${widget.bookNames.nameFor(unit.start.osisBookId, const Locale('zh', 'CN'))} ${unit.start.chapter}:${unit.start.verse}',
               ),
-              subtitle: Text(
-                unit.text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Expanded(
+                child: ListView.builder(
+                  itemCount: units.length,
+                  itemBuilder: (context, index) {
+                    final unit = units[index];
+                    return ListTile(
+                      selected: _selected.contains(index),
+                      title: Text(
+                        '${widget.bookNames.nameFor(unit.start.osisBookId, const Locale('zh', 'CN'))} ${unit.start.chapter}:${unit.start.verse}',
+                      ),
+                      subtitle: Text(
+                        unit.text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () {
+                        if (!_selecting) {
+                          widget.onOpen(unit);
+                          return;
+                        }
+                        setState(() {
+                          if (!_selected.add(index)) _selected.remove(index);
+                        });
+                      },
+                      onLongPress: () => setState(() => _selected.add(index)),
+                    );
+                  },
+                ),
               ),
-              onTap: () {
-                if (!_selecting) {
-                  widget.onOpen(unit);
-                  return;
-                }
-                setState(() {
-                  if (!_selected.add(index - 1)) _selected.remove(index - 1);
-                });
-              },
-              onLongPress: () => setState(() => _selected.add(index - 1)),
-            );
-          },
-        );
-      },
+            ],
+          );
+        },
+      ),
     ),
   );
 }

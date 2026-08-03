@@ -88,7 +88,9 @@ jobs:
         run: |
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           test -n "$version"
-          apk_name="BibleRecite-${version}.apk"
+          version_name="${version%%+*}"
+          build_number="${version##*+}"
+          apk_name="BibleRecite-${version_name}-build-${build_number}.apk"
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk "dist/$apk_name"
           (cd dist && sha256sum "$apk_name" > "$apk_name.sha256")
@@ -231,7 +233,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
-          tag="build-${version}-${GITHUB_RUN_NUMBER}"
+          version_name="${version%%+*}"
+          build_number="${version##*+}"
+          tag="build-${version_name}-build-${build_number}-${GITHUB_RUN_NUMBER}"
           # The release step also attaches BibleRecite-latest.apk.  The update
           # manifest must keep referring to the immutable, versioned asset.
           apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' ! -name 'BibleRecite-latest.apk' -printf '%f\n')"
@@ -240,8 +244,8 @@ jobs:
           gh release create "$tag" dist/* \
             --latest \
             --target "$GITHUB_SHA" \
-            --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
-              --notes "离线精准搜索支持长按多选，顶部“加入背诵计划”可新建或加入已有计划；结果显示中文卷名，阅读返回保留搜索列表。搜索索引按译本缓存复用。计划页从背诵返回后，任务和绿色对钩立即刷新。"
+            --title "BibleRecite ${version_name} build ${build_number}" \
+              --notes "搜索多选时返回会先取消选择；已选节数和加入背诵计划固定在顶部。搜索框显示最近 5 条去重记录，点击可直接搜索。发布版本统一显示为 a.b.c build n。"
 
       - name: Publish signed update feed
         env:
@@ -253,7 +257,7 @@ jobs:
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           version_name="${version%%+*}"
           build_number="${version##*+}"
-          tag="build-${version}-${GITHUB_RUN_NUMBER}"
+          tag="build-${version_name}-build-${build_number}-${GITHUB_RUN_NUMBER}"
           # Do not select the moving latest alias: its corresponding SHA file
           # does not exist and the signed feed must reference a fixed asset.
           apk_name="$(find dist -maxdepth 1 -type f -name 'BibleRecite-*.apk' ! -name 'BibleRecite-latest.apk' -printf '%f\n')"
@@ -268,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "离线精准搜索支持长按多选，顶部“加入背诵计划”可新建或加入已有计划；结果显示中文卷名，阅读返回保留搜索列表。搜索索引按译本缓存复用。计划页从背诵返回后，任务和绿色对钩立即刷新。" \
+              --release-notes "搜索多选时返回会先取消选择；已选节数和加入背诵计划固定在顶部。搜索框显示最近 5 条去重记录，点击可直接搜索。发布版本统一显示为 a.b.c build n。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

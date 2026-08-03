@@ -6,6 +6,11 @@ final class AppVersion implements Comparable<AppVersion> {
   final int patch;
   final int buildNumber;
 
+  String get versionName => '$major.$minor.$patch';
+
+  @override
+  String toString() => '$versionName build $buildNumber';
+
   factory AppVersion.parse(String name, String build) {
     final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)$').firstMatch(name);
     final parsedBuild = int.tryParse(build);
