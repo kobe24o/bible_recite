@@ -519,11 +519,12 @@ class _SinglePassageState extends State<_SinglePassage> {
     if (initialIndex > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_controller.hasClients) return;
+        const estimatedVerseRowHeight = 96.0;
         final centered =
-            (_controller.offset - MediaQuery.sizeOf(context).height / 2).clamp(
-              0.0,
-              _controller.position.maxScrollExtent,
-            );
+            (initialIndex * estimatedVerseRowHeight -
+                    _controller.position.viewportDimension / 2 +
+                    estimatedVerseRowHeight / 2)
+                .clamp(0.0, _controller.position.maxScrollExtent);
         _controller.jumpTo(centered);
       });
     }
@@ -608,7 +609,9 @@ class _VerseRow extends StatelessWidget {
                         ? AppLocalizations.of(context)?.omittedVerse ??
                               'This verse is omitted in this translation.'
                         : unit.text,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: selected ? FontWeight.bold : null,
+                    ),
                   ),
                 ),
               ],

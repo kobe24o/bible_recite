@@ -476,6 +476,12 @@ class _SearchResultsSheetState extends State<_SearchResultsSheet> {
                     final unit = units[index];
                     return ListTile(
                       selected: _selected.contains(index),
+                      selectedTileColor: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       title: Text(
                         '${widget.bookNames.nameFor(unit.start.osisBookId, const Locale('zh', 'CN'))} ${unit.start.chapter}:${unit.start.verse}',
                       ),
@@ -483,6 +489,9 @@ class _SearchResultsSheetState extends State<_SearchResultsSheet> {
                         unit.text,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
+                        style: _selected.contains(index)
+                            ? const TextStyle(fontWeight: FontWeight.bold)
+                            : null,
                       ),
                       onTap: () {
                         if (!_selecting) {

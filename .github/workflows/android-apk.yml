@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "搜索多选时返回会先取消选择；已选节数和加入背诵计划固定在顶部。搜索框显示最近 5 条去重记录，点击可直接搜索。发布版本统一显示为 a.b.c build n。"
+              --notes "搜索结果不再限制 100 条并按需渲染；点击后命中经文居中显示。搜索和阅读页的长按选中态统一为绿色圆角背景框与加粗文字。版本号进入 1.1 系列，用户可见格式为 a.b.c build n。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "搜索多选时返回会先取消选择；已选节数和加入背诵计划固定在顶部。搜索框显示最近 5 条去重记录，点击可直接搜索。发布版本统一显示为 a.b.c build n。" \
+              --release-notes "搜索结果不再限制 100 条并按需渲染；点击后命中经文居中显示。搜索和阅读页的长按选中态统一为绿色圆角背景框与加粗文字。版本号进入 1.1 系列，用户可见格式为 a.b.c build n。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
