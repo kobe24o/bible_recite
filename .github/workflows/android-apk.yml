@@ -241,7 +241,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} build #${GITHUB_RUN_NUMBER}" \
-              --notes "背诵完成后，我的、背诵计划与背诵地图会即时刷新；背诵地图下钻标题显示中英文卷名和章节。新增学习轨迹，可按周、月、季、年查看背诵节数、字符数、准确率与时长。Wi-Fi 自动下载完成后，通知栏可恢复已验签 APK 并直接打开系统安装器，不会重复下载。"
+              --notes "圣经页底部新增离线经文精准搜索：点击结果定位高亮阅读，长按可创建背诵计划。计划页从背诵返回后，完成状态和绿色对钩会立即刷新。"
 
       - name: Publish signed update feed
         env:
@@ -268,7 +268,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "背诵完成后，我的、背诵计划与背诵地图会即时刷新；背诵地图下钻标题显示中英文卷名和章节。新增学习轨迹，可按周、月、季、年查看背诵节数、字符数、准确率与时长。Wi-Fi 自动下载完成后，通知栏可恢复已验签 APK 并直接打开系统安装器，不会重复下载。" \
+              --release-notes "圣经页底部新增离线经文精准搜索：点击结果定位高亮阅读，长按可创建背诵计划。计划页从背诵返回后，完成状态和绿色对钩会立即刷新。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
