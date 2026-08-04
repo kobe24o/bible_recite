@@ -158,6 +158,41 @@ void main() {
       );
     },
   );
+
+  test(
+    'schedules a 9999-year-range plan without allocating every day',
+    () async {
+      final start = DateTime(2026, 1, 1);
+      final end = DateTime(9999, 12, 31);
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: '长期计划',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          endChapter: 3,
+          startDate: start,
+          endDate: end,
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 17,
+            ),
+          ],
+        ),
+        now: start,
+      );
+
+      expect(plan.days, end.difference(start).inDays + 1);
+      expect(plan.tasks, hasLength(2));
+      expect(plan.tasks.first.dayIndex, 0);
+      expect(plan.tasks.last.dayIndex, plan.days - 1);
+    },
+  );
 }
 
 final class _ScriptureFixture implements ScriptureRepository {

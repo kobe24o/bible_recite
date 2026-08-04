@@ -183,11 +183,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
               trailing: const Icon(Icons.event_available_outlined),
               onTap: () => _pickDate(start: false),
             ),
-            Text(
-              chinese
-                  ? '共 ${_days.clamp(0, 365)} 天'
-                  : '${_days.clamp(0, 365)} days',
-            ),
+            Text(chinese ? '共 $_days 天' : '$_days days'),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -229,7 +225,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       context: context,
       initialDate: initial,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      lastDate: DateTime(9999, 12, 31),
     );
     if (selected == null) return;
     setState(() {
@@ -246,9 +242,8 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     if (_title.text.trim().isEmpty ||
         (!widget.contentLocked && _passages.isEmpty) ||
         _days < 1 ||
-        _days < widget.minimumDays ||
-        _days > 365) {
-      setState(() => _error = '请检查名称和日期（${widget.minimumDays}–365 天）');
+        _days < widget.minimumDays) {
+      setState(() => _error = '请检查名称和日期（至少 ${widget.minimumDays} 天）');
       return;
     }
     Navigator.pop(

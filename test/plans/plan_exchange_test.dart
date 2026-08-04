@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bible_recite/src/features/plans/domain/plan_exchange.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,5 +54,38 @@ void main() {
     expect(decoded.title, '分享计划');
     expect(decoded.tasks, hasLength(2));
     expect(decoded.tasks.every((task) => task.dayIndex == 0), isTrue);
+  });
+
+  test('imports a plan longer than one year', () {
+    final start = DateTime(2026, 1, 1);
+    final end = DateTime(9999, 12, 31);
+    final decoded = PlanExchange.decode(
+      jsonEncode({
+        'format': PlanExchange.format,
+        'version': PlanExchange.version,
+        'plan': {
+          'title': '长期计划',
+          'translationId': 'cmn-cu89s',
+          'bookId': 'JHN',
+          'startChapter': 3,
+          'endChapter': 3,
+          'startDate': start.toIso8601String(),
+          'endDate': end.toIso8601String(),
+          'tasks': [
+            {
+              'dayIndex': end.difference(start).inDays,
+              'bookId': 'JHN',
+              'startChapter': 3,
+              'startVerse': 16,
+              'endChapter': 3,
+              'endVerse': 16,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(decoded.days, greaterThan(365));
+    expect(decoded.endDate, end);
   });
 }

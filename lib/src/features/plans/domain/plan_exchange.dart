@@ -65,7 +65,7 @@ final class PlanExchange {
       throw const FormatException('计划内容或日期无效');
     }
     final days = end.difference(start).inDays + 1;
-    if (days > 365 || tasks.any((task) => task.dayIndex >= days)) {
+    if (tasks.any((task) => task.dayIndex >= days)) {
       throw const FormatException('计划天数无效');
     }
     return NewMemorizationPlan(

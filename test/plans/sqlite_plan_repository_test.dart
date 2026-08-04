@@ -198,6 +198,62 @@ void main() {
     expect(tasks.single.endVerse, 5);
   });
 
+  test('keeps normal local plans when a long-term plan is added', () async {
+    final database = sqlite3.openInMemory();
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+    final normalId = await repository.createPlan(_plan());
+    final start = DateTime(2026, 1, 1);
+    final end = DateTime(9999, 12, 31);
+    final days = end.difference(start).inDays + 1;
+
+    final longId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '直到9999年',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 1,
+        endChapter: 1,
+        startDate: start,
+        endDate: end,
+        tasks: [
+          NewPlanTask(
+            dayIndex: days - 1,
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+          ),
+        ],
+      ),
+    );
+
+    final plans = await repository.listPlans();
+    expect(plans.map((plan) => plan.id), containsAll([normalId, longId]));
+    final longPlan = plans.singleWhere((plan) => plan.id == longId);
+    expect(longPlan.days, days);
+    expect(longPlan.endDate, end);
+    expect((await repository.listTasks(longId)).single.dueDate, end);
+
+    final schema =
+        database
+                .select(
+                  "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memorization_plan'",
+                )
+                .single['sql']
+            as String;
+    expect(
+      schema,
+      contains('days INTEGER NOT NULL CHECK(days BETWEEN 1 AND 365)'),
+    );
+    expect(
+      database.select('SELECT days FROM plan_schedule_span WHERE plan_id = ?', [
+        longId,
+      ]).single['days'],
+      longPlan.days,
+    );
+  });
+
   test(
     'derives an inclusive end date and can complete then undo a task',
     () async {

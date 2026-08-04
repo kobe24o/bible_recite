@@ -32,14 +32,43 @@ void main() {
     expect(tasks.every((task) => task.units.isNotEmpty), isTrue);
   });
 
-  test('validates custom day range', () {
+  test('validates a positive custom day range', () {
     expect(
       () => const PlanGenerator().generate(units: const [], days: 0),
       throwsArgumentError,
     );
     expect(
-      () => const PlanGenerator().generate(units: const [], days: 366),
-      throwsArgumentError,
+      const PlanGenerator().generate(units: const [], days: 9999 * 366),
+      isEmpty,
     );
   });
+
+  test('spreads a long-term plan without creating empty daily tasks', () {
+    final units = [_unit(1), _unit(2)];
+
+    final tasks = const PlanGenerator().generate(units: units, days: 3652425);
+
+    expect(tasks, hasLength(2));
+    expect(tasks.first.dayIndex, 0);
+    expect(tasks.last.dayIndex, 3652424);
+    expect(tasks.expand((task) => task.units), orderedEquals(units));
+  });
 }
+
+VerseUnit _unit(int verse) => VerseUnit(
+  translationId: 'cmn-cu89s',
+  start: (
+    canonId: CanonId.protestant66,
+    osisBookId: 'JHN',
+    chapter: 1,
+    verse: verse,
+  ),
+  end: (
+    canonId: CanonId.protestant66,
+    osisBookId: 'JHN',
+    chapter: 1,
+    verse: verse,
+  ),
+  text: '经文$verse',
+  status: SourceTextStatus.present,
+);

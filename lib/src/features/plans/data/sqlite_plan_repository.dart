@@ -110,6 +110,13 @@ final class SqlitePlanRepository {
       )
     ''');
     _database.execute('''
+      CREATE TABLE IF NOT EXISTS plan_schedule_span (
+        plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
+        days INTEGER NOT NULL CHECK(days > 365),
+        end_date TEXT NOT NULL
+      )
+    ''');
+    _database.execute('''
       CREATE TABLE IF NOT EXISTS ebbinghaus_settings (
         id INTEGER PRIMARY KEY CHECK(id = 1),
         enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
@@ -270,6 +277,27 @@ final class SqlitePlanRepository {
 
   final Database _database;
 
+  static const _storedDayLimit = 365;
+
+  int _storedDays(int days) => days > _storedDayLimit ? _storedDayLimit : days;
+
+  DateTime _storedEndDate(DateTime start, int days) =>
+      start.add(Duration(days: _storedDays(days) - 1));
+
+  void _saveScheduleSpan(int planId, DateTime start, int days) {
+    if (days <= _storedDayLimit) {
+      _database.execute('DELETE FROM plan_schedule_span WHERE plan_id = ?', [
+        planId,
+      ]);
+      return;
+    }
+    _database.execute(
+      '''INSERT INTO plan_schedule_span(plan_id, days, end_date) VALUES (?, ?, ?)
+      ON CONFLICT(plan_id) DO UPDATE SET days = excluded.days, end_date = excluded.end_date''',
+      [planId, days, _date(start.add(Duration(days: days - 1)))],
+    );
+  }
+
   void _migratePlanTasksForMultiplePassagesPerDay() {
     final definition = _database.select(
       "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plan_task'",
@@ -330,9 +358,9 @@ final class SqlitePlanRepository {
           plan.bookId,
           plan.startChapter,
           plan.endChapter,
-          plan.days,
+          _storedDays(plan.days),
           _date(plan.startDate),
-          _date(plan.endDate),
+          _date(_storedEndDate(plan.startDate, plan.days)),
           plan.sourceKind.name,
           plan.sourceUrl,
           plan.externalId,
@@ -342,6 +370,7 @@ final class SqlitePlanRepository {
         ],
       );
       final id = _database.lastInsertRowId;
+      _saveScheduleSpan(id, plan.startDate, plan.days);
       for (final task in plan.tasks) {
         final dueDate = plan.startDate.add(Duration(days: task.dayIndex));
         _database.execute(
@@ -372,13 +401,15 @@ final class SqlitePlanRepository {
   Future<List<MemorizationPlan>> listPlans() async {
     return _database
         .select('''
-      SELECT p.*,
+      SELECT p.*, COALESCE(s.days, p.days) AS effective_days,
+        COALESCE(s.end_date, p.end_date) AS effective_end_date,
         COUNT(t.id) AS total_tasks,
         COALESCE(SUM(t.completed), 0) AS completed_tasks,
         (SELECT COUNT(*) FROM recitation_result r WHERE r.plan_id = p.id) AS recitation_sessions,
         COALESCE((SELECT AVG(r.accuracy) FROM recitation_result r WHERE r.plan_id = p.id), 0) AS average_accuracy,
         COALESCE((SELECT SUM(r.duration_seconds) FROM recitation_result r WHERE r.plan_id = p.id), 0) AS total_recitation_seconds
       FROM memorization_plan p
+      LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
       LEFT JOIN plan_task t ON t.plan_id = p.id
       GROUP BY p.id
       ORDER BY p.id DESC
@@ -411,10 +442,12 @@ final class SqlitePlanRepository {
   ) async {
     final rows = _database.select(
       '''
-      SELECT p.*,
+      SELECT p.*, COALESCE(s.days, p.days) AS effective_days,
+        COALESCE(s.end_date, p.end_date) AS effective_end_date,
         COUNT(t.id) AS total_tasks,
         COALESCE(SUM(t.completed), 0) AS completed_tasks
       FROM memorization_plan p
+      LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
       LEFT JOIN plan_task t ON t.plan_id = p.id
       WHERE p.source_url = ? AND p.external_id = ?
       GROUP BY p.id
@@ -469,11 +502,15 @@ final class SqlitePlanRepository {
         );
       }
       final days = plan.days + passages.length;
-      final endDate = plan.startDate.add(Duration(days: days - 1));
       _database.execute(
         'UPDATE memorization_plan SET days = ?, end_date = ? WHERE id = ?',
-        [days, _date(endDate), plan.id],
+        [
+          _storedDays(days),
+          _date(_storedEndDate(plan.startDate, days)),
+          plan.id,
+        ],
       );
+      _saveScheduleSpan(plan.id, plan.startDate, days);
       _database.execute('COMMIT');
       await evaluateAndUnlockAchievements(source: 'plan');
     } catch (_) {
@@ -526,9 +563,9 @@ final class SqlitePlanRepository {
           plan.bookId,
           plan.startChapter,
           plan.endChapter,
-          plan.days,
+          _storedDays(plan.days),
           _date(plan.startDate),
-          _date(plan.endDate),
+          _date(_storedEndDate(plan.startDate, plan.days)),
           plan.sourceKind.name,
           plan.sourceUrl,
           plan.externalId,
@@ -537,6 +574,7 @@ final class SqlitePlanRepository {
           planId,
         ],
       );
+      _saveScheduleSpan(planId, plan.startDate, plan.days);
       _database.execute('DELETE FROM plan_task WHERE plan_id = ?', [planId]);
       for (final task in plan.tasks) {
         final dueDate = plan.startDate.add(Duration(days: task.dayIndex));
@@ -621,17 +659,19 @@ final class SqlitePlanRepository {
       (startDate ?? DateTime.now()).day,
     );
     final rows = _database.select(
-      'SELECT days FROM memorization_plan WHERE id = ?',
+      '''SELECT COALESCE(s.days, p.days) AS effective_days FROM memorization_plan p
+      LEFT JOIN plan_schedule_span s ON s.plan_id = p.id WHERE p.id = ?''',
       [planId],
     );
     if (rows.isEmpty) throw StateError('计划不存在');
-    final days = rows.single['days'] as int;
+    final days = rows.single['effective_days'] as int;
     _database.execute('BEGIN IMMEDIATE');
     try {
       _database.execute(
         'UPDATE memorization_plan SET start_date = ?, end_date = ? WHERE id = ?',
-        [_date(start), _date(start.add(Duration(days: days - 1))), planId],
+        [_date(start), _date(_storedEndDate(start, days)), planId],
       );
+      _saveScheduleSpan(planId, start, days);
       _database.execute(
         '''UPDATE plan_task SET completed = 0,
         due_date = date(?, '+' || day_index || ' days') WHERE plan_id = ?''',
@@ -1232,9 +1272,11 @@ final class SqlitePlanRepository {
     bookId: row['book_id'] as String,
     startChapter: row['start_chapter'] as int,
     endChapter: row['end_chapter'] as int,
-    days: row['days'] as int,
+    days: (row['effective_days'] as int?) ?? row['days'] as int,
     startDate: DateTime.parse(row['start_date'] as String),
-    endDate: DateTime.parse(row['end_date'] as String),
+    endDate: DateTime.parse(
+      (row['effective_end_date'] as String?) ?? row['end_date'] as String,
+    ),
     completedTasks: row['completed_tasks'] as int,
     totalTasks: row['total_tasks'] as int,
     sourceKind: PlanSourceKind.values.firstWhere(
