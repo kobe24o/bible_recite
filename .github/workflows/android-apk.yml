@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "预置计划现可查看简介和完整经文列表，并通过固定入口添加到我的计划。App 启动自动同步并缓存预置计划；新增或更新计划显示 NEW，查看或添加后自动消失。今日普通任务补充中文卷名，无执行中计划时会引导开始背诵之旅；我的页面新增应用介绍与诗篇 119:11。"
+              --notes "自定义计划添加经文时，结束卷可选择开始卷及其后的任意卷。跨卷范围会自动按书卷连续拆分为背诵任务，并校验开始节不晚于结束节。"
 
       - name: Publish signed update feed
         env:

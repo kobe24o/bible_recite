@@ -41,13 +41,15 @@ void main() {
                       endDate: DateTime(2026, 7, 31),
                     ),
                     allowDelete: true,
-                    onAddPassage: () async => const PlanPassageSelection(
-                      bookId: 'JHN',
-                      startChapter: 2,
-                      startVerse: 1,
-                      endChapter: 4,
-                      endVerse: 1,
-                    ),
+                    onAddPassages: () async => const [
+                      PlanPassageSelection(
+                        bookId: 'JHN',
+                        startChapter: 2,
+                        startVerse: 1,
+                        endChapter: 4,
+                        endVerse: 1,
+                      ),
+                    ],
                   ),
                 );
               },

@@ -57,7 +57,7 @@ class PlanEditorDialog extends StatefulWidget {
     this.allowDelete = false,
     this.contentLocked = false,
     this.minimumDays = 1,
-    this.onAddPassage,
+    this.onAddPassages,
     super.key,
   });
 
@@ -66,7 +66,7 @@ class PlanEditorDialog extends StatefulWidget {
   final bool allowDelete;
   final bool contentLocked;
   final int minimumDays;
-  final Future<PlanPassageSelection?> Function()? onAddPassage;
+  final Future<List<PlanPassageSelection>?> Function()? onAddPassages;
 
   @override
   State<PlanEditorDialog> createState() => _PlanEditorDialogState();
@@ -161,7 +161,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                 ),
               OutlinedButton.icon(
                 key: const Key('add-plan-passage'),
-                onPressed: widget.onAddPassage == null ? null : _addPassage,
+                onPressed: widget.onAddPassages == null ? null : _addPassages,
                 icon: const Icon(Icons.add_rounded),
                 label: Text(chinese ? '添加经文' : 'Add passage'),
               ),
@@ -284,11 +284,11 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     super.dispose();
   }
 
-  Future<void> _addPassage() async {
-    final passage = await widget.onAddPassage?.call();
-    if (passage != null && mounted) {
+  Future<void> _addPassages() async {
+    final passages = await widget.onAddPassages?.call();
+    if (passages != null && passages.isNotEmpty && mounted) {
       setState(() {
-        _passages.add(passage);
+        _passages.addAll(passages);
         if (_days < _passages.length) {
           _endDate = _startDate.add(Duration(days: _passages.length - 1));
         }

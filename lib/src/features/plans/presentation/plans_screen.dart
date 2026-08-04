@@ -657,7 +657,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
-        onAddPassage: () => _pickPassage(data),
+        onAddPassages: () => _pickPassages(data),
         contentLocked: true,
         minimumDays: template.passages.length,
         initial: PlanEditorDraft(
@@ -731,7 +731,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
-        onAddPassage: () => _pickPassage(data),
+        onAddPassages: () => _pickPassages(data),
         initial: PlanEditorDraft(
           title: '我的背诵计划',
           translationId: data.translation.id,
@@ -756,7 +756,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
-        onAddPassage: plan.contentLocked ? null : () => _pickPassage(data),
+        onAddPassages: plan.contentLocked ? null : () => _pickPassages(data),
         allowDelete: true,
         contentLocked: plan.contentLocked,
         minimumDays: plan.contentLocked ? plan.totalTasks : 1,
@@ -1081,14 +1081,15 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     }
   }
 
-  Future<PlanPassageSelection?> _pickPassage(_EditorData data) => showDialog(
-    context: context,
-    builder: (_) => _PassagePickerDialog(
-      books: data.books,
-      scripture: data.scripture,
-      translationId: data.translation.id,
-    ),
-  );
+  Future<List<PlanPassageSelection>?> _pickPassages(_EditorData data) =>
+      showDialog(
+        context: context,
+        builder: (_) => _PassagePickerDialog(
+          books: data.books,
+          scripture: data.scripture,
+          translationId: data.translation.id,
+        ),
+      );
 
   String _translationLabel(String id) => switch (id) {
     'cmn-cu89t' => '繁體',
@@ -1134,7 +1135,9 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final endBooks = [_startBook];
+    final endBooks = widget.books
+        .where((book) => book.ordinal >= _startBook.ordinal)
+        .toList(growable: false);
     return AlertDialog(
       title: const Text('添加经文'),
       content: SingleChildScrollView(
@@ -1261,7 +1264,7 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (_startVerse == null || _endVerse == null) return;
     final start = (_startBook.ordinal, _startChapter, _startVerse!);
     final end = (_endBook.ordinal, _endChapter, _endVerse!);
@@ -1269,15 +1272,30 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
         (start.$1 == end.$1 &&
             (start.$2 > end.$2 || (start.$2 == end.$2 && start.$3 > end.$3))))
       return;
-    Navigator.pop(
-      context,
-      PlanPassageSelection(
-        bookId: _startBook.osisId,
-        startChapter: _startChapter,
-        startVerse: _startVerse!,
-        endChapter: _endChapter,
-        endVerse: _endVerse!,
-      ),
-    );
+    final startIndex = widget.books.indexOf(_startBook);
+    final endIndex = widget.books.indexOf(_endBook);
+    final selections = <PlanPassageSelection>[];
+    for (var index = startIndex; index <= endIndex; index++) {
+      final book = widget.books[index];
+      final startChapter = book == _startBook ? _startChapter : 1;
+      final startVerse = book == _startBook ? _startVerse! : 1;
+      final endChapter = book == _endBook ? _endChapter : book.chapterCount;
+      final chapter = await widget.scripture.getChapter(
+        widget.translationId,
+        book.osisId,
+        endChapter,
+      );
+      if (chapter.isEmpty) return;
+      selections.add(
+        PlanPassageSelection(
+          bookId: book.osisId,
+          startChapter: startChapter,
+          startVerse: startVerse,
+          endChapter: endChapter,
+          endVerse: book == _endBook ? _endVerse! : chapter.last.end.verse,
+        ),
+      );
+    }
+    if (mounted) Navigator.pop(context, selections);
   }
 }
