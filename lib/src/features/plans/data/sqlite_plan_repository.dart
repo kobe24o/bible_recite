@@ -18,7 +18,7 @@ final class SqlitePlanRepository {
         book_id TEXT NOT NULL,
         start_chapter INTEGER NOT NULL CHECK(start_chapter > 0),
         end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
-        days INTEGER NOT NULL CHECK(days >= 1),
+        days INTEGER NOT NULL CHECK(days BETWEEN 1 AND 365),
         start_date TEXT NOT NULL,
         end_date TEXT,
         source_kind TEXT NOT NULL DEFAULT 'local',
@@ -30,7 +30,6 @@ final class SqlitePlanRepository {
         created_at TEXT NOT NULL
       )
     ''');
-    _migratePlanDaysConstraintIfNeeded();
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_task (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,53 +269,6 @@ final class SqlitePlanRepository {
   }
 
   final Database _database;
-
-  void _migratePlanDaysConstraintIfNeeded() {
-    final rows = _database.select(
-      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memorization_plan'",
-    );
-    if (rows.isEmpty) return;
-    final schema = (rows.single['sql'] as String).toLowerCase();
-    if (!schema.contains('days between 1 and 365')) return;
-    _database.execute('PRAGMA foreign_keys = OFF');
-    try {
-      _database.execute('BEGIN');
-      _database.execute('''
-        CREATE TABLE memorization_plan_unbounded (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          translation_id TEXT NOT NULL,
-          book_id TEXT NOT NULL,
-          start_chapter INTEGER NOT NULL CHECK(start_chapter > 0),
-          end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
-          days INTEGER NOT NULL CHECK(days >= 1),
-          start_date TEXT NOT NULL,
-          end_date TEXT,
-          source_kind TEXT NOT NULL DEFAULT 'local',
-          source_url TEXT,
-          external_id TEXT,
-          revision INTEGER NOT NULL DEFAULT 0,
-          content_locked INTEGER NOT NULL DEFAULT 0 CHECK(content_locked IN (0, 1)),
-          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
-          created_at TEXT NOT NULL
-        )
-      ''');
-      _database.execute('''
-        INSERT INTO memorization_plan_unbounded
-        SELECT * FROM memorization_plan
-      ''');
-      _database.execute('DROP TABLE memorization_plan');
-      _database.execute(
-        'ALTER TABLE memorization_plan_unbounded RENAME TO memorization_plan',
-      );
-      _database.execute('COMMIT');
-    } catch (_) {
-      _database.execute('ROLLBACK');
-      rethrow;
-    } finally {
-      _database.execute('PRAGMA foreign_keys = ON');
-    }
-  }
 
   void _migratePlanTasksForMultiplePassagesPerDay() {
     final definition = _database.select(

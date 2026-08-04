@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "计划日期不再限制 365 天，结束日期可选择至公元 9999 年。长期计划只生成实际经文任务并按时间跨度分布，不会创建大量空日程；已安装用户启动后会自动迁移原有计划数据。"
+              --notes "紧急修复：恢复稳定的本地计划数据库结构，修复升级后本地计划与预置计划不可用的问题。长期计划功能将以不改写既有计划主表的无损方案重新实现。"
 
       - name: Publish signed update feed
         env:

@@ -87,14 +87,12 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   final completedDays = completedTasks.map((task) => task.dayIndex).toSet();
   final current = now ?? DateTime.now();
   final today = DateTime(current.year, current.month, current.day);
-  final firstAvailableDay = today.isAfter(draft.startDate)
-      ? today.difference(draft.startDate).inDays
-      : 0;
-  final unavailableDays = completedDays
-      .where((day) => day >= firstAvailableDay && day < draft.days)
-      .toSet();
-  final availableDayCount =
-      draft.days - firstAvailableDay - unavailableDays.length;
+  final availableDays = [
+    for (var day = 0; day < draft.days; day++)
+      if (!completedDays.contains(day) &&
+          !draft.startDate.add(Duration(days: day)).isBefore(today))
+        day,
+  ];
   final pendingPassages = passageUnits
       .map(
         (units) => units
@@ -105,16 +103,16 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
       )
       .where((units) => units.isNotEmpty)
       .toList(growable: false);
-  if (availableDayCount <= 0 && pendingPassages.isNotEmpty) {
+  if (availableDays.isEmpty && pendingPassages.isNotEmpty) {
     throw StateError('请将结束日期调整到今天或之后');
   }
   // When a plan is shortened there can be more selected passages than days.
   // Keep every verse atomic, then place multiple passage tasks on a day rather
   // than silently extending the date range again.
-  final dayCounts = availableDayCount >= pendingPassages.length
-      ? _allocateDays(pendingPassages, availableDayCount)
+  final dayCounts = availableDays.length >= pendingPassages.length
+      ? _allocateDays(pendingPassages, availableDays.length)
       : List<int>.filled(pendingPassages.length, 1);
-  final combinePassagesOnDay = pendingPassages.length > availableDayCount;
+  final combinePassagesOnDay = pendingPassages.length > availableDays.length;
   final pendingTasks = <NewPlanTask>[];
   final pendingWeights = <int>[];
   final tasks = <NewPlanTask>[
@@ -155,11 +153,7 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
       } else {
         tasks.add(
           NewPlanTask(
-            dayIndex: _availableDayAt(
-              dayCursor + chunk.dayIndex,
-              firstAvailableDay,
-              unavailableDays,
-            ),
+            dayIndex: availableDays[dayCursor + chunk.dayIndex],
             bookId: task.bookId,
             startChapter: task.startChapter,
             startVerse: task.startVerse,
@@ -172,16 +166,15 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
     dayCursor += dayCounts[passageIndex];
   }
   if (combinePassagesOnDay) {
-    final assignedDays = _balancedDayIndexes(pendingWeights, availableDayCount);
+    final assignedDays = _balancedDayIndexes(
+      pendingWeights,
+      availableDays.length,
+    );
     for (var index = 0; index < pendingTasks.length; index++) {
       final task = pendingTasks[index];
       tasks.add(
         NewPlanTask(
-          dayIndex: _availableDayAt(
-            assignedDays[index],
-            firstAvailableDay,
-            unavailableDays,
-          ),
+          dayIndex: availableDays[assignedDays[index]],
           bookId: task.bookId,
           startChapter: task.startChapter,
           startVerse: task.startVerse,
@@ -234,15 +227,6 @@ int _weight(List<VerseUnit> units) => units.fold<int>(
   (total, unit) =>
       total + unit.text.replaceAll(RegExp(r'\s+'), '').runes.length,
 );
-
-int _availableDayAt(int ordinal, int firstDay, Set<int> unavailableDays) {
-  var day = firstDay + ordinal;
-  for (final unavailable in unavailableDays.toList()..sort()) {
-    if (unavailable > day) break;
-    day++;
-  }
-  return day;
-}
 
 List<int> _allocateDays(List<List<VerseUnit>> passages, int totalDays) {
   if (passages.isEmpty) return const [];
