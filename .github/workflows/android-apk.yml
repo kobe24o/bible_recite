@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "搜索结果不再限制 100 条并按需渲染；点击后命中经文居中显示。搜索和阅读页的长按选中态统一为绿色圆角背景框与加粗文字。版本号进入 1.1 系列，用户可见格式为 a.b.c build n。"
+              --notes "预置计划现可查看简介和完整经文列表，并通过固定入口添加到我的计划。App 启动自动同步并缓存预置计划；新增或更新计划显示 NEW，查看或添加后自动消失。今日普通任务补充中文卷名，无执行中计划时会引导开始背诵之旅；我的页面新增应用介绍与诗篇 119:11。"
 
       - name: Publish signed update feed
         env:

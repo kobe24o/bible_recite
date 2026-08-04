@@ -72,3 +72,15 @@ final class RecitationDataRevision extends Notifier<int> {
 
   void refresh() => state++;
 }
+
+/// Incremented when the cached preset-plan feed or its NEW markers change.
+final presetPlanRevisionProvider = NotifierProvider<PresetPlanRevision, int>(
+  PresetPlanRevision.new,
+);
+
+final class PresetPlanRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void refresh() => state++;
+}

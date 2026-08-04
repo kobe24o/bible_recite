@@ -9,6 +9,7 @@ import '../features/update/application/update_controller.dart';
 import '../features/update/domain/update_status.dart';
 import '../features/update/presentation/update_available_notification.dart';
 import '../features/plans/application/plan_providers.dart';
+import '../features/plans/application/preset_plan_sync.dart';
 import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
 
@@ -31,6 +32,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
+      unawaited(_syncPresetPlansAtLaunch());
     });
     _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       unawaited(_checkUpdateAtLaunch());
@@ -56,6 +58,20 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   Future<void> _refreshDailyReminders() async {
     final repository = await ref.read(planRepositoryProvider.future);
     await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
+  }
+
+  Future<void> _syncPresetPlansAtLaunch() async {
+    try {
+      final result = await syncPresetPlans(
+        repository: await ref.read(planRepositoryProvider.future),
+        client: ref.read(cloudPlanFeedClientProvider),
+      );
+      if (result.manifest.plans.isNotEmpty) {
+        ref.read(presetPlanRevisionProvider.notifier).refresh();
+      }
+    } catch (_) {
+      // A plan feed failure must never delay app startup or offline use.
+    }
   }
 
   Future<void> _checkUpdateAtLaunch() async {

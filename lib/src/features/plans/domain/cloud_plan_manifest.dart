@@ -11,6 +11,12 @@ final class CloudPlanManifest {
   final String publisher;
   final List<CloudPlanTemplate> plans;
 
+  Map<String, Object?> toJson() => {
+    'protocolVersion': protocolVersion,
+    'publisher': publisher,
+    'plans': [for (final plan in plans) plan.toJson()],
+  };
+
   static CloudPlanManifest parse(String source) {
     final Object? decoded;
     try {
@@ -66,6 +72,20 @@ final class CloudPlanTemplate {
   final String tag;
   final List<CloudPlanPassage> passages;
 
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'push': push,
+    'revision': revision,
+    'defaultTranslationId': defaultTranslationId,
+    'defaultStartDate': defaultStartDate?.toIso8601String().substring(0, 10),
+    'defaultEndDate': defaultEndDate?.toIso8601String().substring(0, 10),
+    'sourceName': sourceName,
+    'tag': tag,
+    'passages': [for (final passage in passages) passage.toJson()],
+  };
+
   factory CloudPlanTemplate._parse(Map<String, Object?> value) {
     final passages =
         _list(value['passages'], 'passages')
@@ -116,6 +136,15 @@ final class CloudPlanPassage {
   final int startVerse;
   final int endChapter;
   final int endVerse;
+
+  Map<String, Object?> toJson() => {
+    'order': order,
+    'bookId': bookId,
+    'startChapter': startChapter,
+    'startVerse': startVerse,
+    'endChapter': endChapter,
+    'endVerse': endVerse,
+  };
 
   factory CloudPlanPassage._parse(Map<String, Object?> value) {
     final order = _integer(value['order'], 'order');

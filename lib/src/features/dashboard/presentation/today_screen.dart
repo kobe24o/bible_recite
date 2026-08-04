@@ -45,7 +45,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 }
                 final data = snapshot.data!;
                 if (data.tasks.isEmpty && data.reviews.isEmpty) {
-                  return _EmptyToday(localizations: localizations);
+                  return _EmptyToday(
+                    localizations: localizations,
+                    showStartJourney: !data.hasActivePlan,
+                  );
                 }
                 final pending = data.tasks
                     .where((task) => !task.completed)
@@ -83,6 +86,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         _TaskCard(
                           task: task,
                           plan: data.plans[task.planId],
+                          bookName: bookNames.nameFor(
+                            task.bookId,
+                            Localizations.localeOf(context),
+                          ),
                           completed: false,
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
@@ -119,6 +126,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         _TaskCard(
                           task: task,
                           plan: data.plans[task.planId],
+                          bookName: bookNames.nameFor(
+                            task.bookId,
+                            Localizations.localeOf(context),
+                          ),
                           completed: true,
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
@@ -174,6 +185,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         builder: (_) => RecitationPracticeScreen(request: request),
       ),
     );
+    if (mounted) setState(() => _revision++);
   }
 
   Future<void> _startReview(EbbinghausReview review) async {
@@ -237,6 +249,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       plans: {for (final plan in plans) plan.id: plan},
       tasks: tasks,
       reviews: reviews,
+      hasActivePlan: plans.any(
+        (plan) =>
+            !plan.paused &&
+            plan.totalTasks > 0 &&
+            plan.completedTasks < plan.totalTasks,
+      ),
     );
   }
 }
@@ -276,6 +294,7 @@ class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.task,
     required this.plan,
+    required this.bookName,
     required this.completed,
     required this.onChanged,
     required this.repository,
@@ -285,6 +304,7 @@ class _TaskCard extends StatelessWidget {
 
   final PlanTask task;
   final MemorizationPlan? plan;
+  final String bookName;
   final bool completed;
   final VoidCallback onChanged;
   final SqlitePlanRepository repository;
@@ -306,7 +326,7 @@ class _TaskCard extends StatelessWidget {
           ),
         ),
         title: Text(plan?.title ?? '今日任务'),
-        subtitle: Text(range),
+        subtitle: Text('$bookName $range'),
         trailing: IconButton(
           key: Key('${completed ? 'undo' : 'complete'}-task-${task.id}'),
           tooltip: completed ? '撤销完成' : '完成',
@@ -328,9 +348,13 @@ class _TaskCard extends StatelessWidget {
 }
 
 class _EmptyToday extends StatelessWidget {
-  const _EmptyToday({required this.localizations});
+  const _EmptyToday({
+    required this.localizations,
+    this.showStartJourney = false,
+  });
 
   final AppLocalizations localizations;
+  final bool showStartJourney;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -341,11 +365,18 @@ class _EmptyToday extends StatelessWidget {
         children: [
           const Icon(Icons.today_outlined, size: 64),
           const SizedBox(height: 16),
-          Text(localizations.todayEmpty, textAlign: TextAlign.center),
+          Text(
+            showStartJourney
+                ? '开始背诵之旅吧，选择一份计划把神的话藏在心里。'
+                : localizations.todayEmpty,
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: () => context.go('/bible'),
-            child: Text(localizations.browseBible),
+            onPressed: () => context.go(showStartJourney ? '/plans' : '/bible'),
+            child: Text(
+              showStartJourney ? '开始背诵之旅' : localizations.browseBible,
+            ),
           ),
         ],
       ),
@@ -358,9 +389,11 @@ final class _TodayData {
     required this.plans,
     required this.tasks,
     required this.reviews,
+    required this.hasActivePlan,
   });
 
   final Map<int, MemorizationPlan> plans;
   final List<PlanTask> tasks;
   final List<EbbinghausReview> reviews;
+  final bool hasActivePlan;
 }

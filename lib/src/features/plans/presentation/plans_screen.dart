@@ -16,6 +16,8 @@ import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
 import '../application/plan_providers.dart';
+import '../application/preset_plan_sync.dart';
+import '../data/sqlite_plan_repository.dart';
 import '../domain/cloud_plan_manifest.dart';
 import '../domain/plan_draft_builder.dart';
 import '../domain/plan_exchange.dart';
@@ -29,6 +31,34 @@ class PlansScreen extends ConsumerStatefulWidget {
   ConsumerState<PlansScreen> createState() => _PlansScreenState();
 }
 
+final class _PresetPlansData {
+  const _PresetPlansData({required this.manifest, required this.newPlanIds});
+
+  final CloudPlanManifest manifest;
+  final Set<String> newPlanIds;
+}
+
+class _NewPlanBadge extends StatelessWidget {
+  const _NewPlanBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(left: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.error,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(
+      'NEW',
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onError,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
+}
+
 enum _PlanAction { export, edit, restart, pause, resume }
 
 class _PlansScreenState extends ConsumerState<PlansScreen> {
@@ -37,12 +67,14 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   );
   int _revision = 0;
   bool _working = false;
-  CloudPlanManifest? _syncedManifest;
+  Future<_PresetPlansData>? _presetPlansFuture;
+  int? _presetPlansFutureRevision;
 
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     final recitationRevision = ref.watch(recitationDataRevisionProvider);
+    final presetRevision = ref.watch(presetPlanRevisionProvider);
     final repository = ref.watch(planRepositoryProvider);
     final bundled = ref.watch(bundledCloudPlanManifestProvider);
     return Scaffold(
@@ -109,29 +141,34 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           bundled.when(
             loading: () => const Text('正在加载预置计划…'),
             error: (error, _) => Text('无法加载预置计划：$error'),
-            data: (manifest) => Column(
-              children: [
-                for (final template in (_syncedManifest ?? manifest).plans)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.auto_stories_outlined),
-                        ),
-                        title: Text(template.title),
-                        subtitle: Text(
-                          '${template.description} · ${template.passages.length} 天起',
-                        ),
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: _working
-                            ? null
-                            : () => _configureTemplate(template),
-                      ),
+            data: (bundledManifest) => presetRevision == 0
+                ? _presetPlanList(
+                    _PresetPlansData(
+                      manifest: bundledManifest,
+                      newPlanIds: const <String>{},
                     ),
+                  )
+                : repository.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                    data: (repository) {
+                      if (_presetPlansFuture == null ||
+                          _presetPlansFutureRevision != presetRevision) {
+                        _presetPlansFuture = _loadPresetPlans(
+                          repository,
+                          bundledManifest,
+                        );
+                        _presetPlansFutureRevision = presetRevision;
+                      }
+                      return FutureBuilder<_PresetPlansData>(
+                        key: ValueKey(presetRevision),
+                        future: _presetPlansFuture,
+                        builder: (context, snapshot) => snapshot.hasData
+                            ? _presetPlanList(snapshot.data!)
+                            : const SizedBox.shrink(),
+                      );
+                    },
                   ),
-              ],
-            ),
           ),
           const SizedBox(height: 6),
           OutlinedButton.icon(
@@ -142,6 +179,115 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         ],
       ),
     );
+  }
+
+  Future<_PresetPlansData> _loadPresetPlans(
+    SqlitePlanRepository repository,
+    CloudPlanManifest bundled,
+  ) async => _PresetPlansData(
+    manifest: await loadCachedPresetPlanManifest(repository) ?? bundled,
+    newPlanIds: await loadNewPresetPlanIds(repository),
+  );
+
+  Widget _presetPlanList(_PresetPlansData data) => Column(
+    children: [
+      for (final template in data.manifest.plans)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Card(
+            child: ListTile(
+              leading: const CircleAvatar(
+                child: Icon(Icons.auto_stories_outlined),
+              ),
+              title: Row(
+                children: [
+                  Expanded(child: Text(template.title)),
+                  if (data.newPlanIds.contains(template.id))
+                    const _NewPlanBadge(),
+                ],
+              ),
+              subtitle: Text(
+                '${template.description} · ${template.passages.length} 段经文',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: _working ? null : () => _openPresetPlan(template),
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Future<void> _openPresetPlan(CloudPlanTemplate template) async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    await markPresetPlanSeen(repository, template.id);
+    ref.read(presetPlanRevisionProvider.notifier).refresh();
+    if (!mounted) return;
+    await _showPresetPlanDetail(template);
+  }
+
+  Future<void> _showPresetPlanDetail(CloudPlanTemplate template) async {
+    final catalog = ref.read(bookNameCatalogProvider);
+    final locale = Localizations.localeOf(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .82,
+          child: Scaffold(
+            body: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              children: [
+                Text(
+                  template.title,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (template.tag.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Chip(label: Text(template.tag)),
+                ],
+                if (template.description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(template.description),
+                ],
+                const SizedBox(height: 20),
+                Text('经文列表', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                for (final passage in template.passages)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(child: Text('${passage.order}')),
+                    title: Text(_passageLabel(passage, catalog, locale)),
+                  ),
+              ],
+            ),
+            bottomNavigationBar: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: FilledButton.icon(
+                key: const Key('add-preset-plan-button'),
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _configureTemplate(template);
+                },
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                label: const Text('添加到我的计划'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _passageLabel(
+    CloudPlanPassage passage,
+    BookNameCatalog catalog,
+    Locale locale,
+  ) {
+    final start = '${passage.startChapter}:${passage.startVerse}';
+    final end = '${passage.endChapter}:${passage.endVerse}';
+    return '${catalog.nameFor(passage.bookId, locale)} $start–$end';
   }
 
   Widget _planCard(MemorizationPlan plan, AppLocalizations localizations) {
@@ -762,17 +908,19 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     setState(() => _working = true);
     try {
       final repository = await ref.read(planRepositoryProvider.future);
-      final source = await repository.getSetting(
-        'cloud_plan_source_url',
-        defaultCloudPlanSourceUrl,
+      final result = await syncPresetPlans(
+        repository: repository,
+        client: ref.read(cloudPlanFeedClientProvider),
       );
-      final manifest = await ref
-          .read(cloudPlanFeedClientProvider)
-          .fetchFirst(cloudPlanSourceCandidates(source));
       if (!mounted) return;
-      setState(() => _syncedManifest = manifest);
+      ref.read(presetPlanRevisionProvider.notifier).refresh();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('同步完成：${manifest.plans.length} 个计划已更新到预置计划')),
+        SnackBar(
+          content: Text(
+            '同步完成：${result.manifest.plans.length} 个预置计划，'
+            '新增 ${result.newPlanIds.length} 个',
+          ),
+        ),
       );
     } catch (error) {
       if (mounted) {
