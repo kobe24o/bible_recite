@@ -14,14 +14,11 @@ final class PlanGenerator {
     required List<VerseUnit> units,
     required int days,
   }) {
-    if (days < 1 || days > 365) {
-      throw ArgumentError.value(days, 'days', 'Must be between 1 and 365');
+    if (days < 1) {
+      throw ArgumentError.value(days, 'days', 'Must be positive');
     }
     if (units.isEmpty) {
-      return List.generate(
-        days,
-        (index) => GeneratedPlanTask(dayIndex: index, units: const []),
-      );
+      return const [];
     }
 
     final groupCount = days < units.length ? days : units.length;
@@ -46,7 +43,9 @@ final class PlanGenerator {
       }
       tasks.add(
         GeneratedPlanTask(
-          dayIndex: group,
+          dayIndex: groupCount == 1
+              ? 0
+              : (group * (days - 1) / (groupCount - 1)).round(),
           units: List.unmodifiable(units.sublist(cursor, cursor + take)),
         ),
       );
@@ -54,9 +53,6 @@ final class PlanGenerator {
       consumedWeight += weight;
     }
 
-    for (var day = groupCount; day < days; day++) {
-      tasks.add(GeneratedPlanTask(dayIndex: day, units: const []));
-    }
     return List.unmodifiable(tasks);
   }
 

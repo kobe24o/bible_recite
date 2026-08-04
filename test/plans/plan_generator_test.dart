@@ -32,14 +32,34 @@ void main() {
     expect(tasks.every((task) => task.units.isNotEmpty), isTrue);
   });
 
-  test('validates custom day range', () {
+  test('allows long plans without materializing empty daily tasks', () {
     expect(
       () => const PlanGenerator().generate(units: const [], days: 0),
       throwsArgumentError,
     );
-    expect(
-      () => const PlanGenerator().generate(units: const [], days: 366),
-      throwsArgumentError,
+    final units = List.generate(
+      2,
+      (index) => VerseUnit(
+        translationId: 'cmn-cu89s',
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'JHN',
+          chapter: 1,
+          verse: index + 1,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'JHN',
+          chapter: 1,
+          verse: index + 1,
+        ),
+        text: '经文',
+        status: SourceTextStatus.present,
+      ),
     );
+    final tasks = const PlanGenerator().generate(units: units, days: 3652425);
+    expect(tasks, hasLength(2));
+    expect(tasks.first.dayIndex, 0);
+    expect(tasks.last.dayIndex, 3652424);
   });
 }

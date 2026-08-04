@@ -4,6 +4,70 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test('migrates the legacy 365-day database constraint', () {
+    final database = sqlite3.openInMemory();
+    database.execute('''
+      CREATE TABLE memorization_plan (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        start_chapter INTEGER NOT NULL CHECK(start_chapter > 0),
+        end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
+        days INTEGER NOT NULL CHECK(days BETWEEN 1 AND 365),
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        source_kind TEXT NOT NULL DEFAULT 'local',
+        source_url TEXT,
+        external_id TEXT,
+        revision INTEGER NOT NULL DEFAULT 0,
+        content_locked INTEGER NOT NULL DEFAULT 0 CHECK(content_locked IN (0, 1)),
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
+        created_at TEXT NOT NULL
+      )
+    ''');
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+
+    final schema =
+        database
+                .select(
+                  "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memorization_plan'",
+                )
+                .single['sql']
+            as String;
+    expect(schema.toLowerCase(), isNot(contains('days between 1 and 365')));
+  });
+
+  test('stores a plan that ends in year 9999', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+
+    final id = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '长期背诵计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 1,
+        endChapter: 1,
+        startDate: DateTime(2026, 1, 1),
+        endDate: DateTime(9999, 12, 31),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            bookId: 'JHN',
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+          ),
+        ],
+      ),
+    );
+
+    expect((await repository.listPlans()).single.id, id);
+  });
+
   test('stores cloud plan source setting with a default fallback', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
