@@ -62,6 +62,12 @@ void main() {
 
     expect(find.text('背诵 1 次'), findsOneWidget);
     expect(find.text('平均正确率 80%'), findsOneWidget);
+    expect(find.text('目前连续背诵 1 天 · 最高连续背诵 1 天'), findsOneWidget);
+    expect(find.text('目前连续背诵 2 节 · 最高连续背诵 2 节'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('背诵 1 次')).dy,
+      lessThan(tester.getTopLeft(find.text('艾宾浩斯背诵法')).dy),
+    );
     expect(find.text('最近背诵'), findsNothing);
     expect(find.text('我的成就'), findsOneWidget);
     expect(find.text('初次开口'), findsOneWidget);
@@ -84,6 +90,36 @@ void main() {
         .map((widget) => widget.data ?? '')
         .firstWhere((text) => text.contains('获得时间：'));
     expect(timeText, isNot(contains(RegExp(r':\d{2}\.\d'))));
+  });
+
+  testWidgets('uses the configured name in the achievements heading', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.setSetting('profile_name', '路得');
+    await repository.saveRecitationResult(
+      NewRecitationResult(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        mode: 'continuous',
+        durationSeconds: 30,
+        correctCount: 10,
+        incorrectCount: 0,
+        omittedCount: 0,
+        reorderedCount: 0,
+        accuracy: 1,
+        completedAt: DateTime.now(),
+      ),
+    );
+
+    await _pumpScreen(tester, repository);
+
+    expect(find.text('路得的成就'), findsOneWidget);
+    expect(find.text('我的成就'), findsNothing);
   });
 }
 

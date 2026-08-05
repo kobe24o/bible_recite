@@ -162,6 +162,51 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  if (hasStatistics) ...[
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _SummaryCard(
+                          icon: Icons.mic_rounded,
+                          text: chinese
+                              ? '背诵 ${summary.totalSessions} 次'
+                              : '${summary.totalSessions} sessions',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.timer_outlined,
+                          text: chinese
+                              ? '背诵总时长 ${_formatDuration(Duration(seconds: summary.totalSeconds))}'
+                              : 'Total ${_formatDuration(Duration(seconds: summary.totalSeconds))}',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.menu_book_rounded,
+                          text: chinese
+                              ? '累计 ${summary.totalVerses} 节'
+                              : '${summary.totalVerses} verses',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.track_changes_rounded,
+                          text: chinese
+                              ? '平均正确率 ${(summary.averageAccuracy * 100).round()}%'
+                              : 'Average ${(summary.averageAccuracy * 100).round()}%',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.local_fire_department_rounded,
+                          text: chinese
+                              ? '目前连续背诵 ${data.learning.currentDayStreak} 天 · 最高连续背诵 ${data.learning.maxDayStreak} 天'
+                              : 'Current ${data.learning.currentDayStreak} days · Best ${data.learning.maxDayStreak} days',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.format_list_numbered_rounded,
+                          text: chinese
+                              ? '目前连续背诵 ${data.learning.currentVerseStreak} 节 · 最高连续背诵 ${data.learning.maxVerseStreak} 节'
+                              : 'Current ${data.learning.currentVerseStreak} verses · Best ${data.learning.maxVerseStreak} verses',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _EbbinghausSettingsCard(
                     repository: repository,
                     initial: data.settings,
@@ -244,45 +289,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       onAction: () => context.go('/bible'),
                     ),
                   if (hasStatistics) ...[
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _SummaryCard(
-                          icon: Icons.mic_rounded,
-                          text: chinese
-                              ? '背诵 ${summary.totalSessions} 次'
-                              : '${summary.totalSessions} sessions',
-                        ),
-                        _SummaryCard(
-                          icon: Icons.timer_outlined,
-                          text: chinese
-                              ? '背诵总时长 ${_formatDuration(Duration(seconds: summary.totalSeconds))}'
-                              : 'Total ${_formatDuration(Duration(seconds: summary.totalSeconds))}',
-                        ),
-                        _SummaryCard(
-                          icon: Icons.menu_book_rounded,
-                          text: chinese
-                              ? '累计 ${summary.totalVerses} 节'
-                              : '${summary.totalVerses} verses',
-                        ),
-                        _SummaryCard(
-                          icon: Icons.track_changes_rounded,
-                          text: chinese
-                              ? '平均正确率 ${(summary.averageAccuracy * 100).round()}%'
-                              : 'Average ${(summary.averageAccuracy * 100).round()}%',
-                        ),
-                        _SummaryCard(
-                          icon: Icons.local_fire_department_rounded,
-                          text: chinese
-                              ? '连续背诵 ${data.learning.currentStreak} 天'
-                              : '${data.learning.currentStreak}-day streak',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
                     Text(
-                      chinese ? '我的成就' : 'My achievements',
+                      chinese
+                          ? (name.isEmpty ? '我的成就' : '$name的成就')
+                          : (name.isEmpty
+                                ? 'My achievements'
+                                : "$name's achievements"),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 10),

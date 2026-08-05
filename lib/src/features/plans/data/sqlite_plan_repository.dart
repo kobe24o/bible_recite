@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../review/domain/ebbinghaus_models.dart';
@@ -1315,10 +1317,81 @@ final class SqlitePlanRepository {
   }
 
   Future<LearningStats> getLearningStats() async {
-    final snapshot = _achievementSnapshot();
+    final calculated = _learningStatsFromRows(
+      _database.select('SELECT * FROM recitation_result'),
+    );
+    final storedMaxDays =
+        int.tryParse(await getSetting('max_day_streak', '0')) ?? 0;
+    final storedMaxVerses =
+        int.tryParse(await getSetting('max_verse_streak', '0')) ?? 0;
+    final maxDays = max(calculated.maxDayStreak, storedMaxDays);
+    final maxVerses = max(calculated.maxVerseStreak, storedMaxVerses);
+    if (maxDays != storedMaxDays) {
+      await setSetting('max_day_streak', '$maxDays');
+    }
+    if (maxVerses != storedMaxVerses) {
+      await setSetting('max_verse_streak', '$maxVerses');
+    }
     return LearningStats(
-      recitationDays: snapshot.recitationDays,
-      currentStreak: snapshot.activeDayStreak,
+      recitationDays: calculated.recitationDays,
+      currentDayStreak: calculated.currentDayStreak,
+      maxDayStreak: maxDays,
+      currentVerseStreak: calculated.currentVerseStreak,
+      maxVerseStreak: maxVerses,
+    );
+  }
+
+  LearningStats _learningStatsFromRows(List<Row> rows) {
+    final versesByDate = <DateTime, int>{};
+    for (final row in rows) {
+      final completedAt = DateTime.parse(
+        row['completed_at'] as String,
+      ).toLocal();
+      final date = DateTime(
+        completedAt.year,
+        completedAt.month,
+        completedAt.day,
+      );
+      final verseCount =
+          (row['end_verse'] as int) - (row['start_verse'] as int) + 1;
+      versesByDate.update(
+        date,
+        (value) => value + verseCount,
+        ifAbsent: () => verseCount,
+      );
+    }
+
+    final dates = versesByDate.keys.toList()..sort();
+    var currentDays = 0;
+    var currentVerses = 0;
+    var maxDays = 0;
+    var maxVerses = 0;
+    DateTime? previous;
+    for (final date in dates) {
+      if (previous != null && date.difference(previous).inDays == 1) {
+        currentDays++;
+        currentVerses += versesByDate[date]!;
+      } else {
+        currentDays = 1;
+        currentVerses = versesByDate[date]!;
+      }
+      maxDays = max(maxDays, currentDays);
+      maxVerses = max(maxVerses, currentVerses);
+      previous = date;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (previous == null || today.difference(previous).inDays > 1) {
+      currentDays = 0;
+      currentVerses = 0;
+    }
+    return LearningStats(
+      recitationDays: dates.length,
+      currentDayStreak: currentDays,
+      maxDayStreak: maxDays,
+      currentVerseStreak: currentVerses,
+      maxVerseStreak: maxVerses,
     );
   }
 

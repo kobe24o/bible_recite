@@ -100,10 +100,16 @@ final class RecitationSummary {
 final class LearningStats {
   const LearningStats({
     required this.recitationDays,
-    required this.currentStreak,
+    required this.currentDayStreak,
+    required this.maxDayStreak,
+    required this.currentVerseStreak,
+    required this.maxVerseStreak,
   });
   final int recitationDays;
-  final int currentStreak;
+  final int currentDayStreak;
+  final int maxDayStreak;
+  final int currentVerseStreak;
+  final int maxVerseStreak;
 }
 
 final class RecitationVerseMetric {

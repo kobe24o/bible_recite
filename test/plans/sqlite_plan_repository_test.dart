@@ -1,10 +1,48 @@
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/statistics/domain/achievement.dart';
+import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test(
+    'tracks current and historical best streaks without deduplicating verses',
+    () async {
+      final database = sqlite3.openInMemory();
+      final repository = SqlitePlanRepository(database);
+      addTearDown(repository.close);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day, 12);
+
+      await repository.saveRecitationResult(
+        _result(today.subtract(const Duration(days: 5)), 1, 2),
+      );
+      await repository.saveRecitationResult(
+        _result(today.subtract(const Duration(days: 4)), 1, 1),
+      );
+      await repository.saveRecitationResult(
+        _result(today.subtract(const Duration(days: 1)), 1, 3),
+      );
+      await repository.saveRecitationResult(_result(today, 1, 2));
+      await repository.saveRecitationResult(_result(today, 1, 2));
+
+      final active = await repository.getLearningStats();
+      expect(active.recitationDays, 4);
+      expect(active.currentDayStreak, 2);
+      expect(active.maxDayStreak, 2);
+      expect(active.currentVerseStreak, 7);
+      expect(active.maxVerseStreak, 7);
+
+      database.execute('DELETE FROM recitation_result');
+      final cleared = await repository.getLearningStats();
+      expect(cleared.currentDayStreak, 0);
+      expect(cleared.currentVerseStreak, 0);
+      expect(cleared.maxDayStreak, 2);
+      expect(cleared.maxVerseStreak, 7);
+    },
+  );
+
   test(
     'keeps real percentage progress for externally calculated badges',
     () async {
@@ -440,4 +478,24 @@ NewMemorizationPlan _plan() => NewMemorizationPlan(
       endVerse: 5,
     ),
   ],
+);
+
+NewRecitationResult _result(
+  DateTime completedAt,
+  int startVerse,
+  int endVerse,
+) => NewRecitationResult(
+  translationId: 'cmn-cu89s',
+  bookId: 'JHN',
+  chapter: 3,
+  startVerse: startVerse,
+  endVerse: endVerse,
+  mode: 'continuous',
+  durationSeconds: 30,
+  correctCount: 10,
+  incorrectCount: 0,
+  omittedCount: 0,
+  reorderedCount: 0,
+  accuracy: 1,
+  completedAt: completedAt,
 );
