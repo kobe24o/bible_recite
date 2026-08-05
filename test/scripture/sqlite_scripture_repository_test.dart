@@ -22,6 +22,17 @@ void main() {
     expect(verse.text, contains('For God so loved the world'));
   });
 
+  test(
+    'loads chapter verse totals for achievement progress in one query',
+    () async {
+      final totals = await repository.getChapterVerseCounts('cmn-cu89s');
+
+      expect(totals['JHN:3'], 36);
+      expect(totals['GEN:1'], 31);
+      expect(totals['REV:22'], 21);
+    },
+  );
+
   test('parallel repository returns an approved cross-chapter group', () async {
     final range = PassageRange(
       start: (

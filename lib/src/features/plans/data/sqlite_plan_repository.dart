@@ -1089,6 +1089,7 @@ final class SqlitePlanRepository {
   Future<List<AchievementProgress>> syncExternalAchievements(
     List<AchievementDefinition> definitions,
     Set<String> satisfiedIds,
+    Map<String, double> currentValues,
   ) async {
     final now = DateTime.now().toUtc().toIso8601String();
     for (final id in satisfiedIds) {
@@ -1110,7 +1111,9 @@ final class SqlitePlanRepository {
       for (final definition in definitions)
         AchievementProgress(
           definition: definition,
-          current: satisfiedIds.contains(definition.id) ? 1 : 0,
+          current:
+              currentValues[definition.id] ??
+              (satisfiedIds.contains(definition.id) ? 1 : 0),
           satisfied: satisfiedIds.contains(definition.id),
           unlockedAt: unlocks[definition.id],
         ),

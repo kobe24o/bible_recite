@@ -69,6 +69,21 @@ void main() {
       find.byKey(const Key('achievement-first_recitation-unlocked')),
       findsOneWidget,
     );
+    expect(find.text('已获得 · 100%'), findsWidgets);
+    expect(find.text('89%'), findsOneWidget);
+
+    final firstBadge = find.byKey(
+      const Key('achievement-first_recitation-unlocked'),
+    );
+    await tester.ensureVisible(firstBadge);
+    await tester.tap(firstBadge);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('当前进度：100%'), findsOneWidget);
+    final timeText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? '')
+        .firstWhere((text) => text.contains('获得时间：'));
+    expect(timeText, isNot(contains(RegExp(r':\d{2}\.\d'))));
   });
 }
 

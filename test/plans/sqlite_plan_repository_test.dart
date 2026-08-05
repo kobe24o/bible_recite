@@ -1,9 +1,35 @@
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
+import 'package:bible_recite/src/features/statistics/domain/achievement.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test(
+    'keeps real percentage progress for externally calculated badges',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      const definition = AchievementDefinition(
+        id: 'book_complete_JHN',
+        title: '约翰福音勋章',
+        description: '完成约翰福音全部经文',
+        metric: AchievementMetric.sessions,
+        target: 1,
+      );
+
+      final progress = await repository.syncExternalAchievements(
+        const [definition],
+        const {},
+        const {'book_complete_JHN': 0.42},
+      );
+
+      expect(progress.single.current, 0.42);
+      expect(progress.single.fraction, 0.42);
+      expect(progress.single.satisfied, isFalse);
+    },
+  );
+
   test('stores cloud plan source setting with a default fallback', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);

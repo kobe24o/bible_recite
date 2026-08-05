@@ -16,9 +16,8 @@ import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../scripture/application/scripture_providers.dart';
-import '../../scripture/domain/book_name_catalog.dart';
+import '../../scripture/data/sqlite_scripture_repository.dart';
 import '../../scripture/domain/scripture_models.dart';
-import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 
@@ -379,6 +378,17 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final scripture = await ref.read(scriptureRepositoryProvider.future);
     final books = await scripture.listBooks('cmn-cu89s', CanonId.protestant66);
     final names = ref.read(bookNameCatalogProvider);
+    final chapterTotals = scripture is SqliteScriptureRepository
+        ? await scripture.getChapterVerseCounts('cmn-cu89s')
+        : <String, int>{
+            for (final book in books)
+              for (var chapter = 1; chapter <= book.chapterCount; chapter++)
+                '${book.osisId}:$chapter': (await scripture.getChapter(
+                  'cmn-cu89s',
+                  book.osisId,
+                  chapter,
+                )).length,
+          };
     final covered = <String, Set<int>>{};
     for (final item in metrics) {
       covered
@@ -387,6 +397,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     }
     final definitions = <AchievementDefinition>[];
     final satisfied = <String>{};
+    final currentValues = <String, double>{};
     final plans = await repository.listPlans();
     for (final plan in plans.where((plan) => plan.sourceKind.name == 'cloud')) {
       final id = 'preset_plan_${plan.externalId ?? plan.id}';
@@ -402,8 +413,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
         satisfied.add(id);
       }
+      currentValues[id] = plan.totalTasks == 0
+          ? 0
+          : plan.completedTasks / plan.totalTasks;
     }
-    final completedBooks = <BibleBook>[];
+    var oldCovered = 0;
+    var oldTotal = 0;
+    var newCovered = 0;
+    var newTotal = 0;
     for (final book in books) {
       final id = 'book_complete_${book.osisId}';
       definitions.add(
@@ -416,49 +433,37 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           target: 1,
         ),
       );
-      final hasEveryChapter = List.generate(
-        book.chapterCount,
-        (i) => i + 1,
-      ).every((chapter) => covered.containsKey('${book.osisId}:$chapter'));
-      if (!hasEveryChapter) continue;
-      var complete = true;
+      var bookCovered = 0;
+      var bookTotal = 0;
       for (var chapter = 1; chapter <= book.chapterCount; chapter++) {
-        final total = (await scripture.getChapter(
-          'cmn-cu89s',
-          book.osisId,
-          chapter,
-        )).length;
-        if ((covered['${book.osisId}:$chapter']?.length ?? 0) < total) {
-          complete = false;
-          break;
-        }
+        final key = '${book.osisId}:$chapter';
+        final total = chapterTotals[key] ?? 0;
+        bookTotal += total;
+        bookCovered += (covered[key]?.length ?? 0).clamp(0, total).toInt();
       }
-      if (complete) {
-        satisfied.add(id);
-        completedBooks.add(book);
+      final fraction = bookTotal == 0 ? 0.0 : bookCovered / bookTotal;
+      currentValues[id] = fraction;
+      if (fraction >= 1) satisfied.add(id);
+      if (book.ordinal <= 39) {
+        oldCovered += bookCovered;
+        oldTotal += bookTotal;
+      } else {
+        newCovered += bookCovered;
+        newTotal += bookTotal;
       }
     }
-    for (final entry
-        in <({String id, String title, String description, bool complete})>[
-          (
-            id: 'old_testament_complete',
-            title: '旧约勋章',
-            description: '完成旧约全部经文',
-            complete: completedBooks.where((b) => b.ordinal <= 39).length == 39,
-          ),
-          (
-            id: 'new_testament_complete',
-            title: '新约勋章',
-            description: '完成新约全部经文',
-            complete: completedBooks.where((b) => b.ordinal > 39).length == 27,
-          ),
-          (
-            id: 'bible_complete',
-            title: '圣经勋章',
-            description: '完成整本圣经全部经文',
-            complete: completedBooks.length == 66,
-          ),
-        ]) {
+    final scopeProgress = <String, double>{
+      'old_testament_complete': oldTotal == 0 ? 0 : oldCovered / oldTotal,
+      'new_testament_complete': newTotal == 0 ? 0 : newCovered / newTotal,
+      'bible_complete': oldTotal + newTotal == 0
+          ? 0
+          : (oldCovered + newCovered) / (oldTotal + newTotal),
+    };
+    for (final entry in <({String id, String title, String description})>[
+      (id: 'old_testament_complete', title: '旧约勋章', description: '完成旧约全部经文'),
+      (id: 'new_testament_complete', title: '新约勋章', description: '完成新约全部经文'),
+      (id: 'bible_complete', title: '圣经勋章', description: '完成整本圣经全部经文'),
+    ]) {
       definitions.add(
         AchievementDefinition(
           id: entry.id,
@@ -468,9 +473,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           target: 1,
         ),
       );
-      if (entry.complete) satisfied.add(entry.id);
+      currentValues[entry.id] = scopeProgress[entry.id]!;
+      if (scopeProgress[entry.id]! >= 1) satisfied.add(entry.id);
     }
-    return repository.syncExternalAchievements(definitions, satisfied);
+    return repository.syncExternalAchievements(
+      definitions,
+      satisfied,
+      currentValues,
+    );
   }
 
   Future<void> _showAchievement(
@@ -486,7 +496,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         title: Text(progress.definition.title),
         content: Text(
           '${progress.definition.description}\n\n'
-          '${unlocked ? '获得状态：已获得\n获得时间：${progress.unlockedAt}' : '获得状态：尚未获得\n当前进度：${(progress.fraction * 100).round()}%'}',
+          '当前进度：${(progress.fraction * 100).round()}%\n'
+          '${unlocked ? '获得状态：已获得\n获得时间：${_formatDateTime(progress.unlockedAt!)}' : '获得状态：尚未获得'}',
         ),
         actions: [
           TextButton(
@@ -749,8 +760,9 @@ class _DailyReminderCardState extends ConsumerState<_DailyReminderCard> {
         ),
       ),
     );
-    if (selected != null)
+    if (selected != null) {
       await _save(settings.copyWith(intervalMinutes: selected));
+    }
   }
 
   Widget _wheel(
@@ -921,6 +933,13 @@ String _formatDuration(Duration duration, {bool includeSeconds = true}) {
   return parts.isEmpty ? '0秒' : parts.join();
 }
 
+String _formatDateTime(DateTime value) {
+  final local = value.toLocal();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${local.year}-${two(local.month)}-${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
+}
+
 class _AchievementCard extends StatelessWidget {
   const _AchievementCard({required this.progress, required this.onTap});
 
@@ -954,7 +973,9 @@ class _AchievementCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    unlocked ? '已获得' : '${(progress.fraction * 100).round()}%',
+                    unlocked
+                        ? '已获得 · ${(progress.fraction * 100).round()}%'
+                        : '${(progress.fraction * 100).round()}%',
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                 ],

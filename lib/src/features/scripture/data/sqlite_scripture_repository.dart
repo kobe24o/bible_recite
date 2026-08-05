@@ -96,6 +96,26 @@ final class SqliteScriptureRepository implements ScriptureRepository {
     mode: OpenMode.readOnly,
   );
 
+  /// Returns all chapter verse totals with a single read-only database query.
+  /// This keeps whole-Bible achievement progress inexpensive to calculate.
+  Future<Map<String, int>> getChapterVerseCounts(String translationId) async {
+    final database = _open(translationId);
+    try {
+      return {
+        for (final row in database.select('''
+          SELECT osis_book_id, chapter,
+            SUM(end_verse - start_verse + 1) AS verse_count
+          FROM verse_unit
+          WHERE status = 'present'
+          GROUP BY osis_book_id, chapter
+        '''))
+          '${row['osis_book_id']}:${row['chapter']}': row['verse_count'] as int,
+      };
+    } finally {
+      database.close();
+    }
+  }
+
   @override
   Future<List<TranslationInfo>> listTranslations() async {
     final translations = registry.entries
