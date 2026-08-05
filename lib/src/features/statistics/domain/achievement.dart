@@ -215,7 +215,12 @@ final class AchievementProgress {
   final bool satisfied;
   final DateTime? unlockedAt;
 
-  double get fraction => (current / definition.target).clamp(0, 1).toDouble();
+  /// Achievement unlocks are permanent. Metrics such as current streak or
+  /// completed plans may later decrease, but an earned badge must not regress
+  /// to "已获得 · 0%".
+  double get fraction => unlockedAt != null
+      ? 1
+      : (current / definition.target).clamp(0, 1).toDouble();
 }
 
 final class AchievementUnlock {

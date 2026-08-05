@@ -3,6 +3,22 @@ import 'package:bible_recite/src/features/statistics/domain/achievement_engine.d
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'an unlocked achievement keeps 100 percent when its metric decreases',
+    () {
+      final progress = AchievementProgress(
+        definition: achievementDefinitions.singleWhere(
+          (definition) => definition.id == 'plan_complete',
+        ),
+        current: 0,
+        satisfied: false,
+        unlockedAt: DateTime(2026, 8, 5, 12),
+      );
+
+      expect(progress.fraction, 1);
+    },
+  );
+
   test('unlocks encouragement milestones at their exact thresholds', () {
     final progress = const AchievementEngine().evaluate(
       const AchievementSnapshot(

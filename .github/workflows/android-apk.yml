@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "所有可量化成就统一显示真实进度百分比。预置计划按任务完成率计算；66 卷、新旧约和整本圣经按跨译本去重后的经文覆盖节数计算。获得时间显示到秒，去掉秒后小数。"
+              --notes "修复已获得勋章因计划重启、删除或连续天数中断而错误显示 0% 的问题。成就一旦获得，其展示进度固定为 100%；尚未获得的成就继续显示实时进度。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "所有可量化成就统一显示真实进度百分比。预置计划按任务完成率计算；66 卷、新旧约和整本圣经按跨译本去重后的经文覆盖节数计算。获得时间显示到秒，去掉秒后小数。" \
+              --release-notes "修复已获得勋章因计划重启、删除或连续天数中断而错误显示 0% 的问题。成就一旦获得，其展示进度固定为 100%；尚未获得的成就继续显示实时进度。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
