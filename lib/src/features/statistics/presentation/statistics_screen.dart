@@ -42,11 +42,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     ref.watch(recitationDataRevisionProvider);
+    final name = ref.watch(profileNameProvider).asData?.value ?? '';
     final repository = ref.watch(planRepositoryProvider);
     final locale = Localizations.localeOf(context);
     final chinese = locale.languageCode == 'zh';
     return Scaffold(
-      appBar: AppBar(title: Text(localizations.statisticsTitle)),
+      appBar: AppBar(
+        title: Text(name.isEmpty ? localizations.statisticsTitle : name),
+      ),
       body: repository.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => _empty(context, localizations),
@@ -93,18 +96,50 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          Text(
-                            '“我将你的话藏在心里，免得我得罪你。”\n（诗篇119:11）',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimaryContainer,
-                                  fontStyle: FontStyle.italic,
+                          RichText(
+                            text: TextSpan(
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                              children: [
+                                const TextSpan(text: '“'),
+                                TextSpan(
+                                  text: name.isEmpty ? '我' : name,
+                                  style: name.isEmpty
+                                      ? null
+                                      : const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                 ),
+                                const TextSpan(text: '将你的话藏在心里，免得'),
+                                TextSpan(
+                                  text: name.isEmpty ? '我' : name,
+                                  style: name.isEmpty
+                                      ? null
+                                      : const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                ),
+                                const TextSpan(text: '得罪你。”\n（诗篇119:11）'),
+                              ],
+                            ),
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.person_outline_rounded),
+                      title: const Text('我的名字'),
+                      subtitle: Text(name.isEmpty ? '未填写' : name),
+                      trailing: const Icon(Icons.edit_outlined),
+                      onTap: () => _editProfileName(name),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -286,6 +321,37 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         actionLabel: localizations.browseBible,
         onAction: () => context.go('/bible'),
       );
+
+  Future<void> _editProfileName(String current) async {
+    final controller = TextEditingController(text: current);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('我的名字'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 20,
+          decoration: const InputDecoration(hintText: '留空则显示“我的”'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    final repository = await ref.read(planRepositoryProvider.future);
+    await repository.setSetting('profile_name', value);
+    ref.read(profileRevisionProvider.notifier).refresh();
+  }
 
   Future<_StatisticsData> _load(SqlitePlanRepository repository) async {
     await repository.evaluateAndUnlockAchievements(source: 'backfill');

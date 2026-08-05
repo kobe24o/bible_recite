@@ -73,6 +73,22 @@ final class RecitationDataRevision extends Notifier<int> {
   void refresh() => state++;
 }
 
+final profileRevisionProvider = NotifierProvider<ProfileRevision, int>(
+  ProfileRevision.new,
+);
+
+final class ProfileRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+  void refresh() => state++;
+}
+
+final profileNameProvider = FutureProvider<String>((ref) async {
+  ref.watch(profileRevisionProvider);
+  final repository = await ref.watch(planRepositoryProvider.future);
+  return (await repository.getSetting('profile_name', '')).trim();
+});
+
 /// Incremented when the cached preset-plan feed or its NEW markers change.
 final presetPlanRevisionProvider = NotifierProvider<PresetPlanRevision, int>(
   PresetPlanRevision.new,

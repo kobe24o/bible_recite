@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../l10n/generated/app_localizations.dart';
+import '../features/plans/application/plan_providers.dart';
 
-class ResponsiveShell extends StatelessWidget {
+class ResponsiveShell extends ConsumerWidget {
   const ResponsiveShell({required this.child, super.key});
 
   static const breakpoint = 720.0;
@@ -11,13 +13,16 @@ class ResponsiveShell extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final localizations = AppLocalizations.of(context);
+    final name = ref.watch(profileNameProvider).asData?.value;
     final labels = (
       today: localizations?.navToday ?? '今日',
       bible: localizations?.navBible ?? '圣经',
       plans: localizations?.navPlans ?? '计划',
-      statistics: localizations?.navStatistics ?? '统计',
+      statistics: name?.isNotEmpty == true
+          ? name!
+          : (localizations?.navStatistics ?? '统计'),
     );
     final router = GoRouter.maybeOf(context);
     final location =
