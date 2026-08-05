@@ -7,6 +7,7 @@ enum AchievementMetric {
   chapters,
   plans,
   completedPlans,
+  recitationDays,
 }
 
 final class AchievementDefinition {
@@ -16,6 +17,7 @@ final class AchievementDefinition {
     required this.description,
     required this.metric,
     required this.target,
+    this.hiddenUntilUnlocked = false,
   });
 
   final String id;
@@ -23,6 +25,7 @@ final class AchievementDefinition {
   final String description;
   final AchievementMetric metric;
   final double target;
+  final bool hiddenUntilUnlocked;
 }
 
 const achievementDefinitions = <AchievementDefinition>[
@@ -67,27 +70,6 @@ const achievementDefinitions = <AchievementDefinition>[
     description: '累计背诵 100 次',
     metric: AchievementMetric.sessions,
     target: 100,
-  ),
-  AchievementDefinition(
-    id: 'streak_3',
-    title: '三日同行',
-    description: '连续背诵 3 天',
-    metric: AchievementMetric.streak,
-    target: 3,
-  ),
-  AchievementDefinition(
-    id: 'streak_7',
-    title: '一周坚持',
-    description: '连续背诵 7 天',
-    metric: AchievementMetric.streak,
-    target: 7,
-  ),
-  AchievementDefinition(
-    id: 'streak_30',
-    title: '月度同行',
-    description: '连续背诵 30 天',
-    metric: AchievementMetric.streak,
-    target: 30,
   ),
   AchievementDefinition(
     id: 'verses_10',
@@ -154,6 +136,48 @@ const achievementDefinitions = <AchievementDefinition>[
   ),
 ];
 
+List<AchievementDefinition> achievementDefinitionsFor(
+  AchievementSnapshot snapshot,
+) => [
+  ...achievementDefinitions,
+  for (final target in const [1, 3, 5, 7, 15])
+    AchievementDefinition(
+      id: 'days_$target',
+      title: '背诵第 $target 天',
+      description: '累计在 $target 个不同日期完成背诵',
+      metric: AchievementMetric.recitationDays,
+      target: target.toDouble(),
+      hiddenUntilUnlocked: true,
+    ),
+  for (var target = 30; target <= snapshot.recitationDays; target += 30)
+    AchievementDefinition(
+      id: 'days_$target',
+      title: '背诵第 $target 天',
+      description: '累计在 $target 个不同日期完成背诵',
+      metric: AchievementMetric.recitationDays,
+      target: target.toDouble(),
+      hiddenUntilUnlocked: true,
+    ),
+  for (final target in const [1, 3, 5, 7, 15])
+    AchievementDefinition(
+      id: 'streak_$target',
+      title: '连续 $target 天',
+      description: '连续 $target 天每天至少完成一次背诵',
+      metric: AchievementMetric.streak,
+      target: target.toDouble(),
+      hiddenUntilUnlocked: true,
+    ),
+  for (var target = 30; target <= snapshot.activeDayStreak; target += 30)
+    AchievementDefinition(
+      id: 'streak_$target',
+      title: '连续 $target 天',
+      description: '连续 $target 天每天至少完成一次背诵',
+      metric: AchievementMetric.streak,
+      target: target.toDouble(),
+      hiddenUntilUnlocked: true,
+    ),
+];
+
 final class AchievementSnapshot {
   const AchievementSnapshot({
     required this.sessionCount,
@@ -164,6 +188,7 @@ final class AchievementSnapshot {
     required this.completedChapters,
     required this.planCount,
     required this.completedPlanCount,
+    this.recitationDays = 0,
   });
 
   final int sessionCount;
@@ -174,6 +199,7 @@ final class AchievementSnapshot {
   final int completedChapters;
   final int planCount;
   final int completedPlanCount;
+  final int recitationDays;
 }
 
 final class AchievementProgress {

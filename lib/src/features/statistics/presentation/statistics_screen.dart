@@ -15,6 +15,10 @@ import '../../plans/data/sqlite_plan_repository.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
+import '../../scripture/application/scripture_providers.dart';
+import '../../scripture/domain/book_name_catalog.dart';
+import '../../scripture/domain/scripture_models.dart';
+import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 
@@ -98,6 +102,26 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   ).colorScheme.onPrimaryContainer,
                                   fontStyle: FontStyle.italic,
                                 ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_stories_rounded),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              chinese
+                                  ? '我们一起朗读背诵${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}了'
+                                  : 'Reading together for ${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}',
+                            ),
                           ),
                         ],
                       ),
@@ -197,6 +221,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                               : '${summary.totalSessions} sessions',
                         ),
                         _SummaryCard(
+                          icon: Icons.timer_outlined,
+                          text: chinese
+                              ? '背诵总时长 ${_formatDuration(Duration(seconds: summary.totalSeconds))}'
+                              : 'Total ${_formatDuration(Duration(seconds: summary.totalSeconds))}',
+                        ),
+                        _SummaryCard(
                           icon: Icons.menu_book_rounded,
                           text: chinese
                               ? '累计 ${summary.totalVerses} 节'
@@ -207,6 +237,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                           text: chinese
                               ? '平均正确率 ${(summary.averageAccuracy * 100).round()}%'
                               : 'Average ${(summary.averageAccuracy * 100).round()}%',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.local_fire_department_rounded,
+                          text: chinese
+                              ? '连续背诵 ${data.learning.currentStreak} 天'
+                              : '${data.learning.currentStreak}-day streak',
                         ),
                       ],
                     ),
@@ -227,8 +263,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             mainAxisSpacing: 10,
                           ),
                       itemCount: data.achievements.length,
-                      itemBuilder: (context, index) =>
-                          _AchievementCard(progress: data.achievements[index]),
+                      itemBuilder: (context, index) => _AchievementCard(
+                        progress: data.achievements[index],
+                        onTap: () => _showAchievement(data.achievements[index]),
+                      ),
                     ),
                   ],
                 ],
@@ -251,15 +289,148 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Future<_StatisticsData> _load(SqlitePlanRepository repository) async {
     await repository.evaluateAndUnlockAchievements(source: 'backfill');
+    final coverage = await _coverageAchievements(repository);
     return _StatisticsData(
       summary: await repository.getRecitationSummary(),
+      learning: await repository.getLearningStats(),
       results: await repository.listRecitationResults(),
-      achievements: await repository.listAchievementProgress(),
+      achievements: [
+        ...await repository.listAchievementProgress(),
+        ...coverage,
+      ],
       settings: await repository.getEbbinghausSettings(),
       ignoreFinalNasal:
           await repository.getSetting('ignore_final_nasal', 'true') == 'true',
+      firstOpenedAt: await repository.getFirstOpenedAt(),
     );
   }
+
+  Future<List<AchievementProgress>> _coverageAchievements(
+    SqlitePlanRepository repository,
+  ) async {
+    final metrics = await repository.listRecitationVerseMetrics();
+    if (metrics.isEmpty) return const [];
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final books = await scripture.listBooks('cmn-cu89s', CanonId.protestant66);
+    final names = ref.read(bookNameCatalogProvider);
+    final covered = <String, Set<int>>{};
+    for (final item in metrics) {
+      covered
+          .putIfAbsent('${item.bookId}:${item.chapter}', () => <int>{})
+          .add(item.verse);
+    }
+    final definitions = <AchievementDefinition>[];
+    final satisfied = <String>{};
+    final plans = await repository.listPlans();
+    for (final plan in plans.where((plan) => plan.sourceKind.name == 'cloud')) {
+      final id = 'preset_plan_${plan.externalId ?? plan.id}';
+      definitions.add(
+        AchievementDefinition(
+          id: id,
+          title: '${plan.title}勋章',
+          description: '完成预置计划《${plan.title}》',
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      );
+      if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
+        satisfied.add(id);
+      }
+    }
+    final completedBooks = <BibleBook>[];
+    for (final book in books) {
+      final id = 'book_complete_${book.osisId}';
+      definitions.add(
+        AchievementDefinition(
+          id: id,
+          title: '${names.nameFor(book.osisId, const Locale('zh', 'CN'))}勋章',
+          description:
+              '完成${names.nameFor(book.osisId, const Locale('zh', 'CN'))}全部经文',
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      );
+      final hasEveryChapter = List.generate(
+        book.chapterCount,
+        (i) => i + 1,
+      ).every((chapter) => covered.containsKey('${book.osisId}:$chapter'));
+      if (!hasEveryChapter) continue;
+      var complete = true;
+      for (var chapter = 1; chapter <= book.chapterCount; chapter++) {
+        final total = (await scripture.getChapter(
+          'cmn-cu89s',
+          book.osisId,
+          chapter,
+        )).length;
+        if ((covered['${book.osisId}:$chapter']?.length ?? 0) < total) {
+          complete = false;
+          break;
+        }
+      }
+      if (complete) {
+        satisfied.add(id);
+        completedBooks.add(book);
+      }
+    }
+    for (final entry
+        in <({String id, String title, String description, bool complete})>[
+          (
+            id: 'old_testament_complete',
+            title: '旧约勋章',
+            description: '完成旧约全部经文',
+            complete: completedBooks.where((b) => b.ordinal <= 39).length == 39,
+          ),
+          (
+            id: 'new_testament_complete',
+            title: '新约勋章',
+            description: '完成新约全部经文',
+            complete: completedBooks.where((b) => b.ordinal > 39).length == 27,
+          ),
+          (
+            id: 'bible_complete',
+            title: '圣经勋章',
+            description: '完成整本圣经全部经文',
+            complete: completedBooks.length == 66,
+          ),
+        ]) {
+      definitions.add(
+        AchievementDefinition(
+          id: entry.id,
+          title: entry.title,
+          description: entry.description,
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      );
+      if (entry.complete) satisfied.add(entry.id);
+    }
+    return repository.syncExternalAchievements(definitions, satisfied);
+  }
+
+  Future<void> _showAchievement(
+    AchievementProgress progress,
+  ) => showDialog<void>(
+    context: context,
+    builder: (context) {
+      final unlocked = progress.unlockedAt != null;
+      return AlertDialog(
+        icon: Icon(
+          unlocked ? Icons.workspace_premium_rounded : Icons.lock_outline,
+        ),
+        title: Text(progress.definition.title),
+        content: Text(
+          '${progress.definition.description}\n\n'
+          '${unlocked ? '获得状态：已获得\n获得时间：${progress.unlockedAt}' : '获得状态：尚未获得\n当前进度：${(progress.fraction * 100).round()}%'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      );
+    },
+  );
 
   Future<void> _showSharePlatforms() async {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
@@ -664,10 +835,31 @@ class _StatisticsEmptySection extends StatelessWidget {
   );
 }
 
+String _formatDuration(Duration duration, {bool includeSeconds = true}) {
+  var seconds = duration.inSeconds.clamp(0, 1 << 62);
+  final years = seconds ~/ (365 * 24 * 3600);
+  seconds -= years * 365 * 24 * 3600;
+  final days = seconds ~/ (24 * 3600);
+  seconds -= days * 24 * 3600;
+  final hours = seconds ~/ 3600;
+  seconds -= hours * 3600;
+  final minutes = seconds ~/ 60;
+  seconds -= minutes * 60;
+  final parts = <String>[
+    if (years > 0) '$years年',
+    if (days > 0) '$days天',
+    if (hours > 0) '$hours小时',
+    if (minutes > 0) '$minutes分钟',
+    if (includeSeconds && seconds > 0) '$seconds秒',
+  ];
+  return parts.isEmpty ? '0秒' : parts.join();
+}
+
 class _AchievementCard extends StatelessWidget {
-  const _AchievementCard({required this.progress});
+  const _AchievementCard({required this.progress, required this.onTap});
 
   final AchievementProgress progress;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -678,49 +870,53 @@ class _AchievementCard extends StatelessWidget {
         'achievement-${progress.definition.id}-${unlocked ? 'unlocked' : 'locked'}',
       ),
       color: unlocked ? const Color(0xFFE8F1E9) : colors.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  unlocked
-                      ? Icons.workspace_premium_rounded
-                      : Icons.lock_outline,
-                  color: unlocked ? const Color(0xFFB88A22) : colors.outline,
-                ),
-                const Spacer(),
-                Text(
-                  unlocked ? '已获得' : '${(progress.fraction * 100).round()}%',
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              progress.definition.title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: unlocked
-                    ? const Color(0xFF24523A)
-                    : colors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    unlocked
+                        ? Icons.workspace_premium_rounded
+                        : Icons.lock_outline,
+                    color: unlocked ? const Color(0xFFB88A22) : colors.outline,
+                  ),
+                  const Spacer(),
+                  Text(
+                    unlocked ? '已获得' : '${(progress.fraction * 100).round()}%',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              progress.definition.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const Spacer(),
-            LinearProgressIndicator(
-              value: progress.fraction,
-              color: unlocked ? const Color(0xFFB88A22) : colors.primary,
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                progress.definition.title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: unlocked
+                      ? const Color(0xFF24523A)
+                      : colors.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                progress.definition.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const Spacer(),
+              LinearProgressIndicator(
+                value: progress.fraction,
+                color: unlocked ? const Color(0xFFB88A22) : colors.primary,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -747,14 +943,18 @@ class _SummaryCard extends StatelessWidget {
 final class _StatisticsData {
   const _StatisticsData({
     required this.summary,
+    required this.learning,
     required this.results,
     required this.achievements,
     required this.settings,
     required this.ignoreFinalNasal,
+    required this.firstOpenedAt,
   });
   final RecitationSummary summary;
+  final LearningStats learning;
   final List<RecitationResult> results;
   final List<AchievementProgress> achievements;
   final EbbinghausSettings settings;
   final bool ignoreFinalNasal;
+  final DateTime firstOpenedAt;
 }

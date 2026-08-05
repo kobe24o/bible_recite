@@ -4,7 +4,7 @@ final class AchievementEngine {
   const AchievementEngine();
 
   List<AchievementProgress> evaluate(AchievementSnapshot snapshot) => [
-    for (final definition in achievementDefinitions)
+    for (final definition in achievementDefinitionsFor(snapshot))
       AchievementProgress(
         definition: definition,
         current: _current(definition.metric, snapshot),
@@ -23,5 +23,6 @@ final class AchievementEngine {
         AchievementMetric.plans => snapshot.planCount.toDouble(),
         AchievementMetric.completedPlans =>
           snapshot.completedPlanCount.toDouble(),
+        AchievementMetric.recitationDays => snapshot.recitationDays.toDouble(),
       };
 }

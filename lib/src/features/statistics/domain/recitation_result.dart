@@ -97,6 +97,15 @@ final class RecitationSummary {
   final double averageAccuracy;
 }
 
+final class LearningStats {
+  const LearningStats({
+    required this.recitationDays,
+    required this.currentStreak,
+  });
+  final int recitationDays;
+  final int currentStreak;
+}
+
 final class RecitationVerseMetric {
   const RecitationVerseMetric({
     required this.translationId,

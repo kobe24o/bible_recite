@@ -109,6 +109,11 @@ final class SqlitePlanRepository {
         setting_value TEXT NOT NULL
       )
     ''');
+    _database.execute(
+      '''INSERT OR IGNORE INTO app_setting(setting_key, setting_value)
+      VALUES ('first_opened_at', ?)''',
+      [DateTime.now().toUtc().toIso8601String()],
+    );
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
         plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
@@ -425,6 +430,13 @@ final class SqlitePlanRepository {
     );
     return rows.isEmpty ? fallback : rows.single['setting_value'] as String;
   }
+
+  Future<DateTime> getFirstOpenedAt() async => DateTime.parse(
+    await getSetting(
+      'first_opened_at',
+      DateTime.now().toUtc().toIso8601String(),
+    ),
+  ).toLocal();
 
   Future<void> setSetting(String key, String value) async {
     _database.execute(
@@ -1063,11 +1075,44 @@ final class SqlitePlanRepository {
     };
     return [
       for (final item in evaluated)
+        if (!item.definition.hiddenUntilUnlocked ||
+            unlocks.containsKey(item.definition.id))
+          AchievementProgress(
+            definition: item.definition,
+            current: item.current,
+            satisfied: item.satisfied,
+            unlockedAt: unlocks[item.definition.id],
+          ),
+    ];
+  }
+
+  Future<List<AchievementProgress>> syncExternalAchievements(
+    List<AchievementDefinition> definitions,
+    Set<String> satisfiedIds,
+  ) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    for (final id in satisfiedIds) {
+      _database.execute(
+        '''INSERT OR IGNORE INTO achievement_unlock
+        (achievement_id, unlocked_at, source) VALUES (?, ?, 'coverage')''',
+        [id, now],
+      );
+    }
+    final unlocks = <String, DateTime>{
+      for (final row in _database.select(
+        'SELECT achievement_id, unlocked_at FROM achievement_unlock',
+      ))
+        row['achievement_id'] as String: DateTime.parse(
+          row['unlocked_at'] as String,
+        ).toLocal(),
+    };
+    return [
+      for (final definition in definitions)
         AchievementProgress(
-          definition: item.definition,
-          current: item.current,
-          satisfied: item.satisfied,
-          unlockedAt: unlocks[item.definition.id],
+          definition: definition,
+          current: satisfiedIds.contains(definition.id) ? 1 : 0,
+          satisfied: satisfiedIds.contains(definition.id),
+          unlockedAt: unlocks[definition.id],
         ),
     ];
   }
@@ -1111,7 +1156,6 @@ final class SqlitePlanRepository {
         chapterSizes[key] = size;
       }
     }
-    var maxStreak = 0;
     var streak = 0;
     DateTime? previous;
     final sortedDates = activeDates.toList()..sort();
@@ -1121,7 +1165,6 @@ final class SqlitePlanRepository {
       } else {
         streak = 1;
       }
-      if (streak > maxStreak) maxStreak = streak;
       previous = date;
     }
     final completedChapters = chapterCoverage.entries.where((entry) {
@@ -1143,15 +1186,22 @@ final class SqlitePlanRepository {
       )
     ''').single['count']
             as int;
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final currentStreak =
+        previous == null || todayOnly.difference(previous).inDays > 1
+        ? 0
+        : streak;
     return AchievementSnapshot(
       sessionCount: sessionCount,
-      activeDayStreak: maxStreak,
+      activeDayStreak: currentStreak,
       completedVerses: completedVerseKeys.length,
       maxAccuracy: maxAccuracy,
       hasPerfectLongResult: hasPerfectLongResult,
       completedChapters: completedChapters,
       planCount: planCount,
       completedPlanCount: completedPlanCount,
+      recitationDays: activeDates.length,
     );
   }
 
@@ -1258,6 +1308,14 @@ final class SqlitePlanRepository {
       totalVerses: row['total_verses'] as int,
       totalSeconds: row['total_seconds'] as int,
       averageAccuracy: (row['average_accuracy'] as num).toDouble(),
+    );
+  }
+
+  Future<LearningStats> getLearningStats() async {
+    final snapshot = _achievementSnapshot();
+    return LearningStats(
+      recitationDays: snapshot.recitationDays,
+      currentStreak: snapshot.activeDayStreak,
     );
   }
 
