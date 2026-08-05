@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../features/plans/application/plan_providers.dart';
 
-class ResponsiveShell extends ConsumerWidget {
+class ResponsiveShell extends StatelessWidget {
   const ResponsiveShell({required this.child, super.key});
 
   static const breakpoint = 720.0;
@@ -13,9 +13,17 @@ class ResponsiveShell extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    final name = ref.watch(profileNameProvider).asData?.value;
+    String? name;
+    try {
+      name = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(profileNameProvider).asData?.value;
+    } on StateError {
+      // Widget-only shell previews and tests do not always supply Riverpod.
+    }
     final labels = (
       today: localizations?.navToday ?? '今日',
       bible: localizations?.navBible ?? '圣经',
