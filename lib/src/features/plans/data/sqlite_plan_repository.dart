@@ -4,6 +4,10 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../review/domain/ebbinghaus_scheduler.dart';
+import '../../quiz/domain/quiz_models.dart';
+import '../../quiz/domain/quiz_model_settings.dart';
+import '../../quiz/domain/quiz_result.dart';
+import '../../quiz/domain/quiz_scope.dart';
 import '../../statistics/domain/achievement.dart';
 import '../../statistics/domain/achievement_engine.dart';
 import '../../statistics/domain/recitation_result.dart';
@@ -115,6 +119,46 @@ final class SqlitePlanRepository {
       '''INSERT OR IGNORE INTO app_setting(setting_key, setting_value)
       VALUES ('first_opened_at', ?)''',
       [DateTime.now().toUtc().toIso8601String()],
+    );
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS quiz_question (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter INTEGER NOT NULL,
+        verse INTEGER NOT NULL,
+        start_offset INTEGER NOT NULL,
+        end_offset INTEGER NOT NULL,
+        word TEXT NOT NULL,
+        part_of_speech TEXT NOT NULL,
+        meaning TEXT NOT NULL,
+        reference TEXT NOT NULL,
+        answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
+        is_correct INTEGER,
+        answered_at TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    _database.execute(
+      '''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
+      ON quiz_question(translation_id, book_id, chapter, verse, answered)''',
+    );
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS quiz_result (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_id INTEGER NOT NULL
+          REFERENCES quiz_question(id) ON DELETE CASCADE,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter INTEGER NOT NULL,
+        verse INTEGER NOT NULL,
+        correct INTEGER NOT NULL CHECK(correct IN (0, 1)),
+        answered_at TEXT NOT NULL
+      )
+    ''');
+    _database.execute(
+      '''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
+      ON quiz_result(translation_id, book_id, chapter, verse)''',
     );
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
@@ -279,7 +323,7 @@ final class SqlitePlanRepository {
       end_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
       end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''',
     );
-    _database.execute('PRAGMA user_version = 7');
+    _database.execute('PRAGMA user_version = 8');
   }
 
   final Database _database;
@@ -449,6 +493,363 @@ final class SqlitePlanRepository {
       [key, value],
     );
   }
+
+  /// Quiz model settings live in app_setting under three keys.
+  Future<QuizModelSettings> getQuizModelSettings() async {
+    final baseUrl = await getSetting(
+      'quiz_model_url',
+      QuizModelSettings.defaultBaseUrl,
+    );
+    final model = await getSetting('quiz_model_name', QuizModelSettings.defaultModel);
+    final apiKey = await getSetting('quiz_model_api_key', '');
+    return QuizModelSettings(baseUrl: baseUrl, model: model, apiKey: apiKey);
+  }
+
+  Future<void> saveQuizModelSettings(QuizModelSettings settings) async {
+    await setSetting('quiz_model_url', settings.baseUrl.trim());
+    await setSetting('quiz_model_name', settings.model.trim());
+    await setSetting('quiz_model_api_key', settings.apiKey);
+  }
+
+  Future<void> clearQuizModelApiKey() async {
+    await setSetting('quiz_model_api_key', '');
+  }
+
+  /// Lists unanswered questions for the exact scope in canonical order.
+  Future<List<PendingQuizQuestion>> listPendingQuizQuestions(
+    QuizScope scope,
+  ) async {
+    final rows = _database.select(
+      '''
+      SELECT id, translation_id, book_id, chapter, verse, start_offset,
+        end_offset, word, part_of_speech, meaning, reference
+      FROM quiz_question
+      WHERE translation_id = ? AND book_id = ?
+        AND ((chapter > ? OR (chapter = ? AND verse >= ?))
+          AND (chapter < ? OR (chapter = ? AND verse <= ?)))
+        AND answered = 0
+      ORDER BY chapter, verse, start_offset, id
+    ''',
+      [
+        scope.translationId,
+        scope.bookId,
+        scope.startChapter,
+        scope.startChapter,
+        scope.startVerse,
+        scope.endChapter,
+        scope.endChapter,
+        scope.endVerse,
+      ],
+    );
+    return rows.map(_pendingQuestionFromRow).toList(growable: false);
+  }
+
+  /// Verses in the scope that still need a generated question, i.e. verses
+  /// without any unanswered question.
+  Future<List<({int chapter, int verse})>> missingQuizVerses(
+    QuizScope scope,
+  ) async {
+    final required = <({int chapter, int verse})>[];
+    final verseCounts = _chapterVerseCounts(scope);
+    for (var chapter = scope.startChapter; chapter <= scope.endChapter; chapter++) {
+      final count = verseCounts[chapter] ?? scope.endVerse;
+      final startVerse = chapter == scope.startChapter ? scope.startVerse : 1;
+      final endVerse = chapter == scope.endChapter ? scope.endVerse : count;
+      for (var verse = startVerse; verse <= endVerse; verse++) {
+        required.add((chapter: chapter, verse: verse));
+      }
+    }
+    final missing = <({int chapter, int verse})>[];
+    for (final target in required) {
+      final pending = await hasPendingQuizQuestion(
+        translationId: scope.translationId,
+        bookId: scope.bookId,
+        chapter: target.chapter,
+        verse: target.verse,
+      );
+      if (!pending) missing.add(target);
+    }
+    return missing;
+  }
+
+  Map<int, int> _chapterVerseCounts(QuizScope scope) {
+    final counts = <int, int>{};
+    if (scope.startChapter == scope.endChapter) return counts;
+    final rows = _database.select(
+      '''
+      SELECT chapter, COUNT(*) AS verse_count
+      FROM quiz_question
+      WHERE translation_id = ? AND book_id = ?
+        AND chapter >= ? AND chapter <= ?
+      GROUP BY chapter
+    ''',
+      [
+        scope.translationId,
+        scope.bookId,
+        scope.startChapter,
+        scope.endChapter,
+      ],
+    );
+    for (final row in rows) {
+      counts[row['chapter'] as int] = row['verse_count'] as int;
+    }
+    return counts;
+  }
+
+  Future<bool> hasPendingQuizQuestion({
+    required String translationId,
+    required String bookId,
+    required int chapter,
+    required int verse,
+  }) async {
+    final rows = _database.select(
+      '''
+      SELECT 1 FROM quiz_question
+      WHERE translation_id = ? AND book_id = ? AND chapter = ? AND verse = ?
+        AND answered = 0
+      LIMIT 1
+    ''',
+      [translationId, bookId, chapter, verse],
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<void> saveQuizQuestions(List<ValidatedQuizQuestion> questions) async {
+    if (questions.isEmpty) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      for (final question in questions) {
+        _database.execute(
+          '''
+          INSERT INTO quiz_question
+          (translation_id, book_id, chapter, verse, start_offset, end_offset,
+           word, part_of_speech, meaning, reference, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+          [
+            question.translationId,
+            question.bookId,
+            question.chapter,
+            question.verse,
+            question.start,
+            question.end,
+            question.word,
+            question.partOfSpeech,
+            question.meaning,
+            question.reference,
+            now,
+          ],
+        );
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// Completes one pending question and records exactly one quiz_result in a
+  /// transaction, updating the current and maximum correct-streak settings.
+  Future<QuizCompletion> completeQuizQuestion({
+    required int questionId,
+    required bool correct,
+    required DateTime answeredAt,
+  }) async {
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      final question = _database.select(
+        'SELECT * FROM quiz_question WHERE id = ?',
+        [questionId],
+      );
+      if (question.isEmpty) {
+        throw StateError('答题题目不存在');
+      }
+      final row = question.single;
+      if ((row['answered'] as int) == 1) {
+        throw StateError('该题目已经作答');
+      }
+      _database.execute(
+        '''
+        INSERT INTO quiz_result
+        (question_id, translation_id, book_id, chapter, verse, correct, answered_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      ''',
+        [
+          questionId,
+          row['translation_id'],
+          row['book_id'],
+          row['chapter'],
+          row['verse'],
+          correct ? 1 : 0,
+          answeredAt.toUtc().toIso8601String(),
+        ],
+      );
+      _database.execute(
+        '''
+        UPDATE quiz_question SET answered = 1, is_correct = ?, answered_at = ?
+        WHERE id = ?
+      ''',
+        [correct ? 1 : 0, answeredAt.toUtc().toIso8601String(), questionId],
+      );
+      final current = int.tryParse(
+            await _settingRaw('current_quiz_correct_streak'),
+          ) ??
+          0;
+      final max = int.tryParse(
+            await _settingRaw('max_quiz_correct_streak'),
+          ) ??
+          0;
+      final nextCurrent = correct ? current + 1 : 0;
+      final nextMax = max > nextCurrent ? max : nextCurrent;
+      await _setSettingRaw('current_quiz_correct_streak', '$nextCurrent');
+      await _setSettingRaw('max_quiz_correct_streak', '$nextMax');
+      _database.execute('COMMIT');
+      return QuizCompletion(
+        totalAnswered: (await _quizTotalAnswered()),
+        totalCorrect: (await _quizTotalCorrect()),
+        currentCorrectStreak: nextCurrent,
+        maxCorrectStreak: nextMax,
+      );
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  Future<QuizSummary> getQuizSummary() async {
+    final totalAnswered = await _quizTotalAnswered();
+    final totalCorrect = await _quizTotalCorrect();
+    final current = int.tryParse(
+          await _settingRaw('current_quiz_correct_streak'),
+        ) ??
+        0;
+    final max = int.tryParse(
+          await _settingRaw('max_quiz_correct_streak'),
+        ) ??
+        0;
+    return QuizSummary(
+      totalAnswered: totalAnswered,
+      totalCorrect: totalCorrect,
+      currentCorrectStreak: current,
+      maxCorrectStreak: max,
+    );
+  }
+
+  /// Quiz aggregates restricted to one optional scope.  With no filter it
+  /// returns the global summary; with a book, chapter or verse it returns a
+  /// range metric for that exact scope.
+  Future<QuizRangeMetric> getQuizMetric({
+    String? translationId,
+    String? bookId,
+    int? chapter,
+    int? verse,
+  }) async {
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (translationId != null) {
+      clauses.add('translation_id = ?');
+      args.add(translationId);
+    }
+    if (bookId != null) {
+      clauses.add('book_id = ?');
+      args.add(bookId);
+    }
+    if (chapter != null) {
+      clauses.add('chapter = ?');
+      args.add(chapter);
+    }
+    if (verse != null) {
+      clauses.add('verse = ?');
+      args.add(verse);
+    }
+    final where = clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}';
+    final rows = _database.select(
+      'SELECT COUNT(*) AS answered, '
+      'COALESCE(SUM(correct), 0) AS correct FROM quiz_result $where',
+      args,
+    );
+    final row = rows.single;
+    return QuizRangeMetric(
+      answered: row['answered'] as int,
+      correct: (row['correct'] as num).toInt(),
+    );
+  }
+
+  Future<List<QuizRangeMetric>> getQuizRangeMetrics({
+    required String translationId,
+    required String bookId,
+    int? chapter,
+  }) async {
+    final rows = _database.select(
+      '''
+      SELECT chapter, verse, COUNT(*) AS answered,
+        COALESCE(SUM(correct), 0) AS correct
+      FROM quiz_result
+      WHERE translation_id = ? AND book_id = ?
+        ${chapter == null ? '' : 'AND chapter = ?'}
+      GROUP BY chapter, verse
+      ORDER BY chapter, verse
+    ''',
+      chapter == null
+          ? [translationId, bookId]
+          : [translationId, bookId, chapter],
+    );
+    return [
+      for (final row in rows)
+        QuizRangeMetric(
+          answered: row['answered'] as int,
+          correct: (row['correct'] as num).toInt(),
+        ),
+    ];
+  }
+
+  Future<String> _settingRaw(String key) async {
+    final rows = _database.select(
+      'SELECT setting_value FROM app_setting WHERE setting_key = ?',
+      [key],
+    );
+    return rows.isEmpty ? '0' : rows.single['setting_value'] as String;
+  }
+
+  Future<void> _setSettingRaw(String key, String value) async {
+    _database.execute(
+      '''
+      INSERT INTO app_setting(setting_key, setting_value) VALUES (?, ?)
+      ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+    ''',
+      [key, value],
+    );
+  }
+
+  Future<int> _quizTotalAnswered() async {
+    final row = _database
+        .select('SELECT COUNT(*) AS count FROM quiz_result')
+        .single;
+    return row['count'] as int;
+  }
+
+  Future<int> _quizTotalCorrect() async {
+    final row = _database
+        .select('SELECT COUNT(*) AS count FROM quiz_result WHERE correct = 1')
+        .single;
+    return row['count'] as int;
+  }
+
+  PendingQuizQuestion _pendingQuestionFromRow(Row row) =>
+      PendingQuizQuestion(
+        id: row['id'] as int,
+        translationId: row['translation_id'] as String,
+        bookId: row['book_id'] as String,
+        chapter: row['chapter'] as int,
+        verse: row['verse'] as int,
+        start: row['start_offset'] as int,
+        end: row['end_offset'] as int,
+        word: row['word'] as String,
+        partOfSpeech: row['part_of_speech'] as String,
+        meaning: row['meaning'] as String,
+        reference: row['reference'] as String,
+      );
 
   Future<MemorizationPlan?> findPlanBySource(
     String sourceUrl,
