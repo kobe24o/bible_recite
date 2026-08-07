@@ -35,6 +35,7 @@ final class ValidatedQuizQuestion {
     required this.word,
     required this.partOfSpeech,
     required this.meaning,
+    required this.verseText,
   });
 
   final String reference;
@@ -47,6 +48,7 @@ final class ValidatedQuizQuestion {
   final String word;
   final String partOfSpeech;
   final String meaning;
+  final String verseText;
 
   int get length => end - start;
 }

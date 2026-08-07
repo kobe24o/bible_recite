@@ -71,6 +71,7 @@ final class QuizQuestionValidator {
           word: word,
           partOfSpeech: partOfSpeech.trim(),
           meaning: meaning.trim(),
+          verseText: verse.text,
         ),
       );
     }

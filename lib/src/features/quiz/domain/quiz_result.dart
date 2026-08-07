@@ -12,6 +12,7 @@ final class StoredQuizQuestion {
     required this.partOfSpeech,
     required this.meaning,
     required this.reference,
+    required this.verseText,
     required this.answered,
     required this.correct,
     required this.answeredAt,
@@ -28,6 +29,7 @@ final class StoredQuizQuestion {
   final String partOfSpeech;
   final String meaning;
   final String reference;
+  final String verseText;
   final bool answered;
   final bool? correct;
   final DateTime? answeredAt;
@@ -49,6 +51,7 @@ final class PendingQuizQuestion extends StoredQuizQuestion {
     required super.partOfSpeech,
     required super.meaning,
     required super.reference,
+    required super.verseText,
   }) : super(answered: false, correct: null, answeredAt: null);
 }
 

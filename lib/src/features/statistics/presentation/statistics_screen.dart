@@ -12,6 +12,7 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/empty_state_page.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
@@ -211,6 +212,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     repository: repository,
                     initial: data.settings,
                   ),
+                  const SizedBox(height: 12),
+                  QuizModelSettingsCard(repository: repository),
                   const SizedBox(height: 12),
                   _DailyReminderCard(repository: repository),
                   const SizedBox(height: 12),

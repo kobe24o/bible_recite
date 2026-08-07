@@ -113,6 +113,7 @@ void main() {
         word: '世人',
         partOfSpeech: '名词',
         meaning: '世上的人',
+        verseText: '神爱世人',
       ),
     ]);
     var calls = 0;

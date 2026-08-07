@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../features/dashboard/presentation/today_screen.dart';
 import '../features/update/presentation/about_screen.dart';
 import '../features/plans/presentation/plans_screen.dart';
+import '../features/quiz/presentation/quiz_practice_request.dart';
+import '../features/quiz/presentation/quiz_practice_screen.dart';
 import '../features/recitation/presentation/recitation_practice_screen.dart';
 import '../features/scripture/presentation/passage_screen.dart';
 import '../features/scripture/presentation/scripture_browser_screen.dart';
@@ -47,6 +49,14 @@ final appRouter = GoRouter(
       builder: (context, state) => ResponsiveShell(
         child: RecitationPracticeScreen(
           request: state.extra! as RecitationRequest,
+        ),
+      ),
+    ),
+    GoRoute(
+      path: '/quiz',
+      builder: (context, state) => ResponsiveShell(
+        child: QuizPracticeScreen(
+          request: state.extra! as QuizPracticeRequest,
         ),
       ),
     ),
