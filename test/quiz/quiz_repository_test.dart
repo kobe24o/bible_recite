@@ -41,37 +41,43 @@ void main() {
     endVerse: verse,
   );
 
-  test('pending question suppresses regeneration and answered verse becomes eligible', () async {
-    await repository.saveQuizQuestions([questionFor()]);
-    expect(await repository.listPendingQuizQuestions(scopeFor()), hasLength(1));
-    expect(await repository.missingQuizVerses(scopeFor()), isEmpty);
-    expect(
-      await repository.hasPendingQuizQuestion(
-        translationId: 'cmn-cu89s',
-        bookId: 'JHN',
-        chapter: 3,
-        verse: 16,
-      ),
-      isTrue,
-    );
+  test(
+    'pending question suppresses regeneration and answered verse becomes eligible',
+    () async {
+      await repository.saveQuizQuestions([questionFor()]);
+      expect(
+        await repository.listPendingQuizQuestions(scopeFor()),
+        hasLength(1),
+      );
+      expect(await repository.missingQuizVerses(scopeFor()), isEmpty);
+      expect(
+        await repository.hasPendingQuizQuestion(
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+        ),
+        isTrue,
+      );
 
-    await repository.completeQuizQuestion(
-      questionId: 1,
-      correct: true,
-      answeredAt: DateTime.now(),
-    );
-    expect(await repository.listPendingQuizQuestions(scopeFor()), isEmpty);
-    expect(await repository.missingQuizVerses(scopeFor()), hasLength(1));
-    expect(
-      await repository.hasPendingQuizQuestion(
-        translationId: 'cmn-cu89s',
-        bookId: 'JHN',
-        chapter: 3,
-        verse: 16,
-      ),
-      isFalse,
-    );
-  });
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      expect(await repository.listPendingQuizQuestions(scopeFor()), isEmpty);
+      expect(await repository.missingQuizVerses(scopeFor()), hasLength(1));
+      expect(
+        await repository.hasPendingQuizQuestion(
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('completion updates current and max correct streaks', () async {
     await repository.saveQuizQuestions([
@@ -118,7 +124,7 @@ void main() {
   test('quiz settings round-trip with blank default key', () async {
     final defaults = await repository.getQuizModelSettings();
     expect(defaults.baseUrl, contains('bigmodel'));
-    expect(defaults.model, 'GLM-4.7-Flash');
+    expect(defaults.model, 'glm-4.7-flash');
     expect(defaults.apiKey, isEmpty);
 
     await repository.saveQuizModelSettings(

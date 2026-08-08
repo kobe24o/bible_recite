@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -26,13 +27,14 @@ final class QuizModelClient {
   final QuizHttpClient _httpClient;
   final Duration timeout;
   final int maxResponseBytes;
+  Future<void> _generationTail = Future<void>.value();
 
   /// Sends exactly one non-streaming chat completion request containing the
   /// scripture verses, and decodes the raw JSON (untrusted) for the caller.
   Future<Object> generate(
     QuizModelSettings settings,
     List<QuizGenerationVerse> verses,
-  ) async {
+  ) => _runOneGenerationAtATime(() async {
     if (!settings.isConfigured) {
       throw const QuizModelException('尚未配置答题模型');
     }
@@ -48,7 +50,7 @@ final class QuizModelClient {
         {'role': 'system', 'content': _systemPrompt()},
         {'role': 'user', 'content': _userPrompt(verses)},
       ],
-      'temperature': 0.2,
+      'temperature': 0,
       'max_tokens': 4096,
       // The page consumes only message.content.  Explicitly disabling
       // provider-side thinking prevents the response budget being spent in
@@ -73,6 +75,9 @@ final class QuizModelClient {
           .timeout(timeout)
           .then((streamed) => http.Response.fromStream(streamed))
           .timeout(timeout);
+      if (response.statusCode == 429) {
+        throw const QuizModelException('答题模型限流，请稍后重试');
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw QuizModelException('答题模型服务返回 HTTP ${response.statusCode}');
       }
@@ -106,6 +111,23 @@ final class QuizModelClient {
       rethrow;
     } on Object catch (error) {
       throw QuizModelException('无法连接答题模型：$error');
+    }
+  });
+
+  /// GLM accounts may allow a single concurrent call.  Queue requests from
+  /// different entry points rather than making one screen's preparation fail
+  /// merely because another screen is already generating questions.
+  Future<T> _runOneGenerationAtATime<T>(Future<T> Function() action) async {
+    final previous = _generationTail;
+    final release = Completer<void>();
+    _generationTail = previous
+        .catchError((_) {})
+        .then<void>((_) => release.future);
+    await previous.catchError((_) {});
+    try {
+      return await action();
+    } finally {
+      release.complete();
     }
   }
 
@@ -172,6 +194,7 @@ final class QuizModelClient {
           'additionalProperties': false,
           'required': [
             'reference',
+            'word',
             'start',
             'end',
             'length',
@@ -180,6 +203,7 @@ final class QuizModelClient {
           ],
           'properties': {
             'reference': {'type': 'string'},
+            'word': {'type': 'string'},
             'start': {'type': 'integer'},
             'end': {'type': 'integer'},
             'length': {'type': 'integer'},
@@ -198,11 +222,11 @@ final class QuizModelClient {
 你是一位严格的圣经经文出题助手。根据用户提供的每节经文，挑选语义丰富、可朗读的词作为隐藏词，用于“听词填空”练习。
 要求：
 1. 只返回一个 JSON 数组，不要输出任何其他文字、解释或前后缀。
-2. 数组元素字段固定为：reference、start、end、length、partOfSpeech、meaning。
-3. reference 必须一字不差地来自输入；start 和 end 是该节原文的 UTF-16 下标（含 start、不含 end），length 等于 end - start。
-4. 只选择词语或词组，不要选择：连接词、介词、助词、语气词、叹词、标点、数字或没有完整语义的碎片。选择语义丰富、适合朗读回答的实词（名词、动词、形容词等）。
-5. meaning 用中文给出简短的字面解释，1-10 字，不要解释词语在文中的引申义之外的内容，不要给出读音。
-6. 同一节不要重复选择相同位置或相同词。
+2. 每一个输入经文 reference 恰好一题；绝不为同一节生成两题或更多题。数组元素字段固定为：reference、word、start、end、length、partOfSpeech、meaning。
+3. reference 必须一字不差地来自输入；word 必须一字不差地等于原文从 start 到 end 的切片；start 和 end 是该节原文的 UTF-16 下标（含 start、不含 end），length 等于 end - start。
+4. 只选择可独立表达具体意义、适合朗读回答的实词：人物、地点、具体事物、重要事件、核心动词或形容词。绝不选择连接词、介词、助词、语气词、代词、标点、数字、无完整意义的片段，也不要选择“某人说”“某人回答”“某人吩咐/告诉”这类发话引语标签或整句。
+5. meaning 必须严格按“word：简短字面解释”的格式，解释对象只能是 word 本身，不能解释相邻经文、动作或上下文。例如 word 为“约瑟”时可写“约瑟：以色列的儿子”，不能写“约瑟：伏在……上面”。不要给出读音、猜测方法或额外字段。
+6. 先核验每一个 word 的下标、长度和解释对象；任一项不准确时不要输出该项。
 只输出 JSON。''';
 
   static String _userPrompt(List<QuizGenerationVerse> verses) {
@@ -214,7 +238,7 @@ final class QuizModelClient {
     }
     final header = StringBuffer()
       ..writeln('经文语言版本：$currentLanguage')
-      ..writeln('请逐节最多各生成一题；只返回 JSON 数组。')
+      ..writeln('每一节恰好生成一题；同一节绝不可生成多题；只返回 JSON 数组。')
       ..writeln('经文列表：');
     return '$header${rendered.join('\n')}';
   }

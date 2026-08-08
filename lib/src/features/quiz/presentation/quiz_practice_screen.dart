@@ -18,18 +18,13 @@ import 'quiz_practice_request.dart';
 /// verse; the user reads only that word.  Mandarin scoring reuses the
 /// phonetic comparator and the “ignore final nasal” setting.
 class QuizPracticeScreen extends ConsumerStatefulWidget {
-  const QuizPracticeScreen({
-    required this.request,
-    this.recognizer,
-    super.key,
-  });
+  const QuizPracticeScreen({required this.request, this.recognizer, super.key});
 
   final QuizPracticeRequest request;
   final OfflineSpeechRecognizer? recognizer;
 
   @override
-  ConsumerState<QuizPracticeScreen> createState() =>
-      _QuizPracticeScreenState();
+  ConsumerState<QuizPracticeScreen> createState() => _QuizPracticeScreenState();
 }
 
 class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
@@ -50,7 +45,10 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
   final Map<int, _QuizAnswer> _answers = {};
 
   PendingQuizQuestion get _question =>
-      widget.request.questions[_page.clamp(0, widget.request.questions.length - 1)];
+      widget.request.questions[_page.clamp(
+        0,
+        widget.request.questions.length - 1,
+      )];
 
   @override
   void initState() {
@@ -123,8 +121,10 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
         question.translationId == 'cmn-cu89s' ||
         question.translationId == 'cmn-cu89t';
     if (!mandarinTranslation) {
-      return _exact.compare(question.word, spoken, finished: true).correctCount ==
-          _comparableCount(question.word) &&
+      return _exact
+                  .compare(question.word, spoken, finished: true)
+                  .correctCount ==
+              _comparableCount(question.word) &&
           _comparableCount(spoken) == _comparableCount(question.word);
     }
     final scoring = ref.read(mandarinPhoneticComparatorProvider);
@@ -149,8 +149,7 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
         alignment.omittedCount == 0;
   }
 
-  int _comparableCount(String value) => value
-      .runes
+  int _comparableCount(String value) => value.runes
       .map(String.fromCharCode)
       .where((c) => RegExp(r'^[\p{L}\p{N}]$', unicode: true).hasMatch(c))
       .length;
@@ -212,7 +211,21 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
     return Scaffold(
-      appBar: AppBar(title: Text(chinese ? '经文答题' : 'Verse quiz')),
+      appBar: AppBar(
+        title: Text(chinese ? '经文答题' : 'Verse quiz'),
+        actions: [
+          if (widget.request.questions.isNotEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Text(
+                  '${_page + 1} / ${widget.request.questions.length}',
+                  key: const Key('quiz-progress'),
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 14),
         child: Column(
@@ -284,8 +297,8 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
                           _hintCounts[widget.request.questions[index].id] ?? 0,
                       onHint: _showNextHint,
                       recording:
-                          _recording && _question.id ==
-                              widget.request.questions[index].id,
+                          _recording &&
+                          _question.id == widget.request.questions[index].id,
                       transcript: _transcript,
                       onMicTap: _toggleRecording,
                     ),
@@ -315,9 +328,7 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          chinese
-                              ? '录音输入：$_inputLabel'
-                              : 'Audio: $_inputLabel',
+                          chinese ? '录音输入：$_inputLabel' : 'Audio: $_inputLabel',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -407,18 +418,15 @@ class _QuestionPage extends ConsumerWidget {
     String label;
     switch (hintCount) {
       case 0:
-        label = chinese
-            ? '提示（${question.word.length} 个字）'
-            : 'Hint (${question.word.length} chars)';
+        label = chinese ? '提示' : 'Hint';
       case 1:
-        final count = _hintCharCount(question.word);
-        label = '提示：${question.word.substring(0, count)}';
-      case 2:
         label = chinese
             ? '词性：${question.partOfSpeech}'
             : 'POS: ${question.partOfSpeech}';
-      default:
+      case 2:
         label = chinese ? '字面解释：${question.meaning}' : question.meaning;
+      default:
+        label = chinese ? '已显示全部提示' : 'All hints shown';
     }
     return OutlinedButton.icon(
       key: const Key('quiz-hint-button'),
@@ -428,12 +436,8 @@ class _QuestionPage extends ConsumerWidget {
     );
   }
 
-  int _hintCharCount(String word) {
-    final chars = word.runes.length;
-    return chars <= 1 ? 1 : chars - 1;
-  }
-
   Widget _renderVerse(BuildContext context) {
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
     final verseText = question.verseText;
     final start = question.start.clamp(0, verseText.length);
     final end = question.end.clamp(start, verseText.length);
@@ -441,8 +445,7 @@ class _QuestionPage extends ConsumerWidget {
       text: TextSpan(
         style: Theme.of(context).textTheme.bodyLarge,
         children: [
-          if (start > 0)
-            TextSpan(text: verseText.substring(0, start)),
+          if (start > 0) TextSpan(text: verseText.substring(0, start)),
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: answer == null
@@ -456,15 +459,15 @@ class _QuestionPage extends ConsumerWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Theme.of(context).primaryColor),
+                        border: Border.all(
+                          color: Theme.of(context).primaryColor,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        '${'_' * question.word.length}  ',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          letterSpacing: 1.5,
-                        ),
+                      child: Icon(
+                        Icons.mic_rounded,
+                        color: Theme.of(context).primaryColor,
+                        semanticLabel: chinese ? '开始答题录音' : 'Record answer',
                       ),
                     ),
                   )
@@ -478,13 +481,10 @@ class _QuestionPage extends ConsumerWidget {
                       color: const Color(0xFFD8F0D8),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(answer!.text.isEmpty
-                        ? question.word
-                        : answer!.text),
+                    child: Text(question.word),
                   ),
           ),
-          if (end < verseText.length)
-            TextSpan(text: verseText.substring(end)),
+          if (end < verseText.length) TextSpan(text: verseText.substring(end)),
         ],
       ),
     );

@@ -41,7 +41,7 @@ void main() {
     expect(find.text('世人'), findsWidgets);
   });
 
-  testWidgets('hint advances from characters to part of speech to meaning', (
+  testWidgets('hint never exposes answer letters or its length', (
     tester,
   ) async {
     final recognizer = FakeQuizRecognizer();
@@ -50,19 +50,56 @@ void main() {
     await tester.pumpWidget(_app(repository, recognizer));
 
     final hintButton = find.byKey(const Key('quiz-hint-button'));
-    expect(find.textContaining('提示（2 个字）'), findsOneWidget);
-
-    await tester.tap(hintButton);
-    await tester.pumpAndSettle();
-    expect(find.text('提示：世'), findsOneWidget);
+    expect(find.text('提示'), findsOneWidget);
+    expect(find.textContaining('_'), findsNothing);
 
     await tester.tap(hintButton);
     await tester.pumpAndSettle();
     expect(find.text('词性：名词'), findsOneWidget);
+    expect(find.text('提示：世'), findsNothing);
 
     await tester.tap(hintButton);
     await tester.pumpAndSettle();
     expect(find.text('字面解释：世上的人'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a phonetic-correct answer fills the original word, not ASR text',
+    (tester) async {
+      final recognizer = FakeQuizRecognizer();
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await tester.pumpWidget(_app(repository, recognizer));
+
+      await tester.tap(find.byKey(const Key('quiz-mic-inline')));
+      await tester.pumpAndSettle();
+      recognizer.emit(const RecognitionFinal('世任'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('quiz-record-button')));
+      await tester.pumpAndSettle();
+
+      final filledWord = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('quiz-correct-word')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(filledWord.data, '世人');
+      expect(find.text('你读的：世任'), findsOneWidget);
+    },
+  );
+
+  testWidgets('shows the current question progress', (tester) async {
+    final recognizer = FakeQuizRecognizer();
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await tester.pumpWidget(_app(repository, recognizer));
+
+    expect(find.byKey(const Key('quiz-progress')), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('quiz-next-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 2'), findsOneWidget);
   });
 
   testWidgets('next and previous buttons switch questions', (tester) async {
@@ -100,40 +137,35 @@ void main() {
   });
 }
 
-Widget _app(
-  SqlitePlanRepository repository,
-  FakeQuizRecognizer recognizer,
-) => ProviderScope(
-  overrides: [
-    planRepositoryProvider.overrideWith((ref) async => repository),
-  ],
-  child: MaterialApp(
-    locale: const Locale('zh'),
-    supportedLocales: const [Locale('zh'), Locale('en')],
-    localizationsDelegates: const [
-      GlobalMaterialLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-    ],
-    home: QuizPracticeScreen(
-      request: QuizPracticeRequest(
-        scope: const QuizScope(
-          translationId: 'cmn-cu89s',
-          bookId: 'JHN',
-          startChapter: 3,
-          startVerse: 16,
-          endChapter: 3,
-          endVerse: 17,
-        ),
-        questions: [
-          _question(16),
-          _question(17),
+Widget _app(SqlitePlanRepository repository, FakeQuizRecognizer recognizer) =>
+    ProviderScope(
+      overrides: [
+        planRepositoryProvider.overrideWith((ref) async => repository),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: const [Locale('zh'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
         ],
+        home: QuizPracticeScreen(
+          request: QuizPracticeRequest(
+            scope: const QuizScope(
+              translationId: 'cmn-cu89s',
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 17,
+            ),
+            questions: [_question(16), _question(17)],
+          ),
+          recognizer: recognizer,
+        ),
       ),
-      recognizer: recognizer,
-    ),
-  ),
-);
+    );
 
 PendingQuizQuestion _question(int verse) => PendingQuizQuestion(
   id: verse == 16 ? 1 : 2,

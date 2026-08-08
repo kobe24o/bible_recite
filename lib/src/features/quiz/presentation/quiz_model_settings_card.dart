@@ -18,8 +18,7 @@ class QuizModelSettingsCard extends ConsumerStatefulWidget {
       _QuizModelSettingsCardState();
 }
 
-class _QuizModelSettingsCardState
-    extends ConsumerState<QuizModelSettingsCard> {
+class _QuizModelSettingsCardState extends ConsumerState<QuizModelSettingsCard> {
   late Future<QuizModelSettings> _future;
   bool _testing = false;
 
@@ -56,7 +55,7 @@ class _QuizModelSettingsCardState
                 controller: modelController,
                 decoration: const InputDecoration(
                   labelText: '模型名称',
-                  hintText: 'GLM-4.7-Flash',
+                  hintText: 'glm-4.7-flash',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -128,15 +127,15 @@ class _QuizModelSettingsCardState
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            chinese
-                ? '连接成功：${settings.model}'
-                : 'Connected: ${settings.model}',
+            chinese ? '连接成功：${settings.model}' : 'Connected: ${settings.model}',
           ),
         ),
       );
     } on QuizModelException catch (error) {
       messenger.showSnackBar(
-        SnackBar(content: Text('${chinese ? '连接失败：' : 'Failed: '}${error.message}')),
+        SnackBar(
+          content: Text('${chinese ? '连接失败：' : 'Failed: '}${error.message}'),
+        ),
       );
     } on Object catch (error) {
       messenger.showSnackBar(
@@ -186,7 +185,9 @@ class _QuizModelSettingsCardState
                         icon: _testing
                             ? const SizedBox.square(
                                 dimension: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.wifi_tethering_rounded),
                         label: Text(chinese ? '测试连接' : 'Test'),

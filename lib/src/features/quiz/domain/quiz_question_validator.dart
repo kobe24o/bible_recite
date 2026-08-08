@@ -25,6 +25,7 @@ final class QuizQuestionValidator {
       for (final verse in verses) verse.reference: verse,
     };
     final seenOffsets = <String, Set<int>>{};
+    final seenReferences = <String>{};
     final results = <ValidatedQuizQuestion>[];
     for (final item in items) {
       if (item is! Map<String, Object?>) continue;
@@ -32,12 +33,14 @@ final class QuizQuestionValidator {
       final start = item['start'];
       final end = item['end'];
       final length = item['length'];
+      final declaredWord = item['word'];
       final partOfSpeech = item['partOfSpeech'];
       final meaning = item['meaning'];
       if (reference is! String ||
           start is! int ||
           end is! int ||
           length is! int ||
+          declaredWord is! String ||
           partOfSpeech is! String ||
           meaning is! String) {
         continue;
@@ -51,14 +54,18 @@ final class QuizQuestionValidator {
         continue;
       }
       final word = verse.text.substring(start, end);
-      if (_isFunctionWord(word) ||
+      if (declaredWord != word ||
+          _isFunctionWord(word) ||
+          _isBoundaryFragment(word) ||
+          _isReportingPhrase(word) ||
           partOfSpeech.trim().isEmpty ||
-          meaning.trim().isEmpty) {
+          !_meaningExplainsExactWord(meaning, word)) {
         continue;
       }
       final offsets = seenOffsets.putIfAbsent(reference, () => <int>{});
       final key = start << 16 | (end & 0xffff);
       if (!offsets.add(key)) continue;
+      if (!seenReferences.add(reference)) continue;
       results.add(
         ValidatedQuizQuestion(
           reference: reference,
@@ -146,5 +153,49 @@ final class QuizQuestionValidator {
       return true;
     }
     return _functionWords.contains(trimmed);
+  }
+
+  static bool _isBoundaryFragment(String word) {
+    final trimmed = word.trim();
+    if (trimmed.length < 2) return false;
+    const boundaryWords = <String>{
+      '的',
+      '了',
+      '着',
+      '过',
+      '和',
+      '与',
+      '及',
+      '而',
+      '但',
+      '且',
+      '或',
+      '你',
+      '我',
+      '他',
+      '她',
+      '它',
+      '这',
+      '那',
+      '其',
+      '之',
+      '把',
+      '被',
+      '从',
+      '向',
+      '对',
+      '以',
+      '于',
+    };
+    return boundaryWords.contains(trimmed.substring(0, 1)) ||
+        boundaryWords.contains(trimmed.substring(trimmed.length - 1));
+  }
+
+  static bool _isReportingPhrase(String word) =>
+      RegExp(r'^[\u4e00-\u9fff]{1,8}(?:说|说道|回答|吩咐|告诉)$').hasMatch(word.trim());
+
+  static bool _meaningExplainsExactWord(String meaning, String word) {
+    final normalized = meaning.trim();
+    return normalized.startsWith('$word：') || normalized.startsWith('$word:');
   }
 }

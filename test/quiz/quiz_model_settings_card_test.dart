@@ -21,15 +21,13 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          home: Scaffold(
-            body: QuizModelSettingsCard(repository: repository),
-          ),
+          home: Scaffold(body: QuizModelSettingsCard(repository: repository)),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('GLM-4.7-Flash'), findsWidgets);
+    expect(find.textContaining('glm-4.7-flash'), findsWidgets);
     expect(find.textContaining('未配置密钥'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('quiz-model-settings-open')));
@@ -44,7 +42,7 @@ void main() {
     expect(find.textContaining('已配置密钥'), findsOneWidget);
     final saved = await repository.getQuizModelSettings();
     expect(saved.apiKey, 'super-secret');
-    expect(saved.model, 'GLM-4.7-Flash');
+    expect(saved.model, 'glm-4.7-flash');
     expect(saved.baseUrl, QuizModelSettings.defaultBaseUrl);
 
     await tester.tap(find.byKey(const Key('quiz-model-clear-key')));

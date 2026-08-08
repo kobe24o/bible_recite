@@ -21,9 +21,11 @@ void main() {
   );
 
   late SqlitePlanRepository repository;
+  late Database database;
 
   setUp(() {
-    repository = SqlitePlanRepository(sqlite3.openInMemory());
+    database = sqlite3.openInMemory();
+    repository = SqlitePlanRepository(database);
   });
   tearDown(() => repository.close());
 
@@ -69,11 +71,12 @@ void main() {
                   'content': jsonEncode([
                     {
                       'reference': '3:16',
+                      'word': '世人',
                       'start': 2,
                       'end': 4,
                       'length': 2,
                       'partOfSpeech': '名词',
-                      'meaning': '世上的人',
+                      'meaning': '世人：世上的人',
                     },
                   ]),
                 },
@@ -135,6 +138,39 @@ void main() {
     expect(calls, 0);
   });
 
+  test(
+    'regenerates unanswered questions from an older quality version',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世人：世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      database.execute('UPDATE quiz_question SET quality_version = 1');
+
+      expect(await repository.listPendingQuizQuestions(scope()), isEmpty);
+      expect(
+        await repository.hasPendingQuizQuestion(
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('fails gracefully when the model key is missing', () async {
     final service = QuizGenerationService(
       repository: repository,
@@ -158,11 +194,7 @@ final class _FakeScripture implements ScriptureRepository {
 
   @override
   Future<Passage> getPassage(String translationId, PassageRange range) async {
-    return Passage(
-      range: range,
-      translationId: translationId,
-      units: units,
-    );
+    return Passage(range: range, translationId: translationId, units: units);
   }
 
   @override

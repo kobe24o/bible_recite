@@ -12,7 +12,7 @@ final class QuizModelSettings {
 
   static const defaultBaseUrl = 'https://open.bigmodel.cn/api/paas/v4';
 
-  static const defaultModel = 'GLM-4.7-Flash';
+  static const defaultModel = 'glm-4.7-flash';
 
   static const defaultSettings = QuizModelSettings(
     baseUrl: defaultBaseUrl,

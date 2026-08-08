@@ -14,6 +14,10 @@ import '../../statistics/domain/recitation_result.dart';
 import '../domain/plan_models.dart';
 
 final class SqlitePlanRepository {
+  /// Bump this when stricter question validation makes cached unanswered
+  /// questions unsuitable. Answered history remains intact for statistics.
+  static const quizQuestionQualityVersion = 2;
+
   SqlitePlanRepository(this._database) {
     _database.execute('PRAGMA foreign_keys = ON');
     _database.execute('''
@@ -134,6 +138,7 @@ final class SqlitePlanRepository {
         meaning TEXT NOT NULL,
         reference TEXT NOT NULL,
         verse_text TEXT NOT NULL,
+        quality_version INTEGER NOT NULL DEFAULT 1,
         answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
         is_correct INTEGER,
         answered_at TEXT,
@@ -147,6 +152,11 @@ final class SqlitePlanRepository {
     if (!quizQuestionColumns.contains('verse_text')) {
       _database.execute(
         "ALTER TABLE quiz_question ADD COLUMN verse_text TEXT NOT NULL DEFAULT ''",
+      );
+    }
+    if (!quizQuestionColumns.contains('quality_version')) {
+      _database.execute(
+        'ALTER TABLE quiz_question ADD COLUMN quality_version INTEGER NOT NULL DEFAULT 1',
       );
     }
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
@@ -536,7 +546,7 @@ final class SqlitePlanRepository {
       WHERE translation_id = ? AND book_id = ?
         AND ((chapter > ? OR (chapter = ? AND verse >= ?))
           AND (chapter < ? OR (chapter = ? AND verse <= ?)))
-        AND answered = 0
+        AND answered = 0 AND quality_version = ?
       ORDER BY chapter, verse, start_offset, id
     ''',
       [
@@ -548,6 +558,7 @@ final class SqlitePlanRepository {
         scope.endChapter,
         scope.endChapter,
         scope.endVerse,
+        quizQuestionQualityVersion,
       ],
     );
     return rows.map(_pendingQuestionFromRow).toList(growable: false);
@@ -593,10 +604,16 @@ final class SqlitePlanRepository {
       SELECT chapter, COUNT(*) AS verse_count
       FROM quiz_question
       WHERE translation_id = ? AND book_id = ?
-        AND chapter >= ? AND chapter <= ?
+        AND chapter >= ? AND chapter <= ? AND quality_version = ?
       GROUP BY chapter
     ''',
-      [scope.translationId, scope.bookId, scope.startChapter, scope.endChapter],
+      [
+        scope.translationId,
+        scope.bookId,
+        scope.startChapter,
+        scope.endChapter,
+        quizQuestionQualityVersion,
+      ],
     );
     for (final row in rows) {
       counts[row['chapter'] as int] = row['verse_count'] as int;
@@ -614,10 +631,10 @@ final class SqlitePlanRepository {
       '''
       SELECT 1 FROM quiz_question
       WHERE translation_id = ? AND book_id = ? AND chapter = ? AND verse = ?
-        AND answered = 0
+        AND answered = 0 AND quality_version = ?
       LIMIT 1
     ''',
-      [translationId, bookId, chapter, verse],
+      [translationId, bookId, chapter, verse, quizQuestionQualityVersion],
     );
     return rows.isNotEmpty;
   }
@@ -632,8 +649,9 @@ final class SqlitePlanRepository {
           '''
           INSERT INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
-           word, part_of_speech, meaning, reference, verse_text, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           word, part_of_speech, meaning, reference, verse_text,
+           quality_version, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
           [
             question.translationId,
@@ -647,6 +665,7 @@ final class SqlitePlanRepository {
             question.meaning,
             question.reference,
             question.verseText,
+            quizQuestionQualityVersion,
             now,
           ],
         );
