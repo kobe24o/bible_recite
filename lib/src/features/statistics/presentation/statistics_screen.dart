@@ -12,6 +12,7 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/empty_state_page.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
@@ -189,7 +190,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         _SummaryCard(
                           icon: Icons.track_changes_rounded,
                           text: chinese
-                              ? '平均正确率 ${(summary.averageAccuracy * 100).round()}%'
+                              ? '背诵正确率 ${(summary.averageAccuracy * 100).round()}%'
                               : 'Average ${(summary.averageAccuracy * 100).round()}%',
                         ),
                         _SummaryCard(
@@ -208,6 +209,37 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _SummaryCard(
+                        icon: Icons.quiz_outlined,
+                        text: chinese
+                            ? '答题 ${data.quiz.totalAnswered} 道'
+                            : '${data.quiz.totalAnswered} quizzes',
+                      ),
+                      _SummaryCard(
+                        icon: Icons.check_circle_outline_rounded,
+                        text: chinese
+                            ? '答对 ${data.quiz.totalCorrect} 道'
+                            : '${data.quiz.totalCorrect} correct',
+                      ),
+                      _SummaryCard(
+                        icon: Icons.track_changes_rounded,
+                        text: chinese
+                            ? '答题正确率 ${(data.quiz.accuracy * 100).round()}%'
+                            : 'Quiz ${(data.quiz.accuracy * 100).round()}%',
+                      ),
+                      _SummaryCard(
+                        icon: Icons.local_fire_department_outlined,
+                        text: chinese
+                            ? '最大连续答对 ${data.quiz.maxCorrectStreak} 道'
+                            : 'Best ${data.quiz.maxCorrectStreak} correct',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   _EbbinghausSettingsCard(
                     repository: repository,
                     initial: data.settings,
@@ -372,6 +404,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final coverage = await _coverageAchievements(repository);
     return _StatisticsData(
       summary: await repository.getRecitationSummary(),
+      quiz: await repository.getQuizSummary(),
       learning: await repository.getLearningStats(),
       results: await repository.listRecitationResults(),
       achievements: [
@@ -1045,6 +1078,7 @@ class _SummaryCard extends StatelessWidget {
 final class _StatisticsData {
   const _StatisticsData({
     required this.summary,
+    required this.quiz,
     required this.learning,
     required this.results,
     required this.achievements,
@@ -1053,6 +1087,7 @@ final class _StatisticsData {
     required this.firstOpenedAt,
   });
   final RecitationSummary summary;
+  final QuizSummary quiz;
   final LearningStats learning;
   final List<RecitationResult> results;
   final List<AchievementProgress> achievements;

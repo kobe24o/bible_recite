@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "优化“我的”页面指标布局，新增目前与最高连续背诵天数、连续背诵节数；连续节数按每次背诵累加且不去重，断档超过一天后目前值清零，历史最高值持久保存。设置名字后，成就标题同步显示为“名字的成就”。"
+              --notes "新增语音答题：经文阅读和计划阅读可预先生成题目，录音后按拼音判分并显示提示、纠正结果与原文。我的页面和背诵地图新增独立答题统计；原有统计明确标注为背诵正确率。经文阅读支持左右滑动切换同一卷的相邻章节。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "优化“我的”页面指标布局，新增目前与最高连续背诵天数、连续背诵节数；连续节数按每次背诵累加且不去重，断档超过一天后目前值清零，历史最高值持久保存。设置名字后，成就标题同步显示为“名字的成就”。" \
+              --release-notes "新增语音答题：经文阅读和计划阅读可预先生成题目，录音后按拼音判分并显示提示、纠正结果与原文。我的页面和背诵地图新增独立答题统计；原有统计明确标注为背诵正确率。经文阅读支持左右滑动切换同一卷的相邻章节。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

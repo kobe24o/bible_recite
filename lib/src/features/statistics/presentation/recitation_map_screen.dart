@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../quiz/domain/quiz_result.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
@@ -45,13 +46,25 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
       bookId: widget.bookId,
       chapter: widget.chapter,
     );
-    if (metrics.isEmpty) return const _MapData.empty();
-    final translation = widget.translationId ?? metrics.first.translationId;
+    final quizMetrics = await repository.listQuizVerseMetrics(
+      translationId: widget.translationId,
+      bookId: widget.bookId,
+      chapter: widget.chapter,
+    );
+    if (metrics.isEmpty && quizMetrics.isEmpty) return const _MapData.empty();
+    final translation =
+        widget.translationId ??
+        (metrics.isNotEmpty
+            ? metrics.first.translationId
+            : quizMetrics.first.translationId);
     final scripture = await ref.read(scriptureRepositoryProvider.future);
     final books = await scripture.listBooks(translation, CanonId.protestant66);
     final verseCounts = <String, int>{};
-    for (final scope
-        in metrics.map((m) => '${m.bookId}:${m.chapter}').toSet()) {
+    final scopes = {
+      ...metrics.map((m) => '${m.bookId}:${m.chapter}'),
+      ...quizMetrics.map((m) => '${m.bookId}:${m.chapter}'),
+    };
+    for (final scope in scopes) {
       final parts = scope.split(':');
       verseCounts[scope] = (await scripture.getChapter(
         translation,
@@ -59,7 +72,14 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
         int.parse(parts.last),
       )).length;
     }
-    return _MapData(translation, books, metrics, scripture, verseCounts);
+    return _MapData(
+      translation,
+      books,
+      metrics,
+      quizMetrics,
+      scripture,
+      verseCounts,
+    );
   }
 
   @override
@@ -81,7 +101,10 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
                   value: _MapSort.defaultOrder,
                   child: Text('恢复默认排序'),
                 ),
-                PopupMenuItem(value: _MapSort.accuracy, child: Text('按准确率排序')),
+                PopupMenuItem(
+                  value: _MapSort.accuracy,
+                  child: Text('按背诵准确率排序'),
+                ),
                 PopupMenuItem(value: _MapSort.duration, child: Text('按时长排序')),
                 PopupMenuItem(
                   value: _MapSort.completion,
@@ -98,8 +121,8 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final data = snapshot.data!;
-          if (data.metrics.isEmpty) {
-            return const Center(child: Text('完成一次背诵后，这里会生成你的背诵地图。'));
+          if (data.isEmpty) {
+            return const Center(child: Text('完成一次背诵或答题后，这里会生成你的背诵地图。'));
           }
           if (widget.testament == null) return _testaments(context, data);
           if (widget.bookId == null) return _books(context, data);
@@ -220,19 +243,21 @@ class _RecitationMapScreenState extends ConsumerState<RecitationMapScreen> {
 
   Widget _verses(BuildContext context, _MapData data) => ListView.separated(
     padding: const EdgeInsets.all(16),
-    itemCount: data.metrics.length,
+    itemCount: data.verseEntries.length,
     separatorBuilder: (_, _) => const Divider(height: 1),
     itemBuilder: (_, index) {
-      final metric = data.metrics[index];
+      final entry = data.verseEntries[index];
       return ListTile(
-        leading: CircleAvatar(child: Text('${metric.verse}')),
-        title: Text('第 ${metric.verse} 节 · 背诵 ${metric.sessions} 次'),
+        leading: CircleAvatar(child: Text('${entry.verse}')),
+        title: Text('第 ${entry.verse} 节 · 背诵 ${entry.sessions} 次'),
         subtitle: Text(
-          '准确率 ${(metric.averageAccuracy * 100).round()}% · 累计 ${_duration(metric.totalSeconds)}',
+          '背诵准确率 ${(entry.recitationAccuracy * 100).round()}% · '
+          '${entry.quizAccuracyLabel} · '
+          '累计 ${_duration(entry.totalSeconds)}',
         ),
         trailing: const Icon(Icons.menu_book_outlined),
         onTap: () => context.push(
-          '/bible/${metric.translationId}/${metric.bookId}/${metric.chapter}?verse=${metric.verse}&endVerse=${metric.verse}',
+          '/bible/${entry.translationId}/${entry.bookId}/${entry.chapter}?verse=${entry.verse}&endVerse=${entry.verse}',
         ),
       );
     },
@@ -246,6 +271,7 @@ class _MapData {
     this.translationId,
     this.books,
     this.metrics,
+    this.quizMetrics,
     this.scripture,
     this.verseCounts,
   );
@@ -253,13 +279,36 @@ class _MapData {
     : translationId = '',
       books = const [],
       metrics = const [],
+      quizMetrics = const [],
       scripture = null,
       verseCounts = const {};
   final String translationId;
   final List<BibleBook> books;
   final List<RecitationVerseMetric> metrics;
+  final List<QuizVerseMetric> quizMetrics;
   final ScriptureRepository? scripture;
   final Map<String, int> verseCounts;
+
+  bool get isEmpty => metrics.isEmpty && quizMetrics.isEmpty;
+
+  List<_VerseMapEntry> get verseEntries {
+    final entries = <String, _VerseMapEntry>{};
+    for (final metric in metrics) {
+      final key =
+          '${metric.translationId}:${metric.bookId}:${metric.chapter}:${metric.verse}';
+      entries[key] = (entries[key] ?? const _VerseMapEntry()).withRecitation(
+        metric,
+      );
+    }
+    for (final metric in quizMetrics) {
+      final key =
+          '${metric.translationId}:${metric.bookId}:${metric.chapter}:${metric.verse}';
+      entries[key] = (entries[key] ?? const _VerseMapEntry()).withQuiz(metric);
+    }
+    final values = entries.values.toList()
+      ..sort((left, right) => left.verse.compareTo(right.verse));
+    return values;
+  }
 
   _MapSummary summaryForBooks(Iterable<BibleBook> books) {
     final list = books.toList();
@@ -277,6 +326,7 @@ class _MapData {
   );
   _MapSummary summaryForChapter(String book, int chapter) => _summary(
     metrics.where((m) => m.bookId == book && m.chapter == chapter),
+    quizMetrics.where((m) => m.bookId == book && m.chapter == chapter),
     verseCounts['$book:$chapter'],
   );
   _MapSummary _combine(List<_MapSummary> values, {required int total}) {
@@ -292,10 +342,16 @@ class _MapData {
       seconds,
       accuracy,
       weight,
+      values.fold(0, (sum, item) => sum + item.quizAnswered),
+      values.fold(0, (sum, item) => sum + item.quizCorrect),
     );
   }
 
-  _MapSummary _summary(Iterable<RecitationVerseMetric> values, int? total) {
+  _MapSummary _summary(
+    Iterable<RecitationVerseMetric> values,
+    Iterable<QuizVerseMetric> quizValues,
+    int? total,
+  ) {
     final list = values.toList();
     final seconds = list.fold(0, (sum, m) => sum + m.totalSeconds);
     final sessions = list.fold(0, (sum, m) => sum + m.sessions);
@@ -303,7 +359,16 @@ class _MapData {
         ? 0
         : list.fold(0.0, (sum, m) => sum + m.averageAccuracy * m.sessions) /
               sessions;
-    return _MapSummary(list.length, total ?? 0, seconds, accuracy, sessions);
+    final quiz = quizValues.toList();
+    return _MapSummary(
+      list.length,
+      total ?? 0,
+      seconds,
+      accuracy,
+      sessions,
+      quiz.fold(0, (sum, item) => sum + item.answered),
+      quiz.fold(0, (sum, item) => sum + item.correct),
+    );
   }
 }
 
@@ -314,14 +379,19 @@ class _MapSummary {
     this.seconds,
     this.accuracy,
     this.sessions,
+    this.quizAnswered,
+    this.quizCorrect,
   );
   final int covered;
   final int total;
   final int seconds;
   final double accuracy;
   final int sessions;
+  final int quizAnswered;
+  final int quizCorrect;
   bool get completed => total > 0 && covered >= total;
   double get completion => total == 0 ? 0 : covered / total;
+  double get quizAccuracy => quizAnswered == 0 ? 0 : quizCorrect / quizAnswered;
 }
 
 class _MapRow extends StatelessWidget {
@@ -362,7 +432,9 @@ class _MapRow extends StatelessWidget {
             LinearProgressIndicator(value: progress),
             const SizedBox(height: 5),
             Text(
-              '准确率 ${(summary.accuracy * 100).round()}% · 累计 ${_duration(summary.seconds)}',
+              '背诵准确率 ${(summary.accuracy * 100).round()}% · '
+              '${summary.quizAnswered == 0 ? '暂无答题' : '答题准确率 ${(summary.quizAccuracy * 100).round()}%'} · '
+              '累计 ${_duration(summary.seconds)}',
             ),
           ],
         ),
@@ -373,3 +445,25 @@ class _MapRow extends StatelessWidget {
 
 String _duration(int seconds) =>
     seconds < 60 ? '$seconds 秒' : '${seconds ~/ 60} 分 ${seconds % 60} 秒';
+
+final class _VerseMapEntry {
+  const _VerseMapEntry({this.recitation, this.quiz});
+
+  final RecitationVerseMetric? recitation;
+  final QuizVerseMetric? quiz;
+
+  _VerseMapEntry withRecitation(RecitationVerseMetric value) =>
+      _VerseMapEntry(recitation: value, quiz: quiz);
+  _VerseMapEntry withQuiz(QuizVerseMetric value) =>
+      _VerseMapEntry(recitation: recitation, quiz: value);
+
+  String get translationId => recitation?.translationId ?? quiz!.translationId;
+  String get bookId => recitation?.bookId ?? quiz!.bookId;
+  int get chapter => recitation?.chapter ?? quiz!.chapter;
+  int get verse => recitation?.verse ?? quiz!.verse;
+  int get sessions => recitation?.sessions ?? 0;
+  int get totalSeconds => recitation?.totalSeconds ?? 0;
+  double get recitationAccuracy => recitation?.averageAccuracy ?? 0;
+  String get quizAccuracyLabel =>
+      quiz == null ? '暂无答题' : '答题准确率 ${(quiz!.accuracy * 100).round()}%';
+}

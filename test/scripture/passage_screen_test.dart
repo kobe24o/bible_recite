@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'scripture_browser_screen_test.dart' show FakeRepositoryForPassage;
 
@@ -84,5 +85,92 @@ void main() {
 
     expect(find.text('已选择 1 节'), findsOneWidget);
     expect(find.text('加入背诵计划（1）'), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps chapter quiz entry disabled while its question is pending',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
+          ],
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            supportedLocales: [Locale('zh'), Locale('en')],
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final startQuiz = find.byKey(const Key('start-quiz-button'));
+      expect(startQuiz, findsOneWidget);
+      expect(tester.widget<FilledButton>(startQuiz).onPressed, isNull);
+    },
+  );
+
+  testWidgets('swiping left opens the next chapter in the same book', (
+    tester,
+  ) async {
+    final router = GoRouter(
+      initialLocation: '/bible/eng-web/JHN/3',
+      routes: [
+        GoRoute(
+          path: '/bible/:translation/:book/:chapter',
+          builder: (_, state) => PassageScreen(
+            translationId: state.pathParameters['translation']!,
+            bookId: state.pathParameters['book']!,
+            chapter: int.parse(state.pathParameters['chapter']!),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh'), Locale('en')],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byKey(const Key('passage-reader')),
+      const Offset(-500, 0),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('约翰福音 4章'), findsOneWidget);
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/bible/eng-web/JHN/4',
+    );
   });
 }

@@ -5,6 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../quiz/application/quiz_providers.dart';
+import '../../quiz/domain/quiz_scope.dart';
+import '../../quiz/presentation/quiz_practice_request.dart';
+import '../../quiz/presentation/quiz_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/book_name_catalog.dart';
@@ -33,6 +37,7 @@ final class RecitationRequest {
     this.planTaskId,
     this.planId,
     this.next,
+    this.quizScope,
   });
 
   final String translationId;
@@ -44,6 +49,7 @@ final class RecitationRequest {
   final int? planTaskId;
   final int? planId;
   final RecitationRequest? next;
+  final QuizScope? quizScope;
 }
 
 class RecitationPracticeScreen extends ConsumerStatefulWidget {
@@ -81,6 +87,7 @@ class _RecitationPracticeScreenState
   RecitationAlignment? _finishedAlignment;
   int _currentVerse = 0;
   DateTime? _startedAt;
+  Future<QuizPracticeRequest?>? _preparedQuiz;
 
   List<VerseUnit> get _presentUnits => widget.request.units
       .where((unit) => unit.status == SourceTextStatus.present)
@@ -111,6 +118,10 @@ class _RecitationPracticeScreenState
           .read(mandarinPhoneticComparatorProvider.future)
           .then<void>((_) {}, onError: (_) {}),
     );
+    final quizScope = widget.request.quizScope;
+    if (quizScope != null) {
+      _preparedQuiz = _prepareQuiz(quizScope);
+    }
     _subscription = _recognizer.events.listen((event) {
       if (!mounted) return;
       setState(() {
@@ -274,9 +285,38 @@ class _RecitationPracticeScreenState
         );
         break;
       }
+      await _openPreparedQuiz();
     } catch (error) {
       if (mounted) setState(() => _error = '保存背诵统计失败：$error');
     }
+  }
+
+  Future<QuizPracticeRequest?> _prepareQuiz(QuizScope scope) async {
+    try {
+      final service = await ref.read(quizGenerationServiceProvider.future);
+      final outcome = await service.prepare(scope);
+      if (!outcome.success) return null;
+      final questions = await service.repository.listPendingQuizQuestions(
+        scope,
+      );
+      return questions.isEmpty
+          ? null
+          : QuizPracticeRequest(scope: scope, questions: questions);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openPreparedQuiz() async {
+    final preparation = _preparedQuiz;
+    if (preparation == null) return;
+    final request = await preparation;
+    if (!mounted || request == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => QuizPracticeScreen(request: request),
+      ),
+    );
   }
 
   List<NewRecitationVerseMetric> _verseMetrics(

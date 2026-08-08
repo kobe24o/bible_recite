@@ -42,21 +42,23 @@ final class QuizModelClient {
     if (verses.isEmpty) {
       throw const QuizModelException('没有可生成题目的经文');
     }
-    final body = jsonEncode({
+    final requestBody = <String, Object?>{
       'model': settings.model,
       'messages': [
-        {
-          'role': 'system',
-          'content': _systemPrompt(),
-        },
-        {
-          'role': 'user',
-          'content': _userPrompt(verses),
-        },
+        {'role': 'system', 'content': _systemPrompt()},
+        {'role': 'user', 'content': _userPrompt(verses)},
       ],
       'temperature': 0.2,
       'max_tokens': 4096,
-    });
+      // The page consumes only message.content.  Explicitly disabling
+      // provider-side thinking prevents the response budget being spent in
+      // reasoning_content while content is empty or incomplete.
+      'thinking': {'type': 'disabled'},
+    };
+    if (_isOpenRouter(settings.baseUrl)) {
+      requestBody['response_format'] = _quizResponseFormat();
+    }
+    final body = jsonEncode(requestBody);
     final uri = _chatUri(settings.baseUrl);
     final request = http.Request('POST', uri)
       ..headers.addAll({
@@ -72,18 +74,14 @@ final class QuizModelClient {
           .then((streamed) => http.Response.fromStream(streamed))
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw QuizModelException(
-          '答题模型服务返回 HTTP ${response.statusCode}',
-        );
+        throw QuizModelException('答题模型服务返回 HTTP ${response.statusCode}');
       }
       if (response.bodyBytes.length > maxResponseBytes) {
         throw const QuizModelException('答题模型响应过大');
       }
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       final choices = switch (decoded) {
-        {
-          'choices': List<Object?> choices,
-        } => choices,
+        {'choices': List<Object?> choices} => choices,
         _ => throw const QuizModelException('答题模型响应缺少 choices'),
       };
       if (choices.isEmpty) {
@@ -92,8 +90,8 @@ final class QuizModelClient {
       final first = choices.first;
       final content = first is Map<String, Object?>
           ? first['message'] is Map<String, Object?>
-          ? (first['message'] as Map<String, Object?>)['content']
-          : null
+                ? (first['message'] as Map<String, Object?>)['content']
+                : null
           : null;
       if (content is! String || content.isEmpty) {
         throw const QuizModelException('答题模型没有返回文本');
@@ -124,10 +122,7 @@ final class QuizModelClient {
     final body = jsonEncode({
       'model': settings.model,
       'messages': [
-        {
-          'role': 'user',
-          'content': '只返回 JSON 数组：[]',
-        },
+        {'role': 'user', 'content': '只返回 JSON 数组：[]'},
       ],
       'max_tokens': 8,
     });
@@ -145,9 +140,7 @@ final class QuizModelClient {
           .then((streamed) => http.Response.fromStream(streamed))
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw QuizModelException(
-          '答题模型服务返回 HTTP ${response.statusCode}',
-        );
+        throw QuizModelException('答题模型服务返回 HTTP ${response.statusCode}');
       }
     } on QuizModelException {
       rethrow;
@@ -162,6 +155,41 @@ final class QuizModelClient {
         : baseUrl;
     return Uri.parse('$normalized/chat/completions');
   }
+
+  static bool _isOpenRouter(String baseUrl) =>
+      Uri.tryParse(baseUrl)?.host.toLowerCase() == 'openrouter.ai';
+
+  static Map<String, Object?> _quizResponseFormat() => {
+    'type': 'json_schema',
+    'json_schema': {
+      'name': 'quiz_questions',
+      'strict': true,
+      'schema': {
+        'type': 'array',
+        'minItems': 1,
+        'items': {
+          'type': 'object',
+          'additionalProperties': false,
+          'required': [
+            'reference',
+            'start',
+            'end',
+            'length',
+            'partOfSpeech',
+            'meaning',
+          ],
+          'properties': {
+            'reference': {'type': 'string'},
+            'start': {'type': 'integer'},
+            'end': {'type': 'integer'},
+            'length': {'type': 'integer'},
+            'partOfSpeech': {'type': 'string'},
+            'meaning': {'type': 'string'},
+          },
+        },
+      },
+    },
+  };
 
   /// The system prompt.  The only caller-configurable values are the
   /// translation/language and verse reference, which come from the input

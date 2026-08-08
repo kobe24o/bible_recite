@@ -1,6 +1,8 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:bible_recite/src/features/statistics/presentation/statistics_screen.dart';
 import 'package:flutter/material.dart';
@@ -61,7 +63,7 @@ void main() {
     await _pumpScreen(tester, repository);
 
     expect(find.text('背诵 1 次'), findsOneWidget);
-    expect(find.text('平均正确率 80%'), findsOneWidget);
+    expect(find.text('背诵正确率 80%'), findsOneWidget);
     expect(find.text('目前连续背诵 1 天 · 最高连续背诵 1 天'), findsOneWidget);
     expect(find.text('目前连续背诵 2 节 · 最高连续背诵 2 节'), findsOneWidget);
     expect(
@@ -90,6 +92,50 @@ void main() {
         .map((widget) => widget.data ?? '')
         .firstWhere((text) => text.contains('获得时间：'));
     expect(timeText, isNot(contains(RegExp(r':\d{2}\.\d'))));
+  });
+
+  testWidgets('keeps quiz statistics separate from recitation statistics', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.saveQuizQuestions([
+      const ValidatedQuizQuestion(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 9,
+        end: 12,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '人类',
+        reference: '约翰福音 3:16',
+        verseText: '神爱世人',
+      ),
+    ]);
+    final question = (await repository.listPendingQuizQuestions(
+      const QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 16,
+      ),
+    )).single;
+    await repository.completeQuizQuestion(
+      questionId: question.id,
+      correct: true,
+      answeredAt: DateTime.now(),
+    );
+
+    await _pumpScreen(tester, repository);
+
+    expect(find.text('答题 1 道'), findsOneWidget);
+    expect(find.text('答对 1 道'), findsOneWidget);
+    expect(find.text('答题正确率 100%'), findsOneWidget);
+    expect(find.text('最大连续答对 1 道'), findsOneWidget);
   });
 
   testWidgets('uses the configured name in the achievements heading', (

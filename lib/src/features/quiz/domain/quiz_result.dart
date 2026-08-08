@@ -69,8 +69,7 @@ final class QuizCompletion {
   final int currentCorrectStreak;
   final int maxCorrectStreak;
 
-  double get accuracy =>
-      totalAnswered == 0 ? 0 : totalCorrect / totalAnswered;
+  double get accuracy => totalAnswered == 0 ? 0 : totalCorrect / totalAnswered;
 }
 
 /// Aggregated quiz statistics independent of recitation statistics.
@@ -87,21 +86,34 @@ final class QuizSummary {
   final int currentCorrectStreak;
   final int maxCorrectStreak;
 
-  double get accuracy =>
-      totalAnswered == 0 ? 0 : totalCorrect / totalAnswered;
+  double get accuracy => totalAnswered == 0 ? 0 : totalCorrect / totalAnswered;
   bool get isEmpty => totalAnswered == 0;
 }
 
 /// Quiz aggregate for one scope (translation, book, chapter, verse).
 final class QuizRangeMetric {
-  const QuizRangeMetric({
-    required this.answered,
-    required this.correct,
-  });
+  const QuizRangeMetric({required this.answered, required this.correct});
 
   final int answered;
   final int correct;
 
   bool get isEmpty => answered == 0;
   double get accuracy => answered == 0 ? 0 : correct / answered;
+}
+
+/// Quiz aggregate for one concrete verse, suitable for the recitation map.
+final class QuizVerseMetric extends QuizRangeMetric {
+  const QuizVerseMetric({
+    required this.translationId,
+    required this.bookId,
+    required this.chapter,
+    required this.verse,
+    required super.answered,
+    required super.correct,
+  });
+
+  final String translationId;
+  final String bookId;
+  final int chapter;
+  final int verse;
 }

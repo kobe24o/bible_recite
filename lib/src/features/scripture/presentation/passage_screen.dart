@@ -7,6 +7,10 @@ import '../../plans/application/plan_providers.dart';
 import '../../plans/domain/plan_draft_builder.dart';
 import '../../plans/domain/plan_models.dart';
 import '../../plans/presentation/plan_editor_dialog.dart';
+import '../../quiz/application/quiz_preparation_controller.dart';
+import '../../quiz/application/quiz_providers.dart';
+import '../../quiz/domain/quiz_scope.dart';
+import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../application/scripture_providers.dart';
 import '../domain/scripture_models.dart';
@@ -38,9 +42,103 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
   String? _parallelTranslationId;
   final Set<int> _selectedVerseIndexes = <int>{};
   bool _selectingVerses = false;
+  QuizPreparationController? _quizPreparation;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(PassageScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chapter != widget.chapter ||
+        oldWidget.bookId != widget.bookId ||
+        oldWidget.translationId != widget.translationId ||
+        oldWidget.initialVerse != widget.initialVerse ||
+        oldWidget.initialEndVerse != widget.initialEndVerse) {
+      _parallelTranslationId = null;
+      _selectingVerses = false;
+      _selectedVerseIndexes.clear();
+      _resetQuiz();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeQuizPreparation();
+    super.dispose();
+  }
+
+  void _resetQuiz() {
+    _disposeQuizPreparation();
+    setState(() {
+      _quizPreparation = null;
+    });
+  }
+
+  void _armQuiz(List<VerseUnit> units) {
+    if (_quizPreparation != null) return;
+    final scope = widget.initialVerse != null
+        ? QuizScope(
+            translationId: widget.translationId,
+            bookId: widget.bookId,
+            startChapter: widget.chapter,
+            startVerse: widget.initialVerse!,
+            endChapter: widget.chapter,
+            endVerse: (widget.initialEndVerse ?? widget.initialVerse)!,
+          )
+        : QuizScope(
+            translationId: widget.translationId,
+            bookId: widget.bookId,
+            startChapter: widget.chapter,
+            startVerse: 1,
+            endChapter: widget.chapter,
+            endVerse: units.isNotEmpty ? units.last.end.verse : 1,
+          );
+    final preparation = QuizPreparationController(
+      scope: scope,
+      serviceLoader: () => ref.read(quizGenerationServiceProvider.future),
+    );
+    preparation.addListener(_onQuizPreparationChanged);
+    _quizPreparation = preparation;
+    preparation.arm();
+  }
+
+  void _onQuizPreparationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _disposeQuizPreparation() {
+    final preparation = _quizPreparation;
+    if (preparation == null) return;
+    preparation.removeListener(_onQuizPreparationChanged);
+    preparation.dispose();
+  }
+
+  void _openQuiz() {
+    final preparation = _quizPreparation;
+    if (preparation == null ||
+        preparation.phase != QuizPreparationPhase.ready ||
+        preparation.questions.isEmpty) {
+      return;
+    }
+    context.push(
+      '/quiz',
+      extra: QuizPracticeRequest(
+        scope: preparation.scope,
+        questions: preparation.questions,
+      ),
+    );
+  }
 
   Future<_PassageData> _load(ScriptureRepository repository) async {
-    final translations = await repository.listTranslations();
+    final values = await Future.wait<Object>([
+      repository.listTranslations(),
+      repository.listBooks(widget.translationId, CanonId.protestant66),
+    ]);
+    final translations = values[0] as List<TranslationInfo>;
+    final books = values[1] as List<BibleBook>;
     final units = await repository.getChapter(
       widget.translationId,
       widget.bookId,
@@ -60,7 +158,17 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       translations: translations,
       units: units,
       parallel: parallel,
+      chapterCount: books
+          .firstWhere((book) => book.osisId == widget.bookId)
+          .chapterCount,
     );
+  }
+
+  void _onChapterSwipe(double? velocity, int chapterCount) {
+    if (_selectingVerses || velocity == null || velocity.abs() < 300) return;
+    final chapter = velocity < 0 ? widget.chapter + 1 : widget.chapter - 1;
+    if (chapter < 1 || chapter > chapterCount) return;
+    context.go('/bible/${widget.translationId}/${widget.bookId}/$chapter');
   }
 
   @override
@@ -104,6 +212,9 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             final data = snapshot.data!;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _armQuiz(data.units);
+            });
             return Column(
               children: [
                 Padding(
@@ -183,28 +294,88 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton.icon(
+                        key: const Key('start-quiz-button'),
+                        onPressed:
+                            _quizPreparation?.phase ==
+                                    QuizPreparationPhase.ready &&
+                                _quizPreparation!.questions.isNotEmpty
+                            ? _openQuiz
+                            : null,
+                        icon: const Icon(Icons.quiz_outlined),
+                        label: Text(
+                          _quizPreparation?.phase ==
+                                  QuizPreparationPhase.preparing
+                              ? '正在生成答题题目…'
+                              : _quizPreparation?.phase ==
+                                        QuizPreparationPhase.ready &&
+                                    _quizPreparation!.questions.isNotEmpty
+                              ? '开始答题'
+                              : '开始答题（题目准备中）',
+                        ),
+                      ),
+                      if (_quizPreparation?.phase ==
+                              QuizPreparationPhase.failed &&
+                          _quizPreparation?.error != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _quizPreparation!.error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        TextButton(
+                          key: const Key('retry-quiz-generation-button'),
+                          onPressed:
+                              _quizPreparation == null ||
+                                  _quizPreparation?.phase ==
+                                      QuizPreparationPhase.preparing
+                              ? null
+                              : () {
+                                  _quizPreparation!.prepare();
+                                },
+                          child: const Text('重试生成'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                 Expanded(
-                  child: data.parallel == null
-                      ? _SinglePassage(
-                          units: data.units,
-                          initialVerse: widget.initialVerse,
-                          initialEndVerse: widget.initialEndVerse,
-                          selecting: _selectingVerses,
-                          selectedIndexes: _selectedVerseIndexes,
-                          onLongPress: (index) => setState(() {
-                            _selectingVerses = true;
-                            _selectedVerseIndexes.add(index);
-                          }),
-                          onTap: (index) {
-                            if (!_selectingVerses) return;
-                            setState(() {
-                              if (!_selectedVerseIndexes.add(index)) {
-                                _selectedVerseIndexes.remove(index);
-                              }
-                            });
-                          },
-                        )
-                      : _ParallelPassageView(passage: data.parallel!),
+                  child: GestureDetector(
+                    key: const Key('passage-reader'),
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragEnd: (details) => _onChapterSwipe(
+                      details.primaryVelocity,
+                      data.chapterCount,
+                    ),
+                    child: data.parallel == null
+                        ? _SinglePassage(
+                            units: data.units,
+                            initialVerse: widget.initialVerse,
+                            initialEndVerse: widget.initialEndVerse,
+                            selecting: _selectingVerses,
+                            selectedIndexes: _selectedVerseIndexes,
+                            onLongPress: (index) => setState(() {
+                              _selectingVerses = true;
+                              _selectedVerseIndexes.add(index);
+                            }),
+                            onTap: (index) {
+                              if (!_selectingVerses) return;
+                              setState(() {
+                                if (!_selectedVerseIndexes.add(index)) {
+                                  _selectedVerseIndexes.remove(index);
+                                }
+                              });
+                            },
+                          )
+                        : _ParallelPassageView(passage: data.parallel!),
+                  ),
                 ),
               ],
             );
@@ -681,9 +852,11 @@ final class _PassageData {
     required this.translations,
     required this.units,
     required this.parallel,
+    required this.chapterCount,
   });
 
   final List<TranslationInfo> translations;
   final List<VerseUnit> units;
   final ParallelPassage? parallel;
+  final int chapterCount;
 }

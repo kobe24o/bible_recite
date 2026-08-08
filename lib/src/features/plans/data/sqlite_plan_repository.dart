@@ -133,16 +133,24 @@ final class SqlitePlanRepository {
         part_of_speech TEXT NOT NULL,
         meaning TEXT NOT NULL,
         reference TEXT NOT NULL,
+        verse_text TEXT NOT NULL,
         answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
         is_correct INTEGER,
         answered_at TEXT,
         created_at TEXT NOT NULL
       )
     ''');
-    _database.execute(
-      '''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
-      ON quiz_question(translation_id, book_id, chapter, verse, answered)''',
-    );
+    final quizQuestionColumns = _database
+        .select('PRAGMA table_info(quiz_question)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!quizQuestionColumns.contains('verse_text')) {
+      _database.execute(
+        "ALTER TABLE quiz_question ADD COLUMN verse_text TEXT NOT NULL DEFAULT ''",
+      );
+    }
+    _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
+      ON quiz_question(translation_id, book_id, chapter, verse, answered)''');
     _database.execute('''
       CREATE TABLE IF NOT EXISTS quiz_result (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,10 +164,8 @@ final class SqlitePlanRepository {
         answered_at TEXT NOT NULL
       )
     ''');
-    _database.execute(
-      '''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
-      ON quiz_result(translation_id, book_id, chapter, verse)''',
-    );
+    _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
+      ON quiz_result(translation_id, book_id, chapter, verse)''');
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
         plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
@@ -500,7 +506,10 @@ final class SqlitePlanRepository {
       'quiz_model_url',
       QuizModelSettings.defaultBaseUrl,
     );
-    final model = await getSetting('quiz_model_name', QuizModelSettings.defaultModel);
+    final model = await getSetting(
+      'quiz_model_name',
+      QuizModelSettings.defaultModel,
+    );
     final apiKey = await getSetting('quiz_model_api_key', '');
     return QuizModelSettings(baseUrl: baseUrl, model: model, apiKey: apiKey);
   }
@@ -522,7 +531,7 @@ final class SqlitePlanRepository {
     final rows = _database.select(
       '''
       SELECT id, translation_id, book_id, chapter, verse, start_offset,
-        end_offset, word, part_of_speech, meaning, reference
+        end_offset, word, part_of_speech, meaning, reference, verse_text
       FROM quiz_question
       WHERE translation_id = ? AND book_id = ?
         AND ((chapter > ? OR (chapter = ? AND verse >= ?))
@@ -551,7 +560,11 @@ final class SqlitePlanRepository {
   ) async {
     final required = <({int chapter, int verse})>[];
     final verseCounts = _chapterVerseCounts(scope);
-    for (var chapter = scope.startChapter; chapter <= scope.endChapter; chapter++) {
+    for (
+      var chapter = scope.startChapter;
+      chapter <= scope.endChapter;
+      chapter++
+    ) {
       final count = verseCounts[chapter] ?? scope.endVerse;
       final startVerse = chapter == scope.startChapter ? scope.startVerse : 1;
       final endVerse = chapter == scope.endChapter ? scope.endVerse : count;
@@ -583,12 +596,7 @@ final class SqlitePlanRepository {
         AND chapter >= ? AND chapter <= ?
       GROUP BY chapter
     ''',
-      [
-        scope.translationId,
-        scope.bookId,
-        scope.startChapter,
-        scope.endChapter,
-      ],
+      [scope.translationId, scope.bookId, scope.startChapter, scope.endChapter],
     );
     for (final row in rows) {
       counts[row['chapter'] as int] = row['verse_count'] as int;
@@ -624,8 +632,8 @@ final class SqlitePlanRepository {
           '''
           INSERT INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
-           word, part_of_speech, meaning, reference, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           word, part_of_speech, meaning, reference, verse_text, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
           [
             question.translationId,
@@ -638,6 +646,7 @@ final class SqlitePlanRepository {
             question.partOfSpeech,
             question.meaning,
             question.reference,
+            question.verseText,
             now,
           ],
         );
@@ -692,14 +701,10 @@ final class SqlitePlanRepository {
       ''',
         [correct ? 1 : 0, answeredAt.toUtc().toIso8601String(), questionId],
       );
-      final current = int.tryParse(
-            await _settingRaw('current_quiz_correct_streak'),
-          ) ??
-          0;
-      final max = int.tryParse(
-            await _settingRaw('max_quiz_correct_streak'),
-          ) ??
-          0;
+      final current =
+          int.tryParse(await _settingRaw('current_quiz_correct_streak')) ?? 0;
+      final max =
+          int.tryParse(await _settingRaw('max_quiz_correct_streak')) ?? 0;
       final nextCurrent = correct ? current + 1 : 0;
       final nextMax = max > nextCurrent ? max : nextCurrent;
       await _setSettingRaw('current_quiz_correct_streak', '$nextCurrent');
@@ -720,14 +725,9 @@ final class SqlitePlanRepository {
   Future<QuizSummary> getQuizSummary() async {
     final totalAnswered = await _quizTotalAnswered();
     final totalCorrect = await _quizTotalCorrect();
-    final current = int.tryParse(
-          await _settingRaw('current_quiz_correct_streak'),
-        ) ??
-        0;
-    final max = int.tryParse(
-          await _settingRaw('max_quiz_correct_streak'),
-        ) ??
-        0;
+    final current =
+        int.tryParse(await _settingRaw('current_quiz_correct_streak')) ?? 0;
+    final max = int.tryParse(await _settingRaw('max_quiz_correct_streak')) ?? 0;
     return QuizSummary(
       totalAnswered: totalAnswered,
       totalCorrect: totalCorrect,
@@ -804,6 +804,47 @@ final class SqlitePlanRepository {
     ];
   }
 
+  /// Returns answered-question aggregates with their verse coordinates.
+  Future<List<QuizVerseMetric>> listQuizVerseMetrics({
+    String? translationId,
+    String? bookId,
+    int? chapter,
+  }) async {
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (translationId != null) {
+      clauses.add('translation_id = ?');
+      args.add(translationId);
+    }
+    if (bookId != null) {
+      clauses.add('book_id = ?');
+      args.add(bookId);
+    }
+    if (chapter != null) {
+      clauses.add('chapter = ?');
+      args.add(chapter);
+    }
+    final where = clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}';
+    final rows = _database.select('''
+      SELECT translation_id, book_id, chapter, verse, COUNT(*) AS answered,
+        COALESCE(SUM(correct), 0) AS correct
+      FROM quiz_result $where
+      GROUP BY translation_id, book_id, chapter, verse
+      ORDER BY translation_id, book_id, chapter, verse
+    ''', args);
+    return [
+      for (final row in rows)
+        QuizVerseMetric(
+          translationId: row['translation_id'] as String,
+          bookId: row['book_id'] as String,
+          chapter: row['chapter'] as int,
+          verse: row['verse'] as int,
+          answered: row['answered'] as int,
+          correct: (row['correct'] as num).toInt(),
+        ),
+    ];
+  }
+
   Future<String> _settingRaw(String key) async {
     final rows = _database.select(
       'SELECT setting_value FROM app_setting WHERE setting_key = ?',
@@ -836,20 +877,20 @@ final class SqlitePlanRepository {
     return row['count'] as int;
   }
 
-  PendingQuizQuestion _pendingQuestionFromRow(Row row) =>
-      PendingQuizQuestion(
-        id: row['id'] as int,
-        translationId: row['translation_id'] as String,
-        bookId: row['book_id'] as String,
-        chapter: row['chapter'] as int,
-        verse: row['verse'] as int,
-        start: row['start_offset'] as int,
-        end: row['end_offset'] as int,
-        word: row['word'] as String,
-        partOfSpeech: row['part_of_speech'] as String,
-        meaning: row['meaning'] as String,
-        reference: row['reference'] as String,
-      );
+  PendingQuizQuestion _pendingQuestionFromRow(Row row) => PendingQuizQuestion(
+    id: row['id'] as int,
+    translationId: row['translation_id'] as String,
+    bookId: row['book_id'] as String,
+    chapter: row['chapter'] as int,
+    verse: row['verse'] as int,
+    start: row['start_offset'] as int,
+    end: row['end_offset'] as int,
+    word: row['word'] as String,
+    partOfSpeech: row['part_of_speech'] as String,
+    meaning: row['meaning'] as String,
+    reference: row['reference'] as String,
+    verseText: row['verse_text'] as String,
+  );
 
   Future<MemorizationPlan?> findPlanBySource(
     String sourceUrl,
