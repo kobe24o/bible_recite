@@ -41,7 +41,7 @@ void main() {
     expect(find.text('世人'), findsWidgets);
   });
 
-  testWidgets('hint never exposes answer letters or its length', (
+  testWidgets('hint shows length but never exposes answer letters', (
     tester,
   ) async {
     final recognizer = FakeQuizRecognizer();
@@ -55,12 +55,17 @@ void main() {
 
     await tester.tap(hintButton);
     await tester.pumpAndSettle();
-    expect(find.text('词性：名词'), findsOneWidget);
+    expect(find.text('提示：2 个字'), findsOneWidget);
     expect(find.text('提示：世'), findsNothing);
 
     await tester.tap(hintButton);
     await tester.pumpAndSettle();
+    expect(find.text('词性：名词'), findsOneWidget);
+
+    await tester.tap(hintButton);
+    await tester.pumpAndSettle();
     expect(find.text('字面解释：世上的人'), findsOneWidget);
+    expect(find.textContaining('世人：世上的人'), findsNothing);
   });
 
   testWidgets(
@@ -177,7 +182,7 @@ PendingQuizQuestion _question(int verse) => PendingQuizQuestion(
   end: 4,
   word: '世人',
   partOfSpeech: '名词',
-  meaning: '世上的人',
+  meaning: '世人：世上的人',
   reference: verse == 16 ? '3:16' : '3:17',
   verseText: '神爱世人',
 );

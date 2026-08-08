@@ -420,11 +420,15 @@ class _QuestionPage extends ConsumerWidget {
       case 0:
         label = chinese ? '提示' : 'Hint';
       case 1:
+        final count = question.word.runes.length;
+        label = chinese ? '提示：$count 个字' : 'Hint: $count characters';
+      case 2:
         label = chinese
             ? '词性：${question.partOfSpeech}'
             : 'POS: ${question.partOfSpeech}';
-      case 2:
-        label = chinese ? '字面解释：${question.meaning}' : question.meaning;
+      case 3:
+        final meaning = _displayMeaning();
+        label = chinese ? '字面解释：$meaning' : meaning;
       default:
         label = chinese ? '已显示全部提示' : 'All hints shown';
     }
@@ -434,6 +438,16 @@ class _QuestionPage extends ConsumerWidget {
       icon: const Icon(Icons.lightbulb_outline_rounded),
       label: Text(label, textAlign: TextAlign.center),
     );
+  }
+
+  String _displayMeaning() {
+    final meaning = question.meaning.trim();
+    for (final prefix in ['${question.word}：', '${question.word}:']) {
+      if (meaning.startsWith(prefix)) {
+        return meaning.substring(prefix.length).trim();
+      }
+    }
+    return meaning;
   }
 
   Widget _renderVerse(BuildContext context) {
