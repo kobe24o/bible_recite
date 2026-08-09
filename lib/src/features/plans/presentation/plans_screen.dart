@@ -124,9 +124,35 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('我的计划', style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      '我的背诵计划',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: 8),
                     for (final plan in plans) _planCard(plan, localizations),
+                    const SizedBox(height: 18),
+                    Text(
+                      '我的复习计划（艾宾浩斯）',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    if (!plans.any((plan) => plan.ebbinghausEnabled))
+                      const Text('尚未为背诵计划开启艾宾浩斯复习')
+                    else
+                      for (final plan in plans.where(
+                        (plan) => plan.ebbinghausEnabled,
+                      ))
+                        Card(
+                          child: ListTile(
+                            leading: const CircleAvatar(
+                              child: Icon(Icons.repeat_rounded),
+                            ),
+                            title: Text(plan.title),
+                            subtitle: Text(plan.paused ? '已暂停' : '复习计划已开启'),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: _working ? null : () => _editPlan(plan),
+                          ),
+                        ),
                     const SizedBox(height: 18),
                   ],
                 );
