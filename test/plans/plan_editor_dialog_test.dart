@@ -79,4 +79,38 @@ void main() {
     expect(result?.draft?.passages.single.endChapter, 4);
     expect(result?.draft?.days, 17);
   });
+
+  testWidgets('asks for scripture when saving an empty custom plan', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: PlanEditorDialog(
+            books: const [],
+            initial: PlanEditorDraft(
+              title: '空计划',
+              translationId: 'cmn-cu89s',
+              bookId: 'JHN',
+              startChapter: 3,
+              endChapter: 3,
+              startDate: DateTime(2026, 8, 9),
+              endDate: DateTime(2026, 8, 9),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('save-plan-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请添加经文'), findsOneWidget);
+  });
 }

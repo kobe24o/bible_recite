@@ -239,10 +239,11 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   }
 
   void _save() {
-    if (_title.text.trim().isEmpty ||
-        (!widget.contentLocked && _passages.isEmpty) ||
-        _days < 1 ||
-        _days < widget.minimumDays) {
+    if (!widget.contentLocked && _passages.isEmpty) {
+      setState(() => _error = '请添加经文');
+      return;
+    }
+    if (_title.text.trim().isEmpty || _days < 1 || _days < widget.minimumDays) {
       setState(() => _error = '请检查名称和日期（至少 ${widget.minimumDays} 天）');
       return;
     }

@@ -88,6 +88,47 @@ void main() {
   });
 
   testWidgets(
+    'opens the date editor when creating a plan from selected verses',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
+          ],
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            supportedLocales: [Locale('zh'), Locale('en')],
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.longPress(find.text('16'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('add-to-plan-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新建计划'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('编辑背诵计划'), findsOneWidget);
+      expect(find.byKey(const Key('plan-start-date')), findsOneWidget);
+      expect(find.byKey(const Key('plan-end-date')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'keeps chapter quiz entry disabled while its question is pending',
     (tester) async {
       await tester.pumpWidget(

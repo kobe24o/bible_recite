@@ -489,39 +489,23 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
   }
 
   Future<void> _createPlanFromSelection(List<VerseUnit> selected) async {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day);
-    final catalog = ref.read(bookNameCatalogProvider);
-    final title =
-        '${catalog.chapterLabel(widget.bookId, widget.chapter, Localizations.localeOf(context))} 背诵计划';
-    try {
-      final repository = await ref.read(planRepositoryProvider.future);
-      await repository.createPlan(
-        NewMemorizationPlan(
-          title: title,
-          translationId: widget.translationId,
-          bookId: widget.bookId,
-          startChapter: widget.chapter,
-          endChapter: widget.chapter,
-          startDate: start,
-          endDate: start.add(Duration(days: selected.length - 1)),
-          tasks: _tasksFor(selected),
-        ),
-      );
-      if (!mounted) return;
+    final saved = await _openNewPlanEditor(
+      initialPassages: [
+        for (final unit in selected)
+          PlanPassageSelection(
+            bookId: unit.start.osisBookId,
+            startChapter: unit.start.chapter,
+            startVerse: unit.start.verse,
+            endChapter: unit.end.chapter,
+            endVerse: unit.end.verse,
+          ),
+      ],
+    );
+    if (saved && mounted) {
       setState(() {
         _selectingVerses = false;
         _selectedVerseIndexes.clear();
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('计划已创建：每天安排一节，可在计划中查看')));
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('创建计划失败：$error')));
-      }
     }
   }
 
@@ -537,7 +521,9 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       ),
   ];
 
-  Future<void> _openNewPlanEditor() async {
+  Future<bool> _openNewPlanEditor({
+    List<PlanPassageSelection> initialPassages = const [],
+  }) async {
     final locale = Localizations.localeOf(context);
     try {
       final scripture = await ref.read(scriptureRepositoryProvider.future);
@@ -556,7 +542,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
             ),
           )
           .toList(growable: false);
-      if (!mounted) return;
+      if (!mounted) return false;
       final today = DateTime.now();
       final start = DateTime(today.year, today.month, today.day);
       final chapterTitle = catalog.chapterLabel(
@@ -575,11 +561,16 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
             startChapter: widget.chapter,
             endChapter: widget.chapter,
             startDate: start,
-            endDate: start.add(const Duration(days: 6)),
+            endDate: start.add(
+              Duration(
+                days: initialPassages.isEmpty ? 6 : initialPassages.length - 1,
+              ),
+            ),
+            passages: initialPassages,
           ),
         ),
       );
-      if (result?.draft == null || !mounted) return;
+      if (result?.draft == null || !mounted) return false;
       final plan = await buildPlanFromDraft(scripture, result!.draft!);
       final repository = await ref.read(planRepositoryProvider.future);
       await repository.createPlan(plan);
@@ -588,12 +579,14 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('计划已保存到本机')));
       }
+      return true;
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('创建计划失败：$error')));
       }
+      return false;
     }
   }
 
