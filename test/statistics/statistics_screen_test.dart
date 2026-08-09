@@ -24,8 +24,7 @@ void main() {
     expect(find.text('通过阈值 80%'), findsOneWidget);
     expect(find.text('复习间隔：1、2、4、7、15、30 天'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('ebbinghaus-toggle')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ebbinghaus-toggle')), findsNothing);
     final slider = tester.widget<Slider>(
       find.byKey(const Key('ebbinghaus-threshold')),
     );
@@ -34,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final settings = await repository.getEbbinghausSettings();
-    expect(settings.enabled, isTrue);
+    expect(settings.enabled, isFalse);
     expect(settings.passThreshold, 0.85);
   });
 

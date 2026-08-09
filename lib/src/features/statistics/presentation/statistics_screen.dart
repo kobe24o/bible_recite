@@ -886,21 +886,15 @@ class _EbbinghausSettingsCardState extends State<_EbbinghausSettingsCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SwitchListTile(
-              key: const Key('ebbinghaus-toggle'),
+            ListTile(
               contentPadding: EdgeInsets.zero,
-              secondary: const Icon(Icons.auto_awesome_rounded),
-              title: Text(chinese ? '艾宾浩斯背诵法' : 'Ebbinghaus review'),
+              leading: const Icon(Icons.auto_awesome_rounded),
+              title: Text(chinese ? '艾宾浩斯背诵法' : 'Ebbinghaus review settings'),
               subtitle: Text(
                 chinese
-                    ? '按遗忘曲线自动安排已通过章节的复习'
-                    : 'Schedule passed chapters along the forgetting curve',
+                    ? '请在每个背诵计划内单独开启；此处仅设置通过阈值'
+                    : 'Enable it per memorization plan; set only the pass threshold here.',
               ),
-              value: _enabled,
-              onChanged: (value) async {
-                setState(() => _enabled = value);
-                await _save();
-              },
             ),
             Text(
               chinese ? '通过阈值 $percent%' : 'Pass threshold $percent%',
