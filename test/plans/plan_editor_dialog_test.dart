@@ -113,4 +113,86 @@ void main() {
 
     expect(find.text('请添加经文'), findsOneWidget);
   });
+
+  testWidgets('keeps a valid header range after appending an earlier passage', (
+    tester,
+  ) async {
+    PlanEditorResult? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                result = await showDialog<PlanEditorResult>(
+                  context: context,
+                  builder: (_) => PlanEditorDialog(
+                    books: [
+                      BibleBook(
+                        osisId: 'GEN',
+                        ordinal: 1,
+                        name: '创世记',
+                        chapterCount: 50,
+                      ),
+                      BibleBook(
+                        osisId: 'JHN',
+                        ordinal: 43,
+                        name: '约翰福音',
+                        chapterCount: 21,
+                      ),
+                    ],
+                    initial: PlanEditorDraft(
+                      title: '选中经文计划',
+                      translationId: 'cmn-cu89s',
+                      bookId: 'JHN',
+                      startChapter: 3,
+                      endChapter: 3,
+                      startDate: DateTime(2026, 8, 9),
+                      endDate: DateTime(2026, 8, 9),
+                      passages: const [
+                        PlanPassageSelection(
+                          bookId: 'JHN',
+                          startChapter: 3,
+                          startVerse: 16,
+                          endChapter: 3,
+                          endVerse: 16,
+                        ),
+                      ],
+                    ),
+                    onAddPassages: () async => const [
+                      PlanPassageSelection(
+                        bookId: 'GEN',
+                        startChapter: 1,
+                        startVerse: 1,
+                        endChapter: 1,
+                        endVerse: 1,
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: const Text('打开跨卷编辑'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开跨卷编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-plan-passage')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-plan-button')));
+    await tester.pumpAndSettle();
+
+    expect(result?.draft?.bookId, 'JHN');
+    expect(result?.draft?.startChapter, 3);
+    expect(result?.draft?.endChapter, 3);
+  });
 }

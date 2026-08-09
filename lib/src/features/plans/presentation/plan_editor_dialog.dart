@@ -263,6 +263,15 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       setState(() => _error = '请检查名称和日期（至少 ${widget.minimumDays} 天）');
       return;
     }
+    final headerPassages = _passages
+        .where((passage) => passage.bookId == _passages.first.bookId)
+        .toList(growable: false);
+    final startChapter = headerPassages
+        .map((passage) => passage.startChapter)
+        .reduce((minimum, value) => value < minimum ? value : minimum);
+    final endChapter = headerPassages
+        .map((passage) => passage.endChapter)
+        .reduce((maximum, value) => value > maximum ? value : maximum);
     Navigator.pop(
       context,
       PlanEditorResult.saved(
@@ -274,10 +283,10 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
               : _passages.first.bookId,
           startChapter: _passages.isEmpty
               ? widget.initial.startChapter
-              : _passages.first.startChapter,
+              : startChapter,
           endChapter: _passages.isEmpty
               ? widget.initial.endChapter
-              : _passages.last.endChapter,
+              : endChapter,
           startDate: _startDate,
           endDate: _endDate,
           passages: _passages,
