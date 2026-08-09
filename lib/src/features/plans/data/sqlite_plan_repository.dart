@@ -695,7 +695,19 @@ final class SqlitePlanRepository {
       }
       final row = question.single;
       if ((row['answered'] as int) == 1) {
-        throw StateError('该题目已经作答');
+        final totalAnswered = await _quizTotalAnswered();
+        final totalCorrect = await _quizTotalCorrect();
+        final current =
+            int.tryParse(await _settingRaw('current_quiz_correct_streak')) ?? 0;
+        final max =
+            int.tryParse(await _settingRaw('max_quiz_correct_streak')) ?? 0;
+        _database.execute('COMMIT');
+        return QuizCompletion(
+          totalAnswered: totalAnswered,
+          totalCorrect: totalCorrect,
+          currentCorrectStreak: current,
+          maxCorrectStreak: max,
+        );
       }
       _database.execute(
         '''

@@ -138,15 +138,10 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
     final repository = await ref.read(planRepositoryProvider.future);
     final ignoreFinalNasal =
         await repository.getSetting('ignore_final_nasal', 'true') == 'true';
-    final alignment = MandarinPhoneticComparator(
+    return MandarinPhoneticComparator(
       lexicon: base.lexicon,
       ignoreFinalNasal: ignoreFinalNasal,
-    ).compare(question.word, spoken, finished: true);
-    final expected = _comparableCount(question.word);
-    return expected > 0 &&
-        alignment.correctCount >= expected &&
-        alignment.incorrectCount == 0 &&
-        alignment.omittedCount == 0;
+    ).hasContiguousPinyinMatch(question.word, spoken);
   }
 
   int _comparableCount(String value) => value.runes

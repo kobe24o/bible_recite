@@ -72,6 +72,10 @@ void main() {
     expect(result.phoneticCorrectCount, 2);
   });
 
+  test('finds the target pinyin sequence within extra recognized words', () {
+    expect(comparator.hasContiguousPinyinMatch('耶和华', '耶稣叶和华'), isTrue);
+  });
+
   test(
     'prefers an exact alignment over an equally cheap phonetic alignment',
     () {

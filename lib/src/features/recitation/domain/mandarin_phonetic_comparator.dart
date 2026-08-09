@@ -18,6 +18,37 @@ final class MandarinPhoneticComparator implements RecitationComparator {
   final BiblePronunciationLexicon lexicon;
   final bool ignoreFinalNasal;
 
+  /// Whether every answer character's pronunciation appears consecutively in
+  /// the recognized transcript. This permits harmless ASR lead-in words while
+  /// still requiring the complete answer pronunciation.
+  bool hasContiguousPinyinMatch(String target, String transcript) {
+    final expected = _comparableCharacters(target);
+    final spoken = _comparableCharacters(transcript);
+    if (expected.isEmpty || spoken.length < expected.length) {
+      return false;
+    }
+    final expectedPinyin = _encodePinyin(expected);
+    final spokenPinyin = _encodePinyin(spoken);
+    if (expectedPinyin.any((value) => value == null)) {
+      return false;
+    }
+
+    for (var start = 0; start <= spoken.length - expected.length; start++) {
+      final matches = Iterable<int>.generate(expected.length).every((offset) {
+        final expectedValue = expectedPinyin[offset];
+        final spokenValue = spokenPinyin[start + offset];
+        return expected[offset].normalized ==
+                spoken[start + offset].normalized ||
+            _normalizedPinyin(expectedValue, ignoreFinalNasal) ==
+                _normalizedPinyin(spokenValue, ignoreFinalNasal);
+      });
+      if (matches) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   RecitationAlignment compare(
     String target,

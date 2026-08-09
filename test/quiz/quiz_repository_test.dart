@@ -102,24 +102,29 @@ void main() {
     expect(summary.maxCorrectStreak, 1);
   });
 
-  test('rejects completing the same question twice', () async {
-    await repository.saveQuizQuestions([questionFor()]);
-    await repository.completeQuizQuestion(
-      questionId: 1,
-      correct: true,
-      answeredAt: DateTime.now(),
-    );
-    await expectLater(
-      repository.completeQuizQuestion(
+  test(
+    'reuses a completed question without duplicating quiz statistics',
+    () async {
+      await repository.saveQuizQuestions([questionFor()]);
+      final first = await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      final repeated = await repository.completeQuizQuestion(
         questionId: 1,
         correct: false,
         answeredAt: DateTime.now(),
-      ),
-      throwsStateError,
-    );
-    final summary = await repository.getQuizSummary();
-    expect(summary.totalAnswered, 1);
-  });
+      );
+      final summary = await repository.getQuizSummary();
+      expect(summary.totalAnswered, 1);
+      expect(summary.totalCorrect, 1);
+      expect(repeated.totalAnswered, first.totalAnswered);
+      expect(repeated.totalCorrect, first.totalCorrect);
+      expect(repeated.currentCorrectStreak, first.currentCorrectStreak);
+      expect(repeated.maxCorrectStreak, first.maxCorrectStreak);
+    },
+  );
 
   test('quiz settings round-trip with blank default key', () async {
     final defaults = await repository.getQuizModelSettings();
