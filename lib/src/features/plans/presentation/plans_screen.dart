@@ -150,7 +150,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                             title: Text(plan.title),
                             subtitle: Text(plan.paused ? '已暂停' : '复习计划已开启'),
                             trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: _working ? null : () => _editPlan(plan),
+                            onTap: _working
+                                ? null
+                                : () => _showReviewPlan(plan),
                           ),
                         ),
                     const SizedBox(height: 18),
@@ -315,6 +317,66 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final end = '${passage.endChapter}:${passage.endVerse}';
     return '${catalog.nameFor(passage.bookId, locale)} $start–$end';
   }
+
+  Future<void> _showReviewPlan(MemorizationPlan plan) async {
+    final repository = await ref.read(planRepositoryProvider.future);
+    final reviews = await repository.listEbbinghausReviewsForPlan(plan.id);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          children: [
+            Text(
+              '${plan.title} · 艾宾浩斯复习',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(plan.paused ? '该复习计划已暂停' : '复习计划进行中'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () async {
+                if (plan.paused) {
+                  await repository.resumePlan(plan.id);
+                } else {
+                  await repository.pausePlan(plan.id);
+                }
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                setState(() => _revision++);
+              },
+              icon: Icon(
+                plan.paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              ),
+              label: Text(plan.paused ? '继续复习计划' : '暂停复习计划'),
+            ),
+            const SizedBox(height: 12),
+            if (reviews.isEmpty) const Text('尚未产生复习记录'),
+            for (final review in reviews)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(child: Text('${review.intervalDays}')),
+                title: Text(
+                  '第 ${review.intervalDays} 天 · ${review.dueDate.year}-${review.dueDate.month.toString().padLeft(2, '0')}-${review.dueDate.day.toString().padLeft(2, '0')}',
+                ),
+                subtitle: Text(
+                  '${review.bookId} ${review.startChapter}:${review.startVerse}–${review.endChapter}:${review.endVerse} · ${_reviewStatusLabel(review.status)}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _reviewStatusLabel(String status) => switch (status) {
+    'completed' => '已通过',
+    'failed' => '未通过',
+    'cancelled' => '已取消',
+    _ => '待复习',
+  };
 
   Widget _planCard(MemorizationPlan plan, AppLocalizations localizations) {
     final locked = plan.contentLocked;

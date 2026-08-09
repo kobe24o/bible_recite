@@ -64,7 +64,7 @@ class _RecitationTimelineScreenState
                       children: [
                         const SizedBox(height: 5),
                         Text(
-                          '背诵 ${point.verses} 节 · ${point.characters} 字 · 准确率 ${(point.accuracy * 100).round()}% · ${_duration(point.seconds)}',
+                          '背诵 ${point.verses} 节 · ${point.characters} 字 · 背诵准确率 ${(point.accuracy * 100).round()}% · ${_duration(point.seconds)}',
                         ),
                         const SizedBox(height: 7),
                         LinearProgressIndicator(

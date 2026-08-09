@@ -1324,7 +1324,7 @@ final class SqlitePlanRepository {
       if (reviewId != null) {
         final rows = _database.select(
           '''
-          SELECT r.id, r.cycle_id, r.interval_days FROM ebbinghaus_review r
+          SELECT r.id, r.cycle_id, r.interval_days, c.source_plan_id FROM ebbinghaus_review r
           JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
           WHERE r.id = ? AND r.status = 'pending' AND c.status = 'active'
         ''',
@@ -1387,7 +1387,12 @@ final class SqlitePlanRepository {
               "UPDATE ebbinghaus_cycle SET status = 'restarted' WHERE id = ?",
               [cycleId],
             );
-            _insertEbbinghausCycle(result, resultId, completedAt);
+            _insertEbbinghausCycle(
+              result,
+              resultId,
+              completedAt,
+              sourcePlanId: rows.single['source_plan_id'] as int?,
+            );
           }
         }
       } else if (passed) {
@@ -1423,7 +1428,12 @@ final class SqlitePlanRepository {
     }
   }
 
-  void _insertEbbinghausCycle(Row result, int resultId, DateTime baseDate) {
+  void _insertEbbinghausCycle(
+    Row result,
+    int resultId,
+    DateTime baseDate, {
+    int? sourcePlanId,
+  }) {
     final createdAt = DateTime.now().toUtc().toIso8601String();
     _database.execute(
       '''
@@ -1434,7 +1444,7 @@ final class SqlitePlanRepository {
     ''',
       [
         resultId,
-        result['plan_id'],
+        sourcePlanId ?? result['plan_id'],
         result['translation_id'],
         result['book_id'],
         result['chapter'],
@@ -1481,14 +1491,8 @@ final class SqlitePlanRepository {
               AND date(result.completed_at, 'localtime') = ?)
           )
           AND NOT EXISTS (
-            SELECT 1 FROM plan_task t
-            JOIN memorization_plan p ON p.id = t.plan_id
-            WHERE p.status = 'paused'
-              AND t.book_id = c.book_id
-              AND t.start_chapter = c.start_chapter
-              AND t.start_verse = c.start_verse
-              AND t.end_chapter = c.end_chapter
-              AND t.end_verse = c.end_verse
+            SELECT 1 FROM memorization_plan p
+            WHERE p.id = c.source_plan_id AND p.status = 'paused'
           )
           ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',
@@ -1507,6 +1511,7 @@ final class SqlitePlanRepository {
             endVerse: row['end_verse'] as int,
             intervalDays: row['interval_days'] as int,
             dueDate: DateTime.parse(row['due_date'] as String),
+            status: row['status'] as String,
             completed: row['status'] == 'completed',
           ),
         )
@@ -1527,6 +1532,36 @@ final class SqlitePlanRepository {
         .values
         .toList(growable: false);
   }
+
+  Future<List<EbbinghausReview>> listEbbinghausReviewsForPlan(
+    int planId,
+  ) async => _database
+      .select(
+        '''SELECT r.id, r.cycle_id, r.interval_days, r.due_date, r.status,
+              c.translation_id, c.book_id, c.chapter, c.start_chapter,
+              c.start_verse, c.end_chapter, c.end_verse
+            FROM ebbinghaus_review r JOIN ebbinghaus_cycle c ON c.id = r.cycle_id
+            WHERE c.source_plan_id = ? ORDER BY r.due_date, r.interval_days''',
+        [planId],
+      )
+      .map(
+        (row) => EbbinghausReview(
+          id: row['id'] as int,
+          cycleId: row['cycle_id'] as int,
+          translationId: row['translation_id'] as String,
+          bookId: row['book_id'] as String,
+          chapter: row['chapter'] as int,
+          startChapter: row['start_chapter'] as int,
+          startVerse: row['start_verse'] as int,
+          endChapter: row['end_chapter'] as int,
+          endVerse: row['end_verse'] as int,
+          intervalDays: row['interval_days'] as int,
+          dueDate: DateTime.parse(row['due_date'] as String),
+          status: row['status'] as String,
+          completed: row['status'] == 'completed',
+        ),
+      )
+      .toList(growable: false);
 
   Future<List<AchievementUnlock>> evaluateAndUnlockAchievements({
     String source = 'backfill',

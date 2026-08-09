@@ -23,6 +23,7 @@ final class EbbinghausReview {
     required this.endVerse,
     required this.intervalDays,
     required this.dueDate,
+    required this.status,
     required this.completed,
   });
 
@@ -37,5 +38,6 @@ final class EbbinghausReview {
   final int endVerse;
   final int intervalDays;
   final DateTime dueDate;
+  final String status;
   final bool completed;
 }
