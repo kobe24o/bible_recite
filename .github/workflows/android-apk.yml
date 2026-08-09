@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "优化答题提示：先显示隐藏词字数，再显示词性与字面解释；不会泄露答案部分文字，字面解释不再显示原词前缀。"
+              --notes "答题按拼音连续匹配判分；模型配置不足会明确提示。艾宾浩斯改为每个背诵计划独立开启，新增复习计划进度、暂停/继续、再次执行及阅读/背诵入口。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "优化答题提示：先显示隐藏词字数，再显示词性与字面解释；不会泄露答案部分文字，字面解释不再显示原词前缀。" \
+              --release-notes "答题按拼音连续匹配判分；模型配置不足会明确提示。艾宾浩斯改为每个背诵计划独立开启，新增复习计划进度、暂停/继续、再次执行及阅读/背诵入口。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

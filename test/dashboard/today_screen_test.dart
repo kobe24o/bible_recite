@@ -18,10 +18,26 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.8,
-      now: yesterday.subtract(const Duration(minutes: 1)),
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '约翰福音复习计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: yesterday,
+        endDate: yesterday,
+        ebbinghausEnabled: true,
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 1,
+            endChapter: 3,
+            endVerse: 36,
+          ),
+        ],
+      ),
     );
     final resultId = await repository.saveRecitationResult(
       NewRecitationResult(
@@ -39,6 +55,7 @@ void main() {
         reorderedCount: 0,
         accuracy: 0.8,
         completedAt: yesterday,
+        planId: planId,
       ),
     );
     await repository.processEbbinghausResult(resultId: resultId);

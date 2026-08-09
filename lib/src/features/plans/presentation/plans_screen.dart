@@ -15,6 +15,7 @@ import '../../scripture/domain/book_name_catalog.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
+import '../../review/domain/ebbinghaus_models.dart';
 import '../application/plan_providers.dart';
 import '../application/preset_plan_sync.dart';
 import '../data/sqlite_plan_repository.dart';
@@ -352,11 +353,26 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
               ),
               label: Text(plan.paused ? '继续复习计划' : '暂停复习计划'),
             ),
+            if (plan.totalTasks > 0 &&
+                plan.completedTasks == plan.totalTasks) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await repository.restartPlan(plan.id);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  setState(() => _revision++);
+                },
+                icon: const Icon(Icons.replay_rounded),
+                label: const Text('再次执行背诵计划'),
+              ),
+            ],
             const SizedBox(height: 12),
             if (reviews.isEmpty) const Text('尚未产生复习记录'),
             for (final review in reviews)
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                onTap: () => _showReviewActions(plan, review),
                 leading: CircleAvatar(child: Text('${review.intervalDays}')),
                 title: Text(
                   '第 ${review.intervalDays} 天 · ${review.dueDate.year}-${review.dueDate.month.toString().padLeft(2, '0')}-${review.dueDate.day.toString().padLeft(2, '0')}',
@@ -369,6 +385,94 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showReviewActions(
+    MemorizationPlan plan,
+    EbbinghausReview review,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '第 ${review.intervalDays} 天复习',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${review.bookId} ${review.startChapter}:${review.startVerse}–${review.endChapter}:${review.endVerse}',
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.menu_book_outlined),
+              title: const Text('高亮阅读'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.push(
+                  '/bible/${review.translationId}/${review.bookId}/${review.startChapter}?verse=${review.startVerse}&endVerse=${review.endVerse}',
+                );
+              },
+            ),
+            if (review.status == 'pending')
+              FilledButton.icon(
+                onPressed: () async {
+                  Navigator.pop(sheetContext);
+                  await _startReviewRecitation(plan, review);
+                },
+                icon: const Icon(Icons.mic_rounded),
+                label: const Text('背诵这段经文'),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _startReviewRecitation(
+    MemorizationPlan plan,
+    EbbinghausReview review,
+  ) async {
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final passage = await scripture.getPassage(
+      review.translationId,
+      PassageRange(
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: review.bookId,
+          chapter: review.startChapter,
+          verse: review.startVerse,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: review.bookId,
+          chapter: review.endChapter,
+          verse: review.endVerse,
+        ),
+      ),
+    );
+    if (!mounted || passage.units.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecitationPracticeScreen(
+          request: RecitationRequest(
+            translationId: review.translationId,
+            bookId: review.bookId,
+            chapter: review.startChapter,
+            mode: RecitationMode.continuous,
+            units: passage.units,
+            planId: plan.id,
+            reviewId: review.id,
+          ),
+        ),
+      ),
+    );
+    if (mounted) setState(() => _revision++);
   }
 
   String _reviewStatusLabel(String status) => switch (status) {

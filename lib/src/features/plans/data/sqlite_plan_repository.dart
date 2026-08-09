@@ -1474,7 +1474,6 @@ final class SqlitePlanRepository {
     DateTime date, {
     bool includeCompleted = false,
   }) async {
-    final settings = await getEbbinghausSettings();
     return _database
         .select(
           '''

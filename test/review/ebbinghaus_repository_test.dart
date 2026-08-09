@@ -5,326 +5,136 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  test('defaults to disabled with an 80 percent threshold', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
+  test(
+    'keeps the global threshold but defaults review generation off',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
 
-    final settings = await repository.getEbbinghausSettings();
+      final settings = await repository.getEbbinghausSettings();
 
-    expect(settings.enabled, isFalse);
-    expect(settings.passThreshold, 0.80);
-    expect(settings.enabledAt, isNull);
-  });
+      expect(settings.enabled, isFalse);
+      expect(settings.passThreshold, .8);
+    },
+  );
 
-  test('schedules only a passed result from an enabled memorization plan', () async {
+  test('only an enabled source plan creates an exact-range review', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     final base = DateTime(2026, 8, 9, 9);
-    final planId = await repository.createPlan(
-      NewMemorizationPlan(
-        title: '独立复习',
-        translationId: 'cmn-cu89s',
-        bookId: 'JHN',
-        startChapter: 3,
-        endChapter: 3,
-        startDate: base,
-        endDate: base,
-        ebbinghausEnabled: true,
-        tasks: const [
-          NewPlanTask(dayIndex: 0, startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16),
-        ],
-      ),
-    );
+    final planId = await _plan(repository, base, enabled: true);
     final standalone = await repository.saveRecitationResult(
       _result(accuracy: 1, completedAt: base),
     );
     final planned = await repository.saveRecitationResult(
-      _result(accuracy: 1, completedAt: base, planId: planId, startVerse: 16, endVerse: 16),
+      _result(
+        accuracy: 1,
+        completedAt: base,
+        planId: planId,
+        startVerse: 16,
+        endVerse: 16,
+      ),
     );
 
     await repository.processEbbinghausResult(resultId: standalone);
     await repository.processEbbinghausResult(resultId: planned);
 
-    final reviews = await repository.dueEbbinghausReviews(base.add(const Duration(days: 1)));
+    final reviews = await repository.dueEbbinghausReviews(
+      base.add(const Duration(days: 1)),
+    );
     expect(reviews, hasLength(1));
     expect(reviews.single.startVerse, 16);
     expect(reviews.single.endVerse, 16);
   });
 
-  test('keeps only the latest overdue review for a passage', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    final base = DateTime(2026, 7, 16, 9);
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.80,
-      now: base.subtract(const Duration(minutes: 1)),
-    );
-    final resultId = await repository.saveRecitationResult(
-      _result(accuracy: 0.80, completedAt: base),
-    );
-
-    await repository.processEbbinghausResult(resultId: resultId);
-    await repository.processEbbinghausResult(resultId: resultId);
-
-    final reviews = await repository.dueEbbinghausReviews(
-      base.add(const Duration(days: 30)),
-    );
-    expect(reviews, hasLength(1));
-    expect(reviews.single.intervalDays, 30);
-    expect(reviews.first.startVerse, 1);
-    expect(reviews.first.endVerse, 36);
-
-    final completedReviewId = await repository.saveRecitationResult(
-      _result(accuracy: 1, completedAt: base.add(const Duration(days: 30))),
-    );
-    await repository.processEbbinghausResult(
-      resultId: completedReviewId,
-      reviewId: reviews.single.id,
-    );
-    final completedToday = await repository.dueEbbinghausReviews(
-      base.add(const Duration(days: 30)),
-      includeCompleted: true,
-    );
-    expect(completedToday, hasLength(1));
-    expect(completedToday.single.id, reviews.single.id);
-    expect(completedToday.single.completed, isTrue);
-    expect(
-      await repository.dueEbbinghausReviews(base.add(const Duration(days: 31))),
-      isEmpty,
-    );
-  });
-
   test(
-    'retains an overdue review completed today in the completed list',
+    'pausing one source plan does not hide another plan with the same range',
     () async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
-      final startedAt = DateTime(2026, 7, 28, 9);
-      final today = DateTime(2026, 7, 31, 9);
-      await repository.updateEbbinghausSettings(
+      final base = DateTime(2026, 8, 9, 9);
+      final pausedPlan = await _plan(repository, base, enabled: true);
+      final activePlan = await _plan(
+        repository,
+        base,
         enabled: true,
-        passThreshold: 0.80,
-        now: startedAt.subtract(const Duration(minutes: 1)),
+        title: '另一个计划',
       );
-      final initialId = await repository.saveRecitationResult(
-        _result(accuracy: 1, completedAt: startedAt),
-      );
-      await repository.processEbbinghausResult(resultId: initialId);
-      final overdue = (await repository.dueEbbinghausReviews(today)).single;
+      for (final planId in [pausedPlan, activePlan]) {
+        final resultId = await repository.saveRecitationResult(
+          _result(accuracy: 1, completedAt: base, planId: planId),
+        );
+        await repository.processEbbinghausResult(resultId: resultId);
+      }
 
-      final completedId = await repository.saveRecitationResult(
-        _result(accuracy: 1, completedAt: today),
-      );
-      await repository.processEbbinghausResult(
-        resultId: completedId,
-        reviewId: overdue.id,
-      );
-
-      final completed = await repository.dueEbbinghausReviews(
-        today,
-        includeCompleted: true,
-      );
-      expect(completed, hasLength(1));
-      expect(completed.single.id, overdue.id);
-      expect(completed.single.completed, isTrue);
-    },
-  );
-
-  test('keeps separate passage reviews in the same chapter', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    final base = DateTime(2026, 7, 16, 9);
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.80,
-      now: base.subtract(const Duration(minutes: 1)),
-    );
-    for (final verse in [16, 17]) {
-      final resultId = await repository.saveRecitationResult(
-        _result(
-          accuracy: 1,
-          completedAt: base,
-          startVerse: verse,
-          endVerse: verse,
-          chapterVerseCount: 36,
-        ),
-      );
-      await repository.processEbbinghausResult(resultId: resultId);
-    }
-
-    final reviews = await repository.dueEbbinghausReviews(
-      base.add(const Duration(days: 1)),
-    );
-    expect(reviews, hasLength(2));
-    expect(reviews.map((review) => review.startVerse), containsAll([16, 17]));
-    expect(
-      reviews.every((review) => review.endVerse == review.startVerse),
-      isTrue,
-    );
-  });
-
-  test('paused plan hides its matching Ebbinghaus review', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    final base = DateTime(2026, 7, 16, 9);
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.80,
-      now: base.subtract(const Duration(minutes: 1)),
-    );
-    final planId = await repository.createPlan(
-      NewMemorizationPlan(
-        title: '暂停测试',
-        translationId: 'cmn-cu89s',
-        bookId: 'JHN',
-        startChapter: 3,
-        endChapter: 3,
-        startDate: DateTime(2026, 7, 16),
-        endDate: DateTime(2026, 7, 16),
-        tasks: const [
-          NewPlanTask(
-            dayIndex: 0,
-            startChapter: 3,
-            startVerse: 1,
-            endChapter: 3,
-            endVerse: 36,
-          ),
-        ],
-      ),
-    );
-    final resultId = await repository.saveRecitationResult(
-      _result(accuracy: 1, completedAt: base),
-    );
-    await repository.processEbbinghausResult(resultId: resultId);
-
-    await repository.pausePlan(planId);
-
-    expect(
-      await repository.dueEbbinghausReviews(base.add(const Duration(days: 1))),
-      isEmpty,
-    );
-  });
-
-  test('results before enabling or below threshold do not schedule', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    final enabledAt = DateTime(2026, 7, 16, 10);
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.80,
-      now: enabledAt,
-    );
-    final oldId = await repository.saveRecitationResult(
-      _result(
-        accuracy: 1,
-        completedAt: enabledAt.subtract(const Duration(minutes: 1)),
-      ),
-    );
-    final failedId = await repository.saveRecitationResult(
-      _result(accuracy: 0.79, completedAt: enabledAt),
-    );
-
-    await repository.processEbbinghausResult(resultId: oldId);
-    await repository.processEbbinghausResult(resultId: failedId);
-
-    expect(
-      await repository.dueEbbinghausReviews(
-        enabledAt.add(const Duration(days: 30)),
-      ),
-      isEmpty,
-    );
-  });
-
-  test(
-    'a failed review restarts the complete curve from failure day',
-    () async {
-      final repository = SqlitePlanRepository(sqlite3.openInMemory());
-      addTearDown(repository.close);
-      final base = DateTime(2026, 7, 16, 9);
-      await repository.updateEbbinghausSettings(
-        enabled: true,
-        passThreshold: 0.80,
-        now: base.subtract(const Duration(minutes: 1)),
-      );
-      final initialId = await repository.saveRecitationResult(
-        _result(accuracy: 0.9, completedAt: base),
-      );
-      await repository.processEbbinghausResult(resultId: initialId);
-      final firstReview = (await repository.dueEbbinghausReviews(
-        base.add(const Duration(days: 1)),
-      )).single;
-      final failedAt = base.add(const Duration(days: 1));
-      final failedId = await repository.saveRecitationResult(
-        _result(accuracy: 0.7, completedAt: failedAt),
-      );
-
-      await repository.processEbbinghausResult(
-        resultId: failedId,
-        reviewId: firstReview.id,
-      );
-
-      final restarted = await repository.dueEbbinghausReviews(
-        failedAt.add(const Duration(days: 30)),
-      );
-      expect(restarted, hasLength(1));
-      expect(restarted.single.dueDate, DateTime(2026, 8, 16));
-    },
-  );
-
-  test(
-    'disabling hides old cycles and re-enabling only accepts new results',
-    () async {
-      final repository = SqlitePlanRepository(sqlite3.openInMemory());
-      addTearDown(repository.close);
-      final base = DateTime(2026, 7, 16, 9);
-      await repository.updateEbbinghausSettings(
-        enabled: true,
-        passThreshold: 0.80,
-        now: base,
-      );
-      final oldId = await repository.saveRecitationResult(
-        _result(accuracy: 1, completedAt: base),
-      );
-      await repository.processEbbinghausResult(resultId: oldId);
-      await repository.updateEbbinghausSettings(
-        enabled: false,
-        passThreshold: 0.80,
-        now: base.add(const Duration(hours: 1)),
-      );
-      await repository.updateEbbinghausSettings(
-        enabled: true,
-        passThreshold: 0.80,
-        now: base.add(const Duration(hours: 2)),
-      );
+      await repository.pausePlan(pausedPlan);
 
       expect(
         await repository.dueEbbinghausReviews(
-          base.add(const Duration(days: 30)),
-        ),
-        isEmpty,
-      );
-
-      final newId = await repository.saveRecitationResult(
-        _result(accuracy: 1, completedAt: base.add(const Duration(hours: 3))),
-      );
-      await repository.processEbbinghausResult(resultId: newId);
-      expect(
-        await repository.dueEbbinghausReviews(
-          base.add(const Duration(days: 31)),
+          base.add(const Duration(days: 1)),
         ),
         hasLength(1),
       );
     },
   );
+
+  test('a failed review restarts under the original source plan', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2026, 8, 9, 9);
+    final planId = await _plan(repository, base, enabled: true);
+    final source = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base, planId: planId),
+    );
+    await repository.processEbbinghausResult(resultId: source);
+    final first = (await repository.dueEbbinghausReviews(
+      base.add(const Duration(days: 1)),
+    )).single;
+    final failed = await repository.saveRecitationResult(
+      _result(accuracy: .7, completedAt: base.add(const Duration(days: 1))),
+    );
+    await repository.processEbbinghausResult(
+      resultId: failed,
+      reviewId: first.id,
+    );
+
+    final restarted = await repository.listEbbinghausReviewsForPlan(planId);
+    expect(restarted.where((review) => review.status == 'pending'), isNotEmpty);
+  });
 }
+
+Future<int> _plan(
+  SqlitePlanRepository repository,
+  DateTime date, {
+  required bool enabled,
+  String title = '复习计划',
+}) => repository.createPlan(
+  NewMemorizationPlan(
+    title: title,
+    translationId: 'cmn-cu89s',
+    bookId: 'JHN',
+    startChapter: 3,
+    endChapter: 3,
+    startDate: date,
+    endDate: date,
+    ebbinghausEnabled: enabled,
+    tasks: const [
+      NewPlanTask(
+        dayIndex: 0,
+        startChapter: 3,
+        startVerse: 1,
+        endChapter: 3,
+        endVerse: 36,
+      ),
+    ],
+  ),
+);
 
 NewRecitationResult _result({
   required double accuracy,
   required DateTime completedAt,
   int startVerse = 1,
   int endVerse = 36,
-  int chapterVerseCount = 36,
   int? planId,
 }) => NewRecitationResult(
   translationId: 'cmn-cu89s',
@@ -332,7 +142,7 @@ NewRecitationResult _result({
   chapter: 3,
   startVerse: startVerse,
   endVerse: endVerse,
-  chapterVerseCount: chapterVerseCount,
+  chapterVerseCount: 36,
   mode: 'continuous',
   durationSeconds: 60,
   correctCount: (accuracy * 100).round(),

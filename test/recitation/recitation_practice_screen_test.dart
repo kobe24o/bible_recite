@@ -160,10 +160,27 @@ void main() {
     final recognizer = FakeRecognizer();
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
-    await repository.updateEbbinghausSettings(
-      enabled: true,
-      passThreshold: 0.8,
-      now: DateTime.now().subtract(const Duration(minutes: 1)),
+    final today = DateTime.now();
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '约翰福音 3 章',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: today,
+        endDate: today,
+        ebbinghausEnabled: true,
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      ),
     );
     await tester.pumpWidget(
       ProviderScope(
@@ -186,6 +203,7 @@ void main() {
               mode: RecitationMode.continuous,
               units: [_unit(16, '神爱世人')],
               reviewId: null,
+              planId: planId,
             ),
             recognizer: recognizer,
           ),
