@@ -52,6 +52,14 @@ final class RecitationRequest {
   final QuizScope? quizScope;
 }
 
+final class _QuizPreparation {
+  const _QuizPreparation({this.request, this.error})
+    : assert(request != null || error != null);
+
+  final QuizPracticeRequest? request;
+  final String? error;
+}
+
 class RecitationPracticeScreen extends ConsumerStatefulWidget {
   const RecitationPracticeScreen({
     required this.request,
@@ -87,7 +95,7 @@ class _RecitationPracticeScreenState
   RecitationAlignment? _finishedAlignment;
   int _currentVerse = 0;
   DateTime? _startedAt;
-  Future<QuizPracticeRequest?>? _preparedQuiz;
+  Future<_QuizPreparation>? _preparedQuiz;
 
   List<VerseUnit> get _presentUnits => widget.request.units
       .where((unit) => unit.status == SourceTextStatus.present)
@@ -291,27 +299,37 @@ class _RecitationPracticeScreenState
     }
   }
 
-  Future<QuizPracticeRequest?> _prepareQuiz(QuizScope scope) async {
+  Future<_QuizPreparation> _prepareQuiz(QuizScope scope) async {
     try {
       final service = await ref.read(quizGenerationServiceProvider.future);
       final outcome = await service.prepare(scope);
-      if (!outcome.success) return null;
+      if (!outcome.success) {
+        return _QuizPreparation(error: outcome.error);
+      }
       final questions = await service.repository.listPendingQuizQuestions(
         scope,
       );
-      return questions.isEmpty
-          ? null
-          : QuizPracticeRequest(scope: scope, questions: questions);
-    } catch (_) {
-      return null;
+      if (questions.isEmpty) {
+        return const _QuizPreparation(error: '没有可开始的答题题目');
+      }
+      return _QuizPreparation(
+        request: QuizPracticeRequest(scope: scope, questions: questions),
+      );
+    } catch (error) {
+      return _QuizPreparation(error: '答题准备失败：$error');
     }
   }
 
   Future<void> _openPreparedQuiz() async {
     final preparation = _preparedQuiz;
     if (preparation == null) return;
-    final request = await preparation;
-    if (!mounted || request == null) return;
+    final prepared = await preparation;
+    if (!mounted) return;
+    final request = prepared.request;
+    if (request == null) {
+      setState(() => _error = prepared.error ?? '答题暂未就绪');
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => QuizPracticeScreen(request: request),

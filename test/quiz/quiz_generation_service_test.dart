@@ -171,19 +171,24 @@ void main() {
     },
   );
 
-  test('fails gracefully when the model key is missing', () async {
+  test('reports incomplete model configuration before generation', () async {
+    const incomplete = QuizModelSettings(
+      baseUrl: 'https://example.test',
+      model: 'GLM-4.7-Flash',
+      apiKey: '',
+    );
+    expect(incomplete.isConfigured, isFalse);
+    expect(incomplete.missingConfigurationMessage, contains('API Key'));
+
     final service = QuizGenerationService(
       repository: repository,
       scripture: scripture(),
       client: QuizModelClient(),
-      settingsLoader: () async => const QuizModelSettings(
-        baseUrl: 'https://example.test',
-        model: 'GLM-4.7-Flash',
-        apiKey: '',
-      ),
+      settingsLoader: () async => incomplete,
     );
     final outcome = await service.prepare(scope());
     expect(outcome.success, isFalse);
+    expect(outcome.error, contains('缺少答题模型配置'));
     expect(outcome.error, contains('API Key'));
   });
 }

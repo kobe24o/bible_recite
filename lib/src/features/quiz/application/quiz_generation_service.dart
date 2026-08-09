@@ -38,8 +38,8 @@ final class QuizGenerationService {
     try {
       final settings = await _loadSettings();
       if (!settings.isConfigured) {
-        return const QuizGenerationOutcome(
-          error: '尚未配置答题模型，请在“我的”页填写服务地址和密钥',
+        return QuizGenerationOutcome(
+          error: settings.missingConfigurationMessage,
         );
       }
       final passage = await scripture.getPassage(
@@ -91,9 +91,7 @@ final class QuizGenerationService {
         );
       }
       if (questions.isEmpty) {
-        return const QuizGenerationOutcome(
-          error: '模型没有返回有效的答题题目，请稍后重试',
-        );
+        return const QuizGenerationOutcome(error: '模型没有返回有效的答题题目，请稍后重试');
       }
       await repository.saveQuizQuestions(questions);
       return QuizGenerationOutcome(generated: questions.length);

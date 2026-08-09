@@ -9,11 +9,19 @@ import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
+import 'package:bible_recite/src/features/quiz/application/quiz_generation_service.dart';
+import 'package:bible_recite/src/features/quiz/application/quiz_providers.dart';
+import 'package:bible_recite/src/features/quiz/data/quiz_model_client.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_model_settings.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlite3/sqlite3.dart';
+
+import '../scripture/scripture_browser_screen_test.dart'
+    show FakeRepositoryForPassage;
 
 void main() {
   testWidgets('verse mode aligns live then advances one verse at a time', (
@@ -323,6 +331,75 @@ void main() {
       2,
     );
   });
+
+  testWidgets(
+    'shows quiz preparation error after a recitation with a quiz scope',
+    (tester) async {
+      final recognizer = FakeRecognizer();
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            quizGenerationServiceProvider.overrideWith(
+              (ref) async => QuizGenerationService(
+                repository: repository,
+                scripture: FakeRepositoryForPassage(),
+                client: QuizModelClient(),
+                settingsLoader: () async => const QuizModelSettings(
+                  baseUrl: 'https://example.test/v1',
+                  model: 'test-model',
+                  apiKey: '',
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '神爱世人')],
+                quizScope: const QuizScope(
+                  translationId: 'cmn-cu89s',
+                  bookId: 'JHN',
+                  startChapter: 3,
+                  startVerse: 16,
+                  endChapter: 3,
+                  endVerse: 16,
+                ),
+              ),
+              recognizer: recognizer,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      recognizer.emit(const RecognitionFinal('神爱世人'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      if (find.text('获得新成就').evaluate().isNotEmpty) {
+        await tester.tap(find.text('太棒了'));
+        await tester.pumpAndSettle();
+      }
+
+      expect(await repository.listRecitationResults(), hasLength(1));
+      expect(find.textContaining('缺少答题模型配置：API Key'), findsOneWidget);
+    },
+  );
 }
 
 RecitationRequest _request(RecitationMode mode) => RecitationRequest(

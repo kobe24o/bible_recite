@@ -24,7 +24,16 @@ final class QuizModelSettings {
   final String model;
   final String apiKey;
 
-  bool get isConfigured => baseUrl.isNotEmpty && model.isNotEmpty;
+  List<String> get missingConfigurationFields => [
+    if (baseUrl.trim().isEmpty) '服务地址',
+    if (model.trim().isEmpty) '模型 ID',
+    if (apiKey.trim().isEmpty) 'API Key',
+  ];
+
+  bool get isConfigured => missingConfigurationFields.isEmpty;
+
+  String get missingConfigurationMessage =>
+      '缺少答题模型配置：${missingConfigurationFields.join('、')}';
 
   QuizModelSettings copyWith({
     String? baseUrl,
