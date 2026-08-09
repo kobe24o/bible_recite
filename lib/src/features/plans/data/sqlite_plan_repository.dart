@@ -36,6 +36,7 @@ final class SqlitePlanRepository {
         external_id TEXT,
         revision INTEGER NOT NULL DEFAULT 0,
         content_locked INTEGER NOT NULL DEFAULT 0 CHECK(content_locked IN (0, 1)),
+        ebbinghaus_enabled INTEGER NOT NULL DEFAULT 0 CHECK(ebbinghaus_enabled IN (0, 1)),
         status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
         created_at TEXT NOT NULL
       )
@@ -206,6 +207,7 @@ final class SqlitePlanRepository {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source_result_id INTEGER NOT NULL UNIQUE
           REFERENCES recitation_result(id) ON DELETE CASCADE,
+        source_plan_id INTEGER REFERENCES memorization_plan(id) ON DELETE SET NULL,
         translation_id TEXT NOT NULL,
         book_id TEXT NOT NULL,
         chapter INTEGER NOT NULL,
@@ -272,6 +274,13 @@ final class SqlitePlanRepository {
         "ALTER TABLE memorization_plan ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
       );
     }
+    if (!columns.contains('ebbinghaus_enabled')) {
+      _database.execute(
+        'ALTER TABLE memorization_plan ADD COLUMN ebbinghaus_enabled INTEGER NOT NULL DEFAULT 0',
+      );
+      _database.execute('''UPDATE memorization_plan SET ebbinghaus_enabled =
+        COALESCE((SELECT enabled FROM ebbinghaus_settings WHERE id = 1), 0)''');
+    }
     final taskColumns = _database
         .select('PRAGMA table_info(plan_task)')
         .map((row) => row['name'] as String)
@@ -331,6 +340,19 @@ final class SqlitePlanRepository {
           'ALTER TABLE ebbinghaus_cycle ADD COLUMN $column INTEGER NOT NULL DEFAULT 1',
         );
       }
+    }
+    if (!cycleColumns.contains('source_plan_id')) {
+      _database.execute(
+        'ALTER TABLE ebbinghaus_cycle ADD COLUMN source_plan_id INTEGER',
+      );
+      _database.execute('''UPDATE ebbinghaus_cycle SET source_plan_id =
+        (SELECT plan_id FROM recitation_result WHERE id = source_result_id)''');
+      _database.execute(
+        "UPDATE ebbinghaus_cycle SET status = 'paused' WHERE source_plan_id IS NULL",
+      );
+      _database.execute('''UPDATE ebbinghaus_review SET status = 'cancelled'
+        WHERE status = 'pending' AND cycle_id IN
+          (SELECT id FROM ebbinghaus_cycle WHERE source_plan_id IS NULL)''');
     }
     _database.execute(
       '''UPDATE ebbinghaus_cycle SET
@@ -417,8 +439,8 @@ final class SqlitePlanRepository {
         '''INSERT INTO memorization_plan
         (title, translation_id, book_id, start_chapter, end_chapter, days,
          start_date, end_date, source_kind, source_url, external_id, revision,
-         content_locked, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+         content_locked, ebbinghaus_enabled, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         [
           plan.title,
           plan.translationId,
@@ -433,6 +455,7 @@ final class SqlitePlanRepository {
           plan.externalId,
           plan.revision,
           plan.contentLocked ? 1 : 0,
+          plan.ebbinghausEnabled ? 1 : 0,
           DateTime.now().toUtc().toIso8601String(),
         ],
       );
@@ -1043,7 +1066,7 @@ final class SqlitePlanRepository {
         '''UPDATE memorization_plan SET title = ?, translation_id = ?,
         book_id = ?, start_chapter = ?, end_chapter = ?, days = ?,
         start_date = ?, end_date = ?, source_kind = ?, source_url = ?,
-        external_id = ?, revision = ?, content_locked = ? WHERE id = ?''',
+        external_id = ?, revision = ?, content_locked = ?, ebbinghaus_enabled = ? WHERE id = ?''',
         [
           plan.title,
           plan.translationId,
@@ -1058,6 +1081,7 @@ final class SqlitePlanRepository {
           plan.externalId,
           plan.revision,
           plan.contentLocked ? 1 : 0,
+          plan.ebbinghausEnabled ? 1 : 0,
           planId,
         ],
       );
@@ -1103,14 +1127,7 @@ final class SqlitePlanRepository {
     _database.execute(
       '''
       UPDATE ebbinghaus_cycle SET status = 'paused'
-      WHERE status = 'active' AND EXISTS (
-        SELECT 1 FROM plan_task t WHERE t.plan_id = ?
-          AND t.book_id = ebbinghaus_cycle.book_id
-          AND t.start_chapter = ebbinghaus_cycle.start_chapter
-          AND t.start_verse = ebbinghaus_cycle.start_verse
-          AND t.end_chapter = ebbinghaus_cycle.end_chapter
-          AND t.end_verse = ebbinghaus_cycle.end_verse
-      )
+      WHERE status = 'active' AND source_plan_id = ?
     ''',
       [planId],
     );
@@ -1121,19 +1138,10 @@ final class SqlitePlanRepository {
       "UPDATE memorization_plan SET status = 'active' WHERE id = ?",
       [planId],
     );
-    final settings = await getEbbinghausSettings();
-    if (!settings.enabled) return;
     _database.execute(
       '''
       UPDATE ebbinghaus_cycle SET status = 'active'
-      WHERE status = 'paused' AND EXISTS (
-        SELECT 1 FROM plan_task t WHERE t.plan_id = ?
-          AND t.book_id = ebbinghaus_cycle.book_id
-          AND t.start_chapter = ebbinghaus_cycle.start_chapter
-          AND t.start_verse = ebbinghaus_cycle.start_verse
-          AND t.end_chapter = ebbinghaus_cycle.end_chapter
-          AND t.end_verse = ebbinghaus_cycle.end_verse
-      )
+      WHERE status = 'paused' AND source_plan_id = ?
     ''',
       [planId],
     );
@@ -1287,15 +1295,25 @@ final class SqlitePlanRepository {
     int? reviewId,
   }) async {
     final settings = await getEbbinghausSettings();
-    if (!settings.enabled || settings.enabledAt == null) return;
     final resultRows = _database.select(
       'SELECT * FROM recitation_result WHERE id = ?',
       [resultId],
     );
     if (resultRows.isEmpty) return;
     final result = resultRows.single;
+    final sourcePlanId = result['plan_id'] as int?;
+    if (reviewId == null && sourcePlanId == null) return;
+    if (reviewId == null) {
+      final enabled = _database.select(
+        'SELECT ebbinghaus_enabled FROM memorization_plan WHERE id = ?',
+        [sourcePlanId],
+      );
+      if (enabled.isEmpty ||
+          (enabled.single['ebbinghaus_enabled'] as int) != 1) {
+        return;
+      }
+    }
     final completedAt = DateTime.parse(result['completed_at'] as String);
-    if (completedAt.isBefore(settings.enabledAt!.toUtc())) return;
     final passed = const EbbinghausScheduler().passes(
       accuracy: (result['accuracy'] as num).toDouble(),
       threshold: settings.passThreshold,
@@ -1380,11 +1398,12 @@ final class SqlitePlanRepository {
         final active = _database.select(
           '''
           SELECT id FROM ebbinghaus_cycle
-          WHERE translation_id = ? AND book_id = ? AND start_chapter = ?
+          WHERE source_plan_id = ? AND translation_id = ? AND book_id = ? AND start_chapter = ?
             AND start_verse = ? AND end_chapter = ? AND end_verse = ?
             AND status = 'active'
         ''',
           [
+            sourcePlanId,
             result['translation_id'],
             result['book_id'],
             result['chapter'],
@@ -1409,12 +1428,13 @@ final class SqlitePlanRepository {
     _database.execute(
       '''
       INSERT INTO ebbinghaus_cycle
-      (source_result_id, translation_id, book_id, chapter, start_chapter,
+      (source_result_id, source_plan_id, translation_id, book_id, chapter, start_chapter,
        start_verse, end_chapter, end_verse, base_date, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
     ''',
       [
         resultId,
+        result['plan_id'],
         result['translation_id'],
         result['book_id'],
         result['chapter'],
@@ -1445,7 +1465,6 @@ final class SqlitePlanRepository {
     bool includeCompleted = false,
   }) async {
     final settings = await getEbbinghausSettings();
-    if (!settings.enabled) return const [];
     return _database
         .select(
           '''
@@ -1894,6 +1913,7 @@ final class SqlitePlanRepository {
     externalId: row['external_id'] as String?,
     revision: row['revision'] as int,
     contentLocked: (row['content_locked'] as int) == 1,
+    ebbinghausEnabled: (row['ebbinghaus_enabled'] as int? ?? 0) == 1,
     paused: (row['status'] as String? ?? 'active') == 'paused',
     recitationSessions: (row['recitation_sessions'] as int?) ?? 0,
     averageAccuracy: (row['average_accuracy'] as num?)?.toDouble() ?? 0,

@@ -12,6 +12,7 @@ final class PlanEditorDraft {
     required this.startDate,
     required this.endDate,
     this.passages = const [],
+    this.ebbinghausEnabled = false,
   });
 
   final String title;
@@ -22,6 +23,7 @@ final class PlanEditorDraft {
   final DateTime startDate;
   final DateTime endDate;
   final List<PlanPassageSelection> passages;
+  final bool ebbinghausEnabled;
 
   int get days => endDate.difference(startDate).inDays + 1;
 }
@@ -78,6 +80,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late String _translationId;
   late DateTime _startDate;
   late DateTime _endDate;
+  late bool _ebbinghausEnabled;
   String? _error;
 
   @override
@@ -88,6 +91,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     _translationId = widget.initial.translationId;
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
+    _ebbinghausEnabled = widget.initial.ebbinghausEnabled;
   }
 
   @override
@@ -184,6 +188,18 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
               onTap: () => _pickDate(start: false),
             ),
             Text(chinese ? '共 $_days 天' : '$_days days'),
+            SwitchListTile(
+              key: const Key('plan-ebbinghaus-enabled'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(chinese ? '开启艾宾浩斯复习' : 'Enable Ebbinghaus reviews'),
+              subtitle: Text(
+                chinese
+                    ? '仅本计划背诵通过后安排复习'
+                    : 'Only passed recitations in this plan are scheduled',
+              ),
+              value: _ebbinghausEnabled,
+              onChanged: (value) => setState(() => _ebbinghausEnabled = value),
+            ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -265,6 +281,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           startDate: _startDate,
           endDate: _endDate,
           passages: _passages,
+          ebbinghausEnabled: _ebbinghausEnabled,
         ),
       ),
     );

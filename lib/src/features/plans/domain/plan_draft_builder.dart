@@ -36,6 +36,7 @@ PlanEditorDraft normalizeDraftForPendingWork(
     startDate: draft.startDate,
     endDate: end,
     passages: draft.passages,
+    ebbinghausEnabled: draft.ebbinghausEnabled,
   );
 }
 
@@ -201,6 +202,7 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
     startDate: draft.startDate,
     endDate: draft.endDate,
     tasks: tasks,
+    ebbinghausEnabled: draft.ebbinghausEnabled,
   );
 }
 

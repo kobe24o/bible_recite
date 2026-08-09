@@ -778,6 +778,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 endVerse: task.endVerse,
               ),
           ],
+          ebbinghausEnabled: plan.ebbinghausEnabled,
         ),
       ),
     );

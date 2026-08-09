@@ -33,6 +33,7 @@ final class NewMemorizationPlan {
     this.externalId,
     this.revision = 0,
     this.contentLocked = false,
+    this.ebbinghausEnabled = false,
   });
 
   final String title;
@@ -48,6 +49,7 @@ final class NewMemorizationPlan {
   final String? externalId;
   final int revision;
   final bool contentLocked;
+  final bool ebbinghausEnabled;
 
   int get days => endDate.difference(startDate).inDays + 1;
 
@@ -65,6 +67,7 @@ final class NewMemorizationPlan {
     String? externalId,
     int? revision,
     bool? contentLocked,
+    bool? ebbinghausEnabled,
   }) => NewMemorizationPlan(
     title: title ?? this.title,
     translationId: translationId ?? this.translationId,
@@ -79,6 +82,7 @@ final class NewMemorizationPlan {
     externalId: externalId ?? this.externalId,
     revision: revision ?? this.revision,
     contentLocked: contentLocked ?? this.contentLocked,
+    ebbinghausEnabled: ebbinghausEnabled ?? this.ebbinghausEnabled,
   );
 }
 
@@ -100,6 +104,7 @@ final class MemorizationPlan {
     required this.externalId,
     required this.revision,
     required this.contentLocked,
+    this.ebbinghausEnabled = false,
     this.paused = false,
     this.recitationSessions = 0,
     this.averageAccuracy = 0,
@@ -122,6 +127,7 @@ final class MemorizationPlan {
   final String? externalId;
   final int revision;
   final bool contentLocked;
+  final bool ebbinghausEnabled;
   final bool paused;
   final int recitationSessions;
   final double averageAccuracy;

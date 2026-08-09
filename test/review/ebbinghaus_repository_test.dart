@@ -16,6 +16,41 @@ void main() {
     expect(settings.enabledAt, isNull);
   });
 
+  test('schedules only a passed result from an enabled memorization plan', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2026, 8, 9, 9);
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '独立复习',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: base,
+        endDate: base,
+        ebbinghausEnabled: true,
+        tasks: const [
+          NewPlanTask(dayIndex: 0, startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16),
+        ],
+      ),
+    );
+    final standalone = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base),
+    );
+    final planned = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base, planId: planId, startVerse: 16, endVerse: 16),
+    );
+
+    await repository.processEbbinghausResult(resultId: standalone);
+    await repository.processEbbinghausResult(resultId: planned);
+
+    final reviews = await repository.dueEbbinghausReviews(base.add(const Duration(days: 1)));
+    expect(reviews, hasLength(1));
+    expect(reviews.single.startVerse, 16);
+    expect(reviews.single.endVerse, 16);
+  });
+
   test('keeps only the latest overdue review for a passage', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
@@ -290,6 +325,7 @@ NewRecitationResult _result({
   int startVerse = 1,
   int endVerse = 36,
   int chapterVerseCount = 36,
+  int? planId,
 }) => NewRecitationResult(
   translationId: 'cmn-cu89s',
   bookId: 'JHN',
@@ -304,5 +340,6 @@ NewRecitationResult _result({
   omittedCount: 0,
   reorderedCount: 0,
   accuracy: accuracy,
+  planId: planId,
   completedAt: completedAt,
 );
