@@ -90,12 +90,14 @@ class _RecitationPracticeScreenState
   bool _recording = false;
   bool _preparing = false;
   bool _revealed = true;
+  bool _showScriptureByDefault = true;
   bool _finished = false;
   bool _celebrating = false;
   RecitationAlignment? _finishedAlignment;
   int _currentVerse = 0;
   DateTime? _startedAt;
   Future<_QuizPreparation>? _preparedQuiz;
+  late final Future<void> _scriptureVisibilityLoading;
 
   List<VerseUnit> get _presentUnits => widget.request.units
       .where((unit) => unit.status == SourceTextStatus.present)
@@ -114,6 +116,17 @@ class _RecitationPracticeScreenState
       _finishedAlignment ??
       _exactComparator.compare(_target, _transcript, finished: _finished);
 
+  List<RecitationToken> get _displayedAlignmentTokens {
+    if (_finished) return _alignment.tokens;
+    return _alignment.tokens
+        .where(
+          (token) =>
+              token.kind == RecitationTokenKind.correct ||
+              token.kind == RecitationTokenKind.phoneticCorrect,
+        )
+        .toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,8 +139,9 @@ class _RecitationPracticeScreenState
           .read(mandarinPhoneticComparatorProvider.future)
           .then<void>((_) {}, onError: (_) {}),
     );
+    _scriptureVisibilityLoading = _loadScriptureVisibility();
     final quizScope = widget.request.quizScope;
-    if (quizScope != null) {
+    if (quizScope != null && widget.request.next == null) {
       _preparedQuiz = _prepareQuiz(quizScope);
     }
     _subscription = _recognizer.events.listen((event) {
@@ -148,6 +162,20 @@ class _RecitationPracticeScreenState
     });
   }
 
+  Future<void> _loadScriptureVisibility() async {
+    var showScripture = true;
+    try {
+      final repository = await ref.read(planRepositoryProvider.future);
+      showScripture =
+          await repository.getSetting('show_recitation_scripture', 'true') ==
+          'true';
+    } catch (_) {
+      // Keep the default available if local settings cannot be read.
+    }
+    if (!mounted) return;
+    setState(() => _showScriptureByDefault = showScripture);
+  }
+
   Future<void> _toggleRecording() async {
     if (_recording) {
       await _recognizer.stop();
@@ -162,15 +190,18 @@ class _RecitationPracticeScreenState
       await _saveResult(alignment);
       return;
     }
-    setState(() {
-      _preparing = true;
-      _error = null;
-      _transcript = '';
-      _finished = false;
-      _finishedAlignment = null;
-      _startedAt = DateTime.now();
-    });
+    setState(() => _preparing = true);
     try {
+      await _scriptureVisibilityLoading;
+      if (!mounted) return;
+      setState(() {
+        _error = null;
+        _transcript = '';
+        _finished = false;
+        _finishedAlignment = null;
+        _startedAt = DateTime.now();
+        _revealed = _showScriptureByDefault;
+      });
       await _recognizer.start(
         languageTag: widget.request.translationId.startsWith('eng')
             ? 'en'
@@ -321,8 +352,10 @@ class _RecitationPracticeScreenState
   }
 
   Future<void> _openPreparedQuiz() async {
-    final preparation = _preparedQuiz;
-    if (preparation == null) return;
+    if (widget.request.next != null) return;
+    final scope = widget.request.quizScope;
+    if (scope == null) return;
+    final preparation = _preparedQuiz ??= _prepareQuiz(scope);
     final prepared = await preparation;
     if (!mounted) return;
     final request = prepared.request;
@@ -571,7 +604,7 @@ class _RecitationPracticeScreenState
                           text: TextSpan(
                             style: Theme.of(context).textTheme.bodyLarge,
                             children: [
-                              for (final token in alignment.tokens)
+                              for (final token in _displayedAlignmentTokens)
                                 TextSpan(
                                   text: token.text,
                                   style: TextStyle(
@@ -609,14 +642,16 @@ class _RecitationPracticeScreenState
                           color: Colors.teal,
                           label: chinese ? '同音修正' : 'Phonetic correction',
                         ),
-                      _Legend(
-                        color: Colors.red,
-                        label: chinese ? '错误／漏字' : 'Wrong / missing',
-                      ),
-                      _Legend(
-                        color: Colors.orange,
-                        label: chinese ? '顺序错误' : 'Out of order',
-                      ),
+                      if (_finished) ...[
+                        _Legend(
+                          color: Colors.red,
+                          label: chinese ? '错误／漏字' : 'Wrong / missing',
+                        ),
+                        _Legend(
+                          color: Colors.orange,
+                          label: chinese ? '顺序错误' : 'Out of order',
+                        ),
+                      ],
                     ],
                   ),
                 ],

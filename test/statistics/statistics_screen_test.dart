@@ -24,6 +24,24 @@ void main() {
     expect(find.text('通过阈值 80%'), findsOneWidget);
     expect(find.text('复习间隔：1、2、4、7、15、30 天'), findsOneWidget);
 
+    await tester.ensureVisible(
+      find.byKey(const Key('show-recitation-scripture-toggle')),
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const Key('show-recitation-scripture-toggle')),
+          )
+          .value,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const Key('show-recitation-scripture-toggle')));
+    await tester.pumpAndSettle();
+    expect(
+      await repository.getSetting('show_recitation_scripture', 'true'),
+      'false',
+    );
+
     expect(find.byKey(const Key('ebbinghaus-toggle')), findsNothing);
     final slider = tester.widget<Slider>(
       find.byKey(const Key('ebbinghaus-threshold')),

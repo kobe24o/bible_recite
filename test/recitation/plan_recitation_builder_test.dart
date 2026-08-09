@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'attaches the exact full-plan quiz scope to the selected request',
+    'carries the exact full-plan quiz scope through to the final request',
     () async {
       final first = PlanTask(
         id: 1,
@@ -106,6 +106,8 @@ void main() {
       expect(request.quizScope!.startVerse, 16);
       expect(request.quizScope!.endChapter, 4);
       expect(request.quizScope!.endVerse, 3);
+      expect(request.next, isNotNull);
+      expect(request.next!.quizScope, request.quizScope);
     },
   );
 }

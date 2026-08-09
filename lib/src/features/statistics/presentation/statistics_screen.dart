@@ -251,6 +251,31 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 12),
                   Card(
                     child: SwitchListTile(
+                      key: const Key('show-recitation-scripture-toggle'),
+                      secondary: const Icon(Icons.visibility_outlined),
+                      title: Text(
+                        chinese
+                            ? '开始背诵后显示原文'
+                            : 'Show scripture after recording starts',
+                      ),
+                      subtitle: Text(
+                        chinese
+                            ? '进入页面时始终显示；开始录音后按此设置，仍可随时切换'
+                            : 'Always shown on entry; applied when recording starts and can still be toggled',
+                      ),
+                      value: data.showRecitationScripture,
+                      onChanged: (value) async {
+                        await repository.setSetting(
+                          'show_recitation_scripture',
+                          value ? 'true' : 'false',
+                        );
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: SwitchListTile(
                       key: const Key('ignore-final-nasal-toggle'),
                       secondary: const Icon(Icons.record_voice_over_outlined),
                       title: Text(chinese ? '忽略后鼻音' : 'Ignore final nasal'),
@@ -414,6 +439,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       settings: await repository.getEbbinghausSettings(),
       ignoreFinalNasal:
           await repository.getSetting('ignore_final_nasal', 'true') == 'true',
+      showRecitationScripture:
+          await repository.getSetting('show_recitation_scripture', 'true') ==
+          'true',
       firstOpenedAt: await repository.getFirstOpenedAt(),
     );
   }
@@ -1078,6 +1106,7 @@ final class _StatisticsData {
     required this.achievements,
     required this.settings,
     required this.ignoreFinalNasal,
+    required this.showRecitationScripture,
     required this.firstOpenedAt,
   });
   final RecitationSummary summary;
@@ -1087,5 +1116,6 @@ final class _StatisticsData {
   final List<AchievementProgress> achievements;
   final EbbinghausSettings settings;
   final bool ignoreFinalNasal;
+  final bool showRecitationScripture;
   final DateTime firstOpenedAt;
 }

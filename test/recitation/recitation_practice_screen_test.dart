@@ -102,57 +102,104 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
     expect(find.text('连续背诵 · 2 节'), findsOneWidget);
     expect(find.byKey(const Key('next-verse-button')), findsNothing);
     expect(find.text('约翰福音 3:16'), findsWidgets);
     expect(find.text('约翰福音 3:17'), findsWidgets);
   });
 
-  testWidgets('live result restores punctuation from the selected scripture', (
-    tester,
-  ) async {
-    final recognizer = FakeRecognizer();
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          planRepositoryProvider.overrideWith((ref) async => repository),
-        ],
-        child: MaterialApp(
-          locale: const Locale('zh'),
-          supportedLocales: const [Locale('zh')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
+  testWidgets(
+    'live result does not reveal scripture that has not been spoken',
+    (tester) async {
+      final recognizer = FakeRecognizer();
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
           ],
-          home: RecitationPracticeScreen(
-            request: RecitationRequest(
-              translationId: 'cmn-cu89s',
-              bookId: 'JHN',
-              chapter: 3,
-              mode: RecitationMode.verse,
-              units: [_unit(16, '「　神爱世人，甚至将他的独生子赐给他们。」')],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '「　神爱世人，甚至将他的独生子赐给他们。」')],
+              ),
+              recognizer: recognizer,
             ),
-            recognizer: recognizer,
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('record-button')));
-    await tester.pumpAndSettle();
-    recognizer.emit(const RecognitionPartial('神爱世人甚至将他的独生子赐给他们'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      recognizer.emit(const RecognitionPartial('神爱世人'));
+      await tester.pumpAndSettle();
 
-    final output = tester.widget<RichText>(
-      find.byKey(const Key('alignment-output')),
-    );
-    expect(output.text.toPlainText(), '「　神爱世人，甚至将他的独生子赐给他们。」');
-  });
+      final output = tester.widget<RichText>(
+        find.byKey(const Key('alignment-output')),
+      );
+      expect(output.text.toPlainText(), '神爱世人');
+      expect(output.text.toPlainText(), isNot(contains('甚至将他的独生子')));
+    },
+  );
+
+  testWidgets(
+    'uses the configured scripture visibility when recording starts',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await repository.setSetting('show_recitation_scripture', 'false');
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '神爱世人')],
+              ),
+              recognizer: FakeRecognizer(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('神爱世人'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('经文已隐藏，点击提示可查看。'), findsOneWidget);
+      await tester.tap(find.text('显示／隐藏经文'));
+      await tester.pumpAndSettle();
+      expect(find.text('神爱世人'), findsOneWidget);
+    },
+  );
 
   testWidgets('a passed recitation schedules Ebbinghaus chapter reviews', (
     tester,
@@ -416,6 +463,84 @@ void main() {
 
       expect(await repository.listRecitationResults(), hasLength(1));
       expect(find.textContaining('缺少答题模型配置：API Key'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'does not show quiz preparation errors until the final planned task',
+    (tester) async {
+      final recognizer = FakeRecognizer();
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      const scope = QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 17,
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            quizGenerationServiceProvider.overrideWith(
+              (ref) async => QuizGenerationService(
+                repository: repository,
+                scripture: FakeRepositoryForPassage(),
+                client: QuizModelClient(),
+                settingsLoader: () async => const QuizModelSettings(
+                  baseUrl: 'https://example.test/v1',
+                  model: 'test-model',
+                  apiKey: '',
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '神爱世人')],
+                quizScope: scope,
+                next: RecitationRequest(
+                  translationId: 'cmn-cu89s',
+                  bookId: 'JHN',
+                  chapter: 3,
+                  mode: RecitationMode.verse,
+                  units: [_unit(17, '不是定世人的罪')],
+                  quizScope: scope,
+                ),
+              ),
+              recognizer: recognizer,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+      recognizer.emit(const RecognitionFinal('神爱世人'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+
+      if (find.text('获得新成就').evaluate().isNotEmpty) {
+        await tester.tap(find.text('太棒了'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.textContaining('缺少答题模型配置：API Key'), findsNothing);
+      expect(find.byKey(const Key('next-verse-button')), findsOneWidget);
     },
   );
 }

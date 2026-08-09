@@ -50,7 +50,9 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
       planTaskId: task.id,
       planId: plan.id,
       next: next,
-      quizScope: task.id == selected.id ? quizScope : null,
+      // Every screen in the chain needs the scope so the final task can enter
+      // the quiz. Only that final screen starts preparation and reports errors.
+      quizScope: quizScope,
     );
   }
   return next;
