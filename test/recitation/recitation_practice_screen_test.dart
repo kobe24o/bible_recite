@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/sqlite3.dart' hide Row;
 
 import '../scripture/scripture_browser_screen_test.dart'
     show FakeRepositoryForPassage;
@@ -605,6 +605,13 @@ void main() {
         find.byKey(const Key('today-quiz-entry-button')),
       );
       expect(button.onPressed, isNull);
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('today-quiz-entry-button')),
+          matching: find.byType(Row),
+        ),
+        findsNothing,
+      );
       expect(find.textContaining('答题失败：缺少答题模型配置'), findsOneWidget);
     },
   );

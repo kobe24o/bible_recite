@@ -493,45 +493,42 @@ class _RecitationPracticeScreenState
       appBar: AppBar(title: Text(chinese ? '离线背诵' : 'Offline recitation')),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_todayQuizPreparation case final preparation?) ...[
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('today-quiz-entry-button'),
-                  onPressed:
-                      preparation.phase == QuizPreparationPhase.ready &&
-                          preparation.questions.isNotEmpty
-                      ? _openTodayQuiz
-                      : null,
-                  icon: const Icon(Icons.quiz_outlined),
-                  label: Text(
-                    _todayQuizButtonLabel(preparation, chinese),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              OutlinedButton.icon(
+                key: const Key('today-quiz-entry-button'),
+                onPressed:
+                    preparation.phase == QuizPreparationPhase.ready &&
+                        preparation.questions.isNotEmpty
+                    ? _openTodayQuiz
+                    : null,
+                icon: const Icon(Icons.quiz_outlined),
+                label: Text(
+                  _todayQuizButtonLabel(preparation, chinese),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(height: 10),
             ],
-            Expanded(
-              flex: _todayQuizPreparation == null ? 1 : 2,
-              child: FilledButton.icon(
-                key: const Key('record-button'),
-                onPressed: _preparing ? null : _toggleRecording,
-                icon: _preparing
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
-                label: Text(
-                  _preparing
-                      ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
-                      : _recording
-                      ? (chinese ? '结束背诵' : 'Finish')
-                      : (chinese ? '开始录音' : 'Start recording'),
-                ),
+            FilledButton.icon(
+              key: const Key('record-button'),
+              onPressed: _preparing ? null : _toggleRecording,
+              icon: _preparing
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
+              label: Text(
+                _preparing
+                    ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
+                    : _recording
+                    ? (chinese ? '结束背诵' : 'Finish')
+                    : (chinese ? '开始录音' : 'Start recording'),
               ),
             ),
           ],

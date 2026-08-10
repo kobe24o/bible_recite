@@ -51,26 +51,23 @@ final class QuizPreparationController extends ChangeNotifier {
     _phase = QuizPreparationPhase.preparing;
     _error = null;
     _notify();
+    QuizGenerationService? service;
     try {
-      final service = await serviceLoader();
+      service = await serviceLoader();
       if (_disposed || generation != _generation) return;
       final outcome = await service.prepare(scope);
       if (_disposed || generation != _generation) return;
-      if (outcome.success) {
-        _questions = await service.repository.listPendingQuizQuestions(scope);
-        if (_questions.isEmpty) {
-          _error = '没有可开始的答题题目';
-          _phase = QuizPreparationPhase.failed;
-        } else {
-          _phase = QuizPreparationPhase.ready;
-        }
-      } else {
-        _questions = const [];
-        _error = outcome.error;
-        _phase = QuizPreparationPhase.failed;
-      }
+      if (await _useCachedQuestions(service, generation)) return;
+      if (_disposed || generation != _generation) return;
+      _questions = const [];
+      _error = outcome.success ? '没有可开始的答题题目' : outcome.error;
+      _phase = QuizPreparationPhase.failed;
     } catch (error) {
       if (!_disposed && generation == _generation) {
+        if (service != null && await _useCachedQuestions(service, generation)) {
+          return;
+        }
+        if (_disposed || generation != _generation) return;
         _questions = const [];
         _error = '生成答题题目失败：$error';
         _phase = QuizPreparationPhase.failed;
@@ -80,6 +77,26 @@ final class QuizPreparationController extends ChangeNotifier {
         _task = null;
         if (!_disposed) _notify();
       }
+    }
+  }
+
+  Future<bool> _useCachedQuestions(
+    QuizGenerationService service,
+    int generation,
+  ) async {
+    try {
+      final questions = await service.repository.listPendingQuizQuestions(
+        scope,
+      );
+      if (_disposed || generation != _generation || questions.isEmpty) {
+        return false;
+      }
+      _questions = questions;
+      _error = null;
+      _phase = QuizPreparationPhase.ready;
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
