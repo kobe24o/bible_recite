@@ -39,6 +39,7 @@ void main() {
     expect(result.single.length, 2);
     expect(result.single.translationId, 'cmn-cu89s');
     expect(result.single.verse, 16);
+    expect(result.single.meaning, '世上的人');
   });
 
   test('rejects wrong reference, index, length and shape', () {

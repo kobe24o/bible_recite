@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../scripture/domain/scripture_repository.dart';
 import '../data/quiz_bank_feed_client.dart';
+import 'quiz_bank_local_validator.dart';
 import '../domain/quiz_bank_exchange.dart';
 import '../domain/quiz_bank_index.dart';
 
@@ -34,12 +36,14 @@ final class QuizBankSyncResult {
   const QuizBankSyncResult({
     required this.imported,
     required this.duplicates,
+    required this.rejected,
     required this.downloadedShards,
     required this.upToDate,
   });
 
   final int imported;
   final int duplicates;
+  final int rejected;
   final int downloadedShards;
   final bool upToDate;
 }
@@ -60,6 +64,7 @@ final class QuizBankSyncStatus {
 /// changed, only shards with a different SHA-256 are fetched and imported.
 Future<QuizBankSyncResult> syncQuizBank({
   required SqlitePlanRepository repository,
+  required ScriptureRepository scripture,
   required QuizBankFeedClient client,
 }) async {
   final previousEtag = await repository.getSetting(_quizBankEtagKey, '');
@@ -72,6 +77,7 @@ Future<QuizBankSyncResult> syncQuizBank({
     return const QuizBankSyncResult(
       imported: 0,
       duplicates: 0,
+      rejected: 0,
       downloadedShards: 0,
       upToDate: true,
     );
@@ -80,6 +86,7 @@ Future<QuizBankSyncResult> syncQuizBank({
   final knownHashes = await _loadShardHashes(repository);
   var imported = 0;
   var duplicates = 0;
+  var rejected = 0;
   var downloaded = 0;
   final nextHashes = <String, String>{...knownHashes};
   for (final shard in index.shards) {
@@ -97,11 +104,13 @@ Future<QuizBankSyncResult> syncQuizBank({
     if (actual != shard.sha256) {
       throw QuizBankFeedException('题库分片 ${shard.path} 的 SHA-256 校验失败');
     }
-    final result = await repository.importQuizBankQuestions(
-      QuizBankExchange.decode(response.text),
-    );
+    final validated = await QuizBankLocalValidator(
+      scripture,
+    ).validate(QuizBankExchange.decode(response.text));
+    final result = await repository.importQuizBankQuestions(validated.accepted);
     imported += result.imported;
     duplicates += result.duplicates;
+    rejected += validated.rejected;
     downloaded++;
     nextHashes[shard.path] = shard.sha256;
   }
@@ -121,6 +130,7 @@ Future<QuizBankSyncResult> syncQuizBank({
   return QuizBankSyncResult(
     imported: imported,
     duplicates: duplicates,
+    rejected: rejected,
     downloadedShards: downloaded,
     upToDate: downloaded == 0,
   );

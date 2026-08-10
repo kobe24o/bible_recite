@@ -18,6 +18,7 @@ import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/domain/quiz_bank_exchange.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../quiz/application/quiz_bank_sync.dart';
+import '../../quiz/application/quiz_bank_local_validator.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
@@ -813,6 +814,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     try {
       final result = await syncQuizBank(
         repository: widget.repository,
+        scripture: await ref.read(scriptureRepositoryProvider.future),
         client: ref.read(quizBankFeedClientProvider),
       );
       if (!mounted) return;
@@ -823,7 +825,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           content: Text(
             result.upToDate
                 ? '题库已是最新'
-                : '题库同步完成：新增 ${result.imported} 道，重复 ${result.duplicates} 道',
+                : '题库同步完成：新增 ${result.imported} 道，重复 ${result.duplicates} 道，'
+                      '本机原文不匹配 ${result.rejected} 道',
           ),
         ),
       );
@@ -975,15 +978,19 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
       if (bytes.length > 10 * 1024 * 1024) {
         throw const FormatException('题库 JSON 文件不能超过 10 MB');
       }
+      final validation = await QuizBankLocalValidator(
+        await ref.read(scriptureRepositoryProvider.future),
+      ).validate(QuizBankExchange.decode(utf8.decode(bytes)));
       final result = await widget.repository.importQuizBankQuestions(
-        QuizBankExchange.decode(utf8.decode(bytes)),
+        validation.accepted,
       );
       if (!mounted) return;
       ref.read(profileRevisionProvider.notifier).refresh();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已导入 ${result.imported} 道题目，重复 ${result.duplicates} 道；新题均为未作答',
+            '已导入 ${result.imported} 道题目，重复 ${result.duplicates} 道；'
+            '本机原文不匹配 ${validation.rejected} 道，新题均为未作答',
           ),
         ),
       );

@@ -8,6 +8,9 @@ import 'package:bible_recite/src/features/quiz/presentation/quiz_practice_reques
 import 'package:bible_recite/src/features/quiz/presentation/quiz_practice_screen.dart';
 import 'package:bible_recite/src/features/recitation/domain/recognition_models.dart';
 import 'package:bible_recite/src/features/recitation/domain/speech_recognizer.dart';
+import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +25,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
+    await tester.pumpAndSettle();
 
     expect(find.text('请朗读被隐藏的词语'), findsOneWidget);
     expect(find.byKey(const Key('quiz-mic-inline')), findsOneWidget);
@@ -48,6 +52,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
+    await tester.pumpAndSettle();
 
     final hintButton = find.byKey(const Key('quiz-hint-button'));
     expect(find.text('提示'), findsOneWidget);
@@ -75,6 +80,7 @@ void main() {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
       await tester.pumpWidget(_app(repository, recognizer));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('quiz-mic-inline')));
       await tester.pumpAndSettle();
@@ -99,6 +105,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('quiz-progress')), findsOneWidget);
     expect(find.text('1 / 2'), findsOneWidget);
@@ -112,6 +119,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
+    await tester.pumpAndSettle();
 
     expect(find.text('约翰福音 3:16'), findsOneWidget);
     await tester.tap(find.byKey(const Key('quiz-next-button')));
@@ -129,6 +137,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('quiz-mic-inline')));
     await tester.pumpAndSettle();
@@ -146,6 +155,9 @@ Widget _app(SqlitePlanRepository repository, FakeQuizRecognizer recognizer) =>
     ProviderScope(
       overrides: [
         planRepositoryProvider.overrideWith((ref) async => repository),
+        scriptureRepositoryProvider.overrideWith(
+          (ref) async => _FakeScripture(),
+        ),
       ],
       child: MaterialApp(
         locale: const Locale('zh'),
@@ -182,10 +194,76 @@ PendingQuizQuestion _question(int verse) => PendingQuizQuestion(
   end: 4,
   word: '世人',
   partOfSpeech: '名词',
-  meaning: '世人：世上的人',
+  meaning: '世上的人',
   reference: verse == 16 ? '3:16' : '3:17',
-  verseText: '神爱世人',
 );
+
+final class _FakeScripture implements ScriptureRepository {
+  @override
+  Future<List<VerseUnit>> getChapter(
+    String translationId,
+    String book,
+    int chapter,
+  ) async => [
+    VerseUnit(
+      translationId: translationId,
+      start: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 16,
+      ),
+      end: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 16,
+      ),
+      text: '神爱世人',
+      status: SourceTextStatus.present,
+    ),
+    VerseUnit(
+      translationId: translationId,
+      start: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 17,
+      ),
+      end: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 17,
+      ),
+      text: '神爱世人',
+      status: SourceTextStatus.present,
+    ),
+  ];
+
+  @override
+  Future<List<TranslationInfo>> listTranslations() =>
+      throw UnimplementedError();
+  @override
+  Future<TranslationInfo> getTranslation(String id) =>
+      throw UnimplementedError();
+  @override
+  Future<List<BibleBook>> listBooks(String translationId, CanonId canonId) =>
+      throw UnimplementedError();
+  @override
+  Future<Passage> getPassage(String translationId, PassageRange range) =>
+      throw UnimplementedError();
+  @override
+  Future<SelectedPassage> getSelection(
+    String translationId,
+    PassageSelection selection,
+  ) => throw UnimplementedError();
+  @override
+  Future<ParallelPassage> resolveParallelPassage(
+    LocatedPassageRange sourceRange,
+    String targetTranslationId,
+  ) => throw UnimplementedError();
+}
 
 final class FakeQuizRecognizer implements OfflineSpeechRecognizer {
   final _events = StreamController<RecognitionEvent>.broadcast();

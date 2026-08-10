@@ -12,6 +12,7 @@ import '../features/plans/application/plan_providers.dart';
 import '../features/plans/application/preset_plan_sync.dart';
 import '../features/quiz/application/quiz_bank_sync.dart';
 import '../features/quiz/application/quiz_providers.dart';
+import '../features/scripture/application/scripture_providers.dart';
 import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
 
@@ -81,6 +82,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     try {
       final result = await syncQuizBank(
         repository: await ref.read(planRepositoryProvider.future),
+        scripture: await ref.read(scriptureRepositoryProvider.future),
         client: ref.read(quizBankFeedClientProvider),
       );
       if (result.imported > 0) {

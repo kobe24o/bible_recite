@@ -5,6 +5,8 @@ import 'package:bible_recite/src/features/quiz/application/quiz_bank_sync.dart';
 import 'package:bible_recite/src/features/quiz/data/quiz_bank_feed_client.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_bank_exchange.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -16,7 +18,7 @@ void main() {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
       final bank = QuizBankExchange.encode(const [
-        ValidatedQuizQuestion(
+        QuizBankQuestion(
           reference: '约翰福音 3:16',
           translationId: 'cmn-cu89s',
           bookId: 'JHN',
@@ -27,7 +29,6 @@ void main() {
           word: '世人',
           partOfSpeech: '名词',
           meaning: '世上的人',
-          verseText: '神爱世人',
         ),
       ]);
       final digest = await Sha256().hash(utf8.encode(bank));
@@ -63,8 +64,17 @@ void main() {
         },
       );
 
-      final first = await syncQuizBank(repository: repository, client: client);
-      final second = await syncQuizBank(repository: repository, client: client);
+      final scripture = _FakeScripture();
+      final first = await syncQuizBank(
+        repository: repository,
+        scripture: scripture,
+        client: client,
+      );
+      final second = await syncQuizBank(
+        repository: repository,
+        scripture: scripture,
+        client: client,
+      );
 
       expect(first.imported, 1);
       expect(second.upToDate, isTrue);
@@ -72,4 +82,54 @@ void main() {
       expect((await repository.listQuizBankQuestions()), hasLength(1));
     },
   );
+}
+
+final class _FakeScripture implements ScriptureRepository {
+  @override
+  Future<List<VerseUnit>> getChapter(
+    String translationId,
+    String book,
+    int chapter,
+  ) async => [
+    VerseUnit(
+      translationId: translationId,
+      start: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 16,
+      ),
+      end: (
+        canonId: CanonId.protestant66,
+        osisBookId: book,
+        chapter: chapter,
+        verse: 16,
+      ),
+      text: '神爱世人',
+      status: SourceTextStatus.present,
+    ),
+  ];
+
+  @override
+  Future<List<TranslationInfo>> listTranslations() =>
+      throw UnimplementedError();
+  @override
+  Future<TranslationInfo> getTranslation(String id) =>
+      throw UnimplementedError();
+  @override
+  Future<List<BibleBook>> listBooks(String translationId, CanonId canonId) =>
+      throw UnimplementedError();
+  @override
+  Future<Passage> getPassage(String translationId, PassageRange range) =>
+      throw UnimplementedError();
+  @override
+  Future<SelectedPassage> getSelection(
+    String translationId,
+    PassageSelection selection,
+  ) => throw UnimplementedError();
+  @override
+  Future<ParallelPassage> resolveParallelPassage(
+    LocatedPassageRange sourceRange,
+    String targetTranslationId,
+  ) => throw UnimplementedError();
 }

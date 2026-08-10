@@ -77,7 +77,7 @@ final class QuizQuestionValidator {
           end: end,
           word: word,
           partOfSpeech: partOfSpeech.trim(),
-          meaning: meaning.trim(),
+          meaning: compactQuizMeaning(word, meaning),
           verseText: verse.text,
         ),
       );

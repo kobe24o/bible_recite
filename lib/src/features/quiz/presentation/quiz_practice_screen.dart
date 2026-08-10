@@ -11,8 +11,31 @@ import '../../recitation/domain/mandarin_phonetic_comparator.dart';
 import '../../recitation/domain/recognition_models.dart';
 import '../../recitation/domain/speech_recognizer.dart';
 import '../../scripture/application/scripture_providers.dart';
+import '../../scripture/domain/scripture_models.dart';
 import '../domain/quiz_result.dart';
 import 'quiz_practice_request.dart';
+
+final _quizVerseTextProvider =
+    FutureProvider.family<String?, PendingQuizQuestion>((ref, question) async {
+      final scripture = await ref.read(scriptureRepositoryProvider.future);
+      final units = await scripture.getChapter(
+        question.translationId,
+        question.bookId,
+        question.chapter,
+      );
+      for (final unit in units) {
+        if (unit.status != SourceTextStatus.present ||
+            unit.start.verse != question.verse ||
+            unit.end.verse != question.verse ||
+            question.end > unit.text.length ||
+            unit.text.substring(question.start, question.end) !=
+                question.word) {
+          continue;
+        }
+        return unit.text;
+      }
+      return null;
+    });
 
 /// One-word voice quiz.  Each question hides exactly one meaningful word in a
 /// verse; the user reads only that word.  Mandarin scoring reuses the
@@ -205,6 +228,10 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
   @override
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final verseReady = switch (ref.watch(_quizVerseTextProvider(_question))) {
+      AsyncData(:final value) => value != null,
+      _ => false,
+    };
     return Scaffold(
       appBar: AppBar(
         title: Text(chinese ? '经文答题' : 'Verse quiz'),
@@ -254,7 +281,10 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
             const SizedBox(height: 10),
             FilledButton.icon(
               key: const Key('quiz-record-button'),
-              onPressed: _preparing || _answers.containsKey(_question.id)
+              onPressed:
+                  _preparing ||
+                      _answers.containsKey(_question.id) ||
+                      !verseReady
                   ? null
                   : _toggleRecording,
               icon: _preparing
@@ -376,7 +406,34 @@ class _QuestionPage extends ConsumerWidget {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: _renderVerse(context),
+            child: ref
+                .watch(_quizVerseTextProvider(question))
+                .when(
+                  data: (verseText) => verseText == null
+                      ? Text(
+                          chinese
+                              ? '本机经文与题目不匹配，无法作答'
+                              : 'Question does not match local scripture',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        )
+                      : _renderVerse(context, verseText),
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                  error: (_, _) => Text(
+                    chinese
+                        ? '读取本机经文失败，无法作答'
+                        : 'Could not read local scripture',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
           ),
         ),
         const SizedBox(height: 12),
@@ -436,18 +493,11 @@ class _QuestionPage extends ConsumerWidget {
   }
 
   String _displayMeaning() {
-    final meaning = question.meaning.trim();
-    for (final prefix in ['${question.word}：', '${question.word}:']) {
-      if (meaning.startsWith(prefix)) {
-        return meaning.substring(prefix.length).trim();
-      }
-    }
-    return meaning;
+    return question.meaning;
   }
 
-  Widget _renderVerse(BuildContext context) {
+  Widget _renderVerse(BuildContext context, String verseText) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
-    final verseText = question.verseText;
     final start = question.start.clamp(0, verseText.length);
     final end = question.end.clamp(start, verseText.length);
     return RichText(

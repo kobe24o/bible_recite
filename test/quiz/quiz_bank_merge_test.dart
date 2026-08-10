@@ -2,8 +2,8 @@ import 'package:bible_recite/src/features/quiz/domain/quiz_bank_merge.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-ValidatedQuizQuestion _question({int start = 2, String meaning = '世上的人'}) =>
-    ValidatedQuizQuestion(
+QuizBankQuestion _question({int start = 2, String meaning = '世上的人'}) =>
+    QuizBankQuestion(
       reference: '3:16',
       translationId: 'cmn-cu89s',
       bookId: 'JHN',
@@ -14,7 +14,6 @@ ValidatedQuizQuestion _question({int start = 2, String meaning = '世上的人'}
       word: start == 2 ? '世人' : '神爱',
       partOfSpeech: '名词',
       meaning: meaning,
-      verseText: '神爱世人',
     );
 
 void main() {

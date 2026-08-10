@@ -6,9 +6,9 @@ import 'quiz_models.dart';
 /// statistics and model credentials so a bank can be shared safely.
 final class QuizBankExchange {
   static const format = 'bible-recite-quiz-bank';
-  static const version = 1;
+  static const version = 2;
 
-  static String encode(List<ValidatedQuizQuestion> questions) =>
+  static String encode(List<QuizBankQuestion> questions) =>
       const JsonEncoder.withIndent('  ').convert({
         'format': format,
         'version': version,
@@ -23,31 +23,32 @@ final class QuizBankExchange {
               'end': question.end,
               'word': question.word,
               'partOfSpeech': question.partOfSpeech,
-              'meaning': question.meaning,
+              'meaning': compactQuizMeaning(question.word, question.meaning),
               'reference': question.reference,
-              'verseText': question.verseText,
             },
         ],
       });
 
-  static List<ValidatedQuizQuestion> decode(String source) {
+  /// Version 1 files are accepted only as a migration path. Their embedded
+  /// text is deliberately ignored: callers must validate every question
+  /// against the scripture installed on this device before saving it.
+  static List<QuizBankQuestion> decode(String source) {
     final root = _map(jsonDecode(source), 'root');
-    if (root['format'] != format || root['version'] != version) {
+    final sourceVersion = root['version'];
+    if (root['format'] != format ||
+        (sourceVersion != 1 && sourceVersion != version)) {
       throw const FormatException('不是可导入的答题题库文件');
     }
     return _list(root['questions'], 'questions')
         .map((value) {
           final data = _map(value, 'question');
-          final text = _text(data['verseText'], 'verseText');
           final start = _nonNegative(data['start'], 'start');
           final end = _positive(data['end'], 'end');
           final word = _text(data['word'], 'word');
-          if (end <= start ||
-              end > text.length ||
-              text.substring(start, end) != word) {
+          if (end <= start) {
             throw const FormatException('题目位置或词语无效');
           }
-          return ValidatedQuizQuestion(
+          return QuizBankQuestion(
             reference: _text(data['reference'], 'reference'),
             translationId: _text(data['translationId'], 'translationId'),
             bookId: _text(data['bookId'], 'bookId'),
@@ -58,7 +59,6 @@ final class QuizBankExchange {
             word: word,
             partOfSpeech: _text(data['partOfSpeech'], 'partOfSpeech'),
             meaning: _text(data['meaning'], 'meaning'),
-            verseText: text,
           );
         })
         .toList(growable: false);

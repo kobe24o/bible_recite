@@ -6,6 +6,8 @@ import 'package:bible_recite/src/features/recitation/domain/recognition_models.d
 import 'package:bible_recite/src/features/recitation/domain/speech_recognizer.dart';
 import 'package:bible_recite/src/features/recitation/presentation/recitation_practice_screen.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
+import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
@@ -408,6 +410,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
             quizGenerationServiceProvider.overrideWith(
               (ref) async => QuizGenerationService(
                 repository: repository,
@@ -485,6 +490,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => _ChineseQuizScripture(),
+            ),
             quizGenerationServiceProvider.overrideWith(
               (ref) async => QuizGenerationService(
                 repository: repository,
@@ -554,6 +562,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => _ChineseQuizScripture(),
+            ),
             quizGenerationServiceProvider.overrideWith(
               (ref) async => QuizGenerationService(
                 repository: repository,
@@ -640,6 +651,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => _ChineseQuizScripture(),
+            ),
             quizGenerationServiceProvider.overrideWith(
               (ref) async => QuizGenerationService(
                 repository: repository,
@@ -727,6 +741,43 @@ VerseUnit _unit(int verse, String text) => VerseUnit(
   text: text,
   status: SourceTextStatus.present,
 );
+
+final class _ChineseQuizScripture implements ScriptureRepository {
+  @override
+  Future<List<VerseUnit>> getChapter(
+    String translationId,
+    String osisBookId,
+    int chapter,
+  ) async => [_unit(16, '神爱世人')];
+
+  @override
+  Future<List<TranslationInfo>> listTranslations() =>
+      throw UnimplementedError();
+
+  @override
+  Future<TranslationInfo> getTranslation(String id) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<BibleBook>> listBooks(String translationId, CanonId canonId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Passage> getPassage(String translationId, PassageRange range) =>
+      throw UnimplementedError();
+
+  @override
+  Future<SelectedPassage> getSelection(
+    String translationId,
+    PassageSelection selection,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<ParallelPassage> resolveParallelPassage(
+    LocatedPassageRange sourceRange,
+    String targetTranslationId,
+  ) => throw UnimplementedError();
+}
 
 final class FakeRecognizer implements OfflineSpeechRecognizer {
   final _events = StreamController<RecognitionEvent>.broadcast();

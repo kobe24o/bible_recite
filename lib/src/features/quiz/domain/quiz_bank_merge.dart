@@ -4,10 +4,10 @@ import 'quiz_models.dart';
 /// scripture positions have different metadata, keeping the operation safe
 /// and repeatable for shared collections.
 final class QuizBankMerge {
-  static List<ValidatedQuizQuestion> merge(
-    Iterable<Iterable<ValidatedQuizQuestion>> banks,
+  static List<QuizBankQuestion> merge(
+    Iterable<Iterable<QuizBankQuestion>> banks,
   ) {
-    final unique = <String, ValidatedQuizQuestion>{};
+    final unique = <String, QuizBankQuestion>{};
     for (final bank in banks) {
       for (final question in bank) {
         unique.putIfAbsent(_key(question), () => question);
@@ -18,12 +18,12 @@ final class QuizBankMerge {
     return merged;
   }
 
-  static String _key(ValidatedQuizQuestion question) =>
+  static String _key(QuizBankQuestion question) =>
       '${question.translationId}\u0000${question.bookId}\u0000'
       '${question.chapter}\u0000${question.verse}\u0000'
       '${question.start}\u0000${question.end}';
 
-  static int _compare(ValidatedQuizQuestion left, ValidatedQuizQuestion right) {
+  static int _compare(QuizBankQuestion left, QuizBankQuestion right) {
     final translation = left.translationId.compareTo(right.translationId);
     if (translation != 0) return translation;
     final book = left.bookId.compareTo(right.bookId);

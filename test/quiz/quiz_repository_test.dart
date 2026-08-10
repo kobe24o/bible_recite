@@ -191,7 +191,8 @@ void main() {
       answered INTEGER NOT NULL, is_correct INTEGER, answered_at TEXT, created_at TEXT NOT NULL
     )''');
       oldDatabase.execute('''CREATE TABLE quiz_result (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question_id INTEGER NOT NULL REFERENCES quiz_question(id) ON DELETE CASCADE,
       translation_id TEXT NOT NULL, book_id TEXT NOT NULL, chapter INTEGER NOT NULL,
       verse INTEGER NOT NULL, correct INTEGER NOT NULL, answered_at TEXT NOT NULL
     )''');
@@ -210,6 +211,12 @@ void main() {
       final migrated = SqlitePlanRepository(oldDatabase);
 
       expect(oldDatabase.select('SELECT * FROM quiz_question'), hasLength(1));
+      expect(
+        oldDatabase
+            .select('PRAGMA table_info(quiz_question)')
+            .map((row) => row['name']),
+        isNot(contains('verse_text')),
+      );
       expect(
         oldDatabase
             .select('SELECT question_id FROM quiz_result')

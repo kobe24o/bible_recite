@@ -139,7 +139,6 @@ final class SqlitePlanRepository {
         part_of_speech TEXT NOT NULL,
         meaning TEXT NOT NULL,
         reference TEXT NOT NULL,
-        verse_text TEXT NOT NULL,
         quality_version INTEGER NOT NULL DEFAULT 1,
         answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
         is_correct INTEGER,
@@ -151,11 +150,6 @@ final class SqlitePlanRepository {
         .select('PRAGMA table_info(quiz_question)')
         .map((row) => row['name'] as String)
         .toSet();
-    if (!quizQuestionColumns.contains('verse_text')) {
-      _database.execute(
-        "ALTER TABLE quiz_question ADD COLUMN verse_text TEXT NOT NULL DEFAULT ''",
-      );
-    }
     if (!quizQuestionColumns.contains('quality_version')) {
       _database.execute(
         'ALTER TABLE quiz_question ADD COLUMN quality_version INTEGER NOT NULL DEFAULT 1',
@@ -163,6 +157,7 @@ final class SqlitePlanRepository {
     }
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
       ON quiz_question(translation_id, book_id, chapter, verse, answered)''');
+    _compactStoredQuizMeanings();
     _database.execute('''
       CREATE TABLE IF NOT EXISTS quiz_result (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,6 +173,11 @@ final class SqlitePlanRepository {
     ''');
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
       ON quiz_result(translation_id, book_id, chapter, verse)''');
+    if (quizQuestionColumns.contains('verse_text')) {
+      _removeStoredQuizVerseText();
+    }
+    _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
+      ON quiz_question(translation_id, book_id, chapter, verse, answered)''');
     _database.execute('''UPDATE quiz_result
       SET question_id = (
         SELECT MIN(canonical.id)
@@ -587,7 +587,7 @@ final class SqlitePlanRepository {
     final rows = _database.select(
       '''
       SELECT id, translation_id, book_id, chapter, verse, start_offset,
-        end_offset, word, part_of_speech, meaning, reference, verse_text
+        end_offset, word, part_of_speech, meaning, reference
       FROM quiz_question
       WHERE translation_id = ? AND book_id = ?
         AND ((chapter > ? OR (chapter = ? AND verse >= ?))
@@ -652,7 +652,7 @@ final class SqlitePlanRepository {
     try {
       final rows = _database.select(
         '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
-          end_offset, word, part_of_speech, meaning, reference, verse_text
+          end_offset, word, part_of_speech, meaning, reference
         FROM quiz_question WHERE quality_version = ?
         ORDER BY RANDOM() LIMIT ?''',
         [quizQuestionQualityVersion, count],
@@ -676,17 +676,17 @@ final class SqlitePlanRepository {
   /// All current-quality questions, without answer history. Used only for
   /// personal export and cloud-bank import/sync; credentials and statistics
   /// never leave the device.
-  Future<List<ValidatedQuizQuestion>> listQuizBankQuestions() async {
+  Future<List<QuizBankQuestion>> listQuizBankQuestions() async {
     final rows = _database.select(
       '''SELECT translation_id, book_id, chapter, verse, start_offset,
-        end_offset, word, part_of_speech, meaning, reference, verse_text
+        end_offset, word, part_of_speech, meaning, reference
       FROM quiz_question WHERE quality_version = ?
       ORDER BY translation_id, book_id, chapter, verse, start_offset, end_offset''',
       [quizQuestionQualityVersion],
     );
     return rows
         .map(
-          (row) => ValidatedQuizQuestion(
+          (row) => QuizBankQuestion(
             reference: row['reference'] as String,
             translationId: row['translation_id'] as String,
             bookId: row['book_id'] as String,
@@ -697,7 +697,6 @@ final class SqlitePlanRepository {
             word: row['word'] as String,
             partOfSpeech: row['part_of_speech'] as String,
             meaning: row['meaning'] as String,
-            verseText: row['verse_text'] as String,
           ),
         )
         .toList(growable: false);
@@ -844,9 +843,9 @@ final class SqlitePlanRepository {
           '''
           INSERT OR IGNORE INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
-           word, part_of_speech, meaning, reference, verse_text,
+           word, part_of_speech, meaning, reference,
            quality_version, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
           [
             question.translationId,
@@ -857,9 +856,8 @@ final class SqlitePlanRepository {
             question.end,
             question.word,
             question.partOfSpeech,
-            question.meaning,
+            compactQuizMeaning(question.word, question.meaning),
             question.reference,
-            question.verseText,
             quizQuestionQualityVersion,
             now,
           ],
@@ -888,9 +886,9 @@ final class SqlitePlanRepository {
           '''
           INSERT OR IGNORE INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
-           word, part_of_speech, meaning, reference, verse_text,
+           word, part_of_speech, meaning, reference,
            quality_version, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
           [
             question.translationId,
@@ -901,9 +899,8 @@ final class SqlitePlanRepository {
             question.end,
             question.word,
             question.partOfSpeech,
-            question.meaning,
+            compactQuizMeaning(question.word, question.meaning),
             question.reference,
-            question.verseText,
             quizQuestionQualityVersion,
             now,
           ],
@@ -1166,8 +1163,70 @@ final class SqlitePlanRepository {
     partOfSpeech: row['part_of_speech'] as String,
     meaning: row['meaning'] as String,
     reference: row['reference'] as String,
-    verseText: row['verse_text'] as String,
   );
+
+  /// Older releases duplicated the full verse in every question. Rebuild the
+  /// table instead of merely clearing the column so existing devices reclaim
+  /// that storage as well. Question ids stay unchanged, preserving results.
+  void _removeStoredQuizVerseText() {
+    _database.execute('PRAGMA foreign_keys = OFF');
+    try {
+      _database.execute('''
+        CREATE TABLE quiz_question_without_verse_text (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          translation_id TEXT NOT NULL,
+          book_id TEXT NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          start_offset INTEGER NOT NULL,
+          end_offset INTEGER NOT NULL,
+          word TEXT NOT NULL,
+          part_of_speech TEXT NOT NULL,
+          meaning TEXT NOT NULL,
+          reference TEXT NOT NULL,
+          quality_version INTEGER NOT NULL DEFAULT 1,
+          answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
+          is_correct INTEGER,
+          answered_at TEXT,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      _database.execute('''
+        INSERT INTO quiz_question_without_verse_text
+        (id, translation_id, book_id, chapter, verse, start_offset, end_offset,
+         word, part_of_speech, meaning, reference, quality_version, answered,
+         is_correct, answered_at, created_at)
+        SELECT id, translation_id, book_id, chapter, verse, start_offset, end_offset,
+          word, part_of_speech, meaning, reference, quality_version, answered,
+          is_correct, answered_at, created_at
+        FROM quiz_question
+      ''');
+      _database.execute('DROP TABLE quiz_question');
+      _database.execute(
+        'ALTER TABLE quiz_question_without_verse_text RENAME TO quiz_question',
+      );
+    } finally {
+      _database.execute('PRAGMA foreign_keys = ON');
+    }
+  }
+
+  void _compactStoredQuizMeanings() {
+    final rows = _database.select(
+      'SELECT id, word, meaning FROM quiz_question',
+    );
+    for (final row in rows) {
+      final compact = compactQuizMeaning(
+        row['word'] as String,
+        row['meaning'] as String,
+      );
+      if (compact != row['meaning']) {
+        _database.execute('UPDATE quiz_question SET meaning = ? WHERE id = ?', [
+          compact,
+          row['id'],
+        ]);
+      }
+    }
+  }
 
   Future<MemorizationPlan?> findPlanBySource(
     String sourceUrl,

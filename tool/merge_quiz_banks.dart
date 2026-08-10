@@ -35,7 +35,7 @@ Future<void> main(List<String> arguments) async {
     }
   }
   if (output == null || inputs.isEmpty) _fail('需要至少一个输入文件和 -o 输出文件');
-  final banks = <List<ValidatedQuizQuestion>>[];
+  final banks = <List<QuizBankQuestion>>[];
   var total = 0;
   for (final path in inputs) {
     final file = File(path);
