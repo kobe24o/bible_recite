@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "新增共享答题题库导入导出与国内加速同步；同节累计 5 道题后随机复用，已有题库无需模型配置也可继续答题。"
+              --notes "修复今日任务离散或跨卷计划的答题范围；导出题库后显示保存位置；新增本机题库随机答题。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "新增共享答题题库导入导出与国内加速同步；同节累计 5 道题后随机复用，已有题库无需模型配置也可继续答题。" \
+              --release-notes "修复今日任务离散或跨卷计划的答题范围；导出题库后显示保存位置；新增本机题库随机答题。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

@@ -16,11 +16,13 @@ enum QuizPreparationPhase { idle, waiting, preparing, ready, failed }
 final class QuizPreparationController extends ChangeNotifier {
   QuizPreparationController({
     required this.scope,
+    this.scopes = const [],
     this.immediate = false,
     required this.serviceLoader,
   });
 
   final QuizScope scope;
+  final List<QuizScope> scopes;
   final bool immediate;
   final Future<QuizGenerationService> Function() serviceLoader;
 
@@ -55,7 +57,7 @@ final class QuizPreparationController extends ChangeNotifier {
     try {
       service = await serviceLoader();
       if (_disposed || generation != _generation) return;
-      final outcome = await service.prepare(scope);
+      final outcome = await service.prepareScopes(_effectiveScopes);
       if (_disposed || generation != _generation) return;
       if (await _useCachedQuestions(service, generation)) return;
       if (_disposed || generation != _generation) return;
@@ -85,9 +87,14 @@ final class QuizPreparationController extends ChangeNotifier {
     int generation,
   ) async {
     try {
-      final questions = await service.repository.listQuizQuestionsForPractice(
-        scope,
-      );
+      final questions = <PendingQuizQuestion>[];
+      final ids = <int>{};
+      for (final scope in _effectiveScopes) {
+        for (final question
+            in await service.repository.listQuizQuestionsForPractice(scope)) {
+          if (ids.add(question.id)) questions.add(question);
+        }
+      }
       if (_disposed || generation != _generation || questions.isEmpty) {
         return false;
       }
@@ -99,6 +106,8 @@ final class QuizPreparationController extends ChangeNotifier {
       return false;
     }
   }
+
+  List<QuizScope> get _effectiveScopes => scopes.isEmpty ? [scope] : scopes;
 
   /// Starts the five-second countdown (or prepares immediately when the
   /// generation scope is authoritative, e.g. Today's tasks).  Any earlier

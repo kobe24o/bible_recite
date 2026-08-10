@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'carries the exact full-plan quiz scope through to the final request',
+    'carries every exact plan task range through to the final request',
     () async {
       final first = PlanTask(
         id: 1,
@@ -101,16 +101,89 @@ void main() {
         selected: first,
       );
 
-      expect(request!.quizScope, isNotNull);
-      expect(request.quizScope!.startChapter, 3);
-      expect(request.quizScope!.startVerse, 16);
-      expect(request.quizScope!.endChapter, 4);
-      expect(request.quizScope!.endVerse, 3);
+      expect(request!.quizScopes, hasLength(2));
+      expect(request.quizScopes.first.startChapter, 3);
+      expect(request.quizScopes.first.startVerse, 16);
+      expect(request.quizScopes.first.endChapter, 3);
+      expect(request.quizScopes.first.endVerse, 18);
+      expect(request.quizScopes.last.startChapter, 4);
+      expect(request.quizScopes.last.startVerse, 1);
+      expect(request.quizScopes.last.endChapter, 4);
+      expect(request.quizScopes.last.endVerse, 3);
       expect(request.next, isNotNull);
-      expect(request.next!.quizScope, request.quizScope);
+      expect(request.next!.quizScopes, request.quizScopes);
+    },
+  );
+
+  test(
+    'does not fill gaps or drop another book from a plan quiz scope',
+    () async {
+      final first = _task(id: 1, day: 0, book: 'JHN', chapter: 3, verse: 16);
+      final later = _task(id: 2, day: 1, book: 'JHN', chapter: 5, verse: 2);
+      final otherBook = _task(
+        id: 3,
+        day: 2,
+        book: 'EXO',
+        chapter: 1,
+        verse: 15,
+      );
+      final plan = MemorizationPlan(
+        id: 1,
+        title: '离散经文计划',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 5,
+        days: 3,
+        startDate: DateTime(2026, 7, 30),
+        endDate: DateTime(2026, 8, 1),
+        totalTasks: 3,
+        completedTasks: 0,
+        sourceKind: PlanSourceKind.local,
+        sourceUrl: null,
+        externalId: null,
+        revision: 0,
+        contentLocked: false,
+      );
+
+      final request = await buildPlanRecitationRequest(
+        scripture: _PassageRepository(),
+        plan: plan,
+        tasks: [first, later, otherBook],
+        selected: first,
+      );
+
+      expect(
+        request!.quizScopes
+            .map(
+              (scope) =>
+                  '${scope.bookId}:${scope.startChapter}:${scope.startVerse}',
+            )
+            .toList(),
+        ['JHN:3:16', 'JHN:5:2', 'EXO:1:15'],
+      );
     },
   );
 }
+
+PlanTask _task({
+  required int id,
+  required int day,
+  required String book,
+  required int chapter,
+  required int verse,
+}) => PlanTask(
+  id: id,
+  planId: 1,
+  dayIndex: day,
+  dueDate: DateTime(2026, 7, 30 + day),
+  bookId: book,
+  startChapter: chapter,
+  startVerse: verse,
+  endChapter: chapter,
+  endVerse: verse,
+  completed: false,
+);
 
 class _PassageRepository implements ScriptureRepository {
   @override

@@ -150,6 +150,35 @@ void main() {
   });
 
   test(
+    'random local practice reopens answered questions for a new attempt',
+    () async {
+      await repository.saveQuizQuestions([
+        questionFor(verse: 16),
+        questionFor(verse: 17, start: 0, end: 1),
+      ]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      await repository.completeQuizQuestion(
+        questionId: 2,
+        correct: false,
+        answeredAt: DateTime.now(),
+      );
+
+      final selected = await repository.listRandomQuizQuestionsForPractice(10);
+
+      expect(selected, hasLength(2));
+      expect(
+        await repository.listPendingQuizQuestions(scopeFor(verse: 16)),
+        hasLength(1),
+      );
+      expect((await repository.getQuizSummary()).totalAnswered, 2);
+    },
+  );
+
+  test(
     'migration merges duplicate question positions before adding uniqueness',
     () {
       final oldDatabase = sqlite3.openInMemory();

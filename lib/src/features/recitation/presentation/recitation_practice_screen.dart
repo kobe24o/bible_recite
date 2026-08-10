@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../plans/data/sqlite_plan_repository.dart';
 import '../../quiz/application/quiz_preparation_controller.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/domain/quiz_scope.dart';
+import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
@@ -39,6 +41,7 @@ final class RecitationRequest {
     this.planId,
     this.next,
     this.quizScope,
+    this.quizScopes = const [],
     this.todayQuizEntry = false,
   });
 
@@ -52,6 +55,7 @@ final class RecitationRequest {
   final int? planId;
   final RecitationRequest? next;
   final QuizScope? quizScope;
+  final List<QuizScope> quizScopes;
   final bool todayQuizEntry;
 }
 
@@ -144,11 +148,11 @@ class _RecitationPracticeScreenState
           .then<void>((_) {}, onError: (_) {}),
     );
     _scriptureVisibilityLoading = _loadScriptureVisibility();
-    final quizScope = widget.request.quizScope;
-    if (widget.request.todayQuizEntry && quizScope != null) {
-      _armTodayQuiz(quizScope);
-    } else if (quizScope != null && widget.request.next == null) {
-      _preparedQuiz = _prepareQuiz(quizScope);
+    final quizScopes = _quizScopes;
+    if (widget.request.todayQuizEntry && quizScopes.isNotEmpty) {
+      _armTodayQuiz(quizScopes);
+    } else if (quizScopes.isNotEmpty && widget.request.next == null) {
+      _preparedQuiz = _prepareQuiz(quizScopes);
     }
     _subscription = _recognizer.events.listen((event) {
       if (!mounted) return;
@@ -168,9 +172,17 @@ class _RecitationPracticeScreenState
     });
   }
 
-  void _armTodayQuiz(QuizScope scope) {
+  List<QuizScope> get _quizScopes {
+    final explicit = widget.request.quizScopes;
+    if (explicit.isNotEmpty) return explicit;
+    final legacy = widget.request.quizScope;
+    return legacy == null ? const [] : [legacy];
+  }
+
+  void _armTodayQuiz(List<QuizScope> scopes) {
     final preparation = QuizPreparationController(
-      scope: scope,
+      scope: scopes.first,
+      scopes: scopes,
       serviceLoader: () => ref.read(quizGenerationServiceProvider.future),
     );
     preparation.addListener(_onTodayQuizPreparationChanged);
@@ -369,16 +381,17 @@ class _RecitationPracticeScreenState
     }
   }
 
-  Future<_QuizPreparation> _prepareQuiz(QuizScope scope) async {
+  Future<_QuizPreparation> _prepareQuiz(List<QuizScope> scopes) async {
     try {
       final service = await ref.read(quizGenerationServiceProvider.future);
-      final outcome = await service.prepare(scope);
-      final questions = await service.repository.listQuizQuestionsForPractice(
-        scope,
-      );
+      final outcome = await service.prepareScopes(scopes);
+      final questions = await _questionsForScopes(service.repository, scopes);
       if (questions.isNotEmpty) {
         return _QuizPreparation(
-          request: QuizPracticeRequest(scope: scope, questions: questions),
+          request: QuizPracticeRequest(
+            scope: scopes.first,
+            questions: questions,
+          ),
         );
       }
       if (!outcome.success) {
@@ -390,12 +403,28 @@ class _RecitationPracticeScreenState
     }
   }
 
+  Future<List<PendingQuizQuestion>> _questionsForScopes(
+    SqlitePlanRepository repository,
+    List<QuizScope> scopes,
+  ) async {
+    final questions = <PendingQuizQuestion>[];
+    final ids = <int>{};
+    for (final scope in scopes) {
+      for (final question in await repository.listQuizQuestionsForPractice(
+        scope,
+      )) {
+        if (ids.add(question.id)) questions.add(question);
+      }
+    }
+    return questions;
+  }
+
   Future<void> _openPreparedQuiz() async {
     if (widget.request.todayQuizEntry) return;
     if (widget.request.next != null) return;
-    final scope = widget.request.quizScope;
-    if (scope == null) return;
-    final preparation = _preparedQuiz ??= _prepareQuiz(scope);
+    final scopes = _quizScopes;
+    if (scopes.isEmpty) return;
+    final preparation = _preparedQuiz ??= _prepareQuiz(scopes);
     final prepared = await preparation;
     if (!mounted) return;
     final request = prepared.request;

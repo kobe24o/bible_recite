@@ -366,15 +366,81 @@ void main() {
       expect(await repository.listPendingQuizQuestions(scope()), hasLength(1));
     },
   );
+
+  test(
+    'prepares disjoint task scopes without filling their chapter gap',
+    () async {
+      final firstScope = scope();
+      const laterScope = QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 5,
+        startVerse: 2,
+        endChapter: 5,
+        endVerse: 2,
+      );
+      await repository.saveQuizQuestions([
+        for (final target in <({int chapter, int verse, String reference})>[
+          (chapter: 3, verse: 16, reference: '3:16'),
+          (chapter: 5, verse: 2, reference: '5:2'),
+        ])
+          ValidatedQuizQuestion(
+            reference: target.reference,
+            translationId: 'cmn-cu89s',
+            bookId: 'JHN',
+            chapter: target.chapter,
+            verse: target.verse,
+            start: 2,
+            end: 4,
+            word: '世人',
+            partOfSpeech: '名词',
+            meaning: '世上的人',
+            verseText: '神爱世人',
+          ),
+      ]);
+      final fake = _FakeScripture([unitAt(3, 16), unitAt(4, 1), unitAt(5, 2)]);
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: fake,
+        client: QuizModelClient(),
+        settingsLoader: () async => const QuizModelSettings(
+          baseUrl: 'https://example.test/v1',
+          model: 'test-model',
+          apiKey: '',
+        ),
+      );
+
+      final outcome = await service.prepareScopes([firstScope, laterScope]);
+
+      expect(outcome.success, isTrue);
+      expect(fake.requestedRanges.map((range) => range.start.chapter), [3, 5]);
+    },
+  );
 }
 
 final class _FakeScripture implements ScriptureRepository {
   _FakeScripture(this.units);
   final List<VerseUnit> units;
+  final List<PassageRange> requestedRanges = [];
 
   @override
   Future<Passage> getPassage(String translationId, PassageRange range) async {
-    return Passage(range: range, translationId: translationId, units: units);
+    requestedRanges.add(range);
+    final visible = units
+        .where((unit) {
+          if (unit.start.osisBookId != range.start.osisBookId) return false;
+          final chapter = unit.start.chapter;
+          final verse = unit.start.verse;
+          final afterStart =
+              chapter > range.start.chapter ||
+              (chapter == range.start.chapter && verse >= range.start.verse);
+          final beforeEnd =
+              chapter < range.end.chapter ||
+              (chapter == range.end.chapter && verse <= range.end.verse);
+          return afterStart && beforeEnd;
+        })
+        .toList(growable: false);
+    return Passage(range: range, translationId: translationId, units: visible);
   }
 
   @override

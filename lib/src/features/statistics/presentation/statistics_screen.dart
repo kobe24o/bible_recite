@@ -16,9 +16,12 @@ import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/domain/quiz_bank_exchange.dart';
+import '../../quiz/domain/quiz_scope.dart';
 import '../../quiz/application/quiz_bank_sync.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
+import '../../quiz/presentation/quiz_practice_request.dart';
+import '../../quiz/presentation/quiz_practice_screen.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
@@ -766,6 +769,12 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
             OverflowBar(
               alignment: MainAxisAlignment.end,
               children: [
+                OutlinedButton.icon(
+                  key: const Key('quiz-bank-random-practice'),
+                  onPressed: _working ? null : _randomPractice,
+                  icon: const Icon(Icons.casino_outlined),
+                  label: const Text('随机答题'),
+                ),
                 TextButton.icon(
                   key: const Key('quiz-bank-import'),
                   onPressed: _working ? null : _import,
@@ -829,6 +838,80 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     }
   }
 
+  Future<void> _randomPractice() async {
+    final controller = TextEditingController(text: '10');
+    final count = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('随机答题'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '题目数量',
+            helperText: '默认 10 道，最多 50 道',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              if (value == null || value < 1 || value > 50) return;
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('开始答题'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (count == null) return;
+    setState(() => _working = true);
+    try {
+      final questions = await widget.repository
+          .listRandomQuizQuestionsForPractice(count);
+      if (!mounted) return;
+      if (questions.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('本机题库暂无可答题目，请先同步或导入题库')));
+        return;
+      }
+      final first = questions.first;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => QuizPracticeScreen(
+            request: QuizPracticeRequest(
+              scope: QuizScope(
+                translationId: first.translationId,
+                bookId: first.bookId,
+                startChapter: first.chapter,
+                startVerse: first.verse,
+                endChapter: first.chapter,
+                endVerse: first.verse,
+              ),
+              questions: questions,
+            ),
+          ),
+        ),
+      );
+      if (mounted) ref.read(profileRevisionProvider.notifier).refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('随机答题准备失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _export() async {
     try {
       final source = QuizBankExchange.encode(
@@ -836,11 +919,13 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
       );
       final bytes = utf8.encode(source);
       const name = 'BibleRecite-quiz-bank.json';
+      late final String savedLocation;
       if (Platform.isAndroid) {
-        await _jsonStoreChannel.invokeMethod<String>('saveJson', {
+        final uri = await _jsonStoreChannel.invokeMethod<String>('saveJson', {
           'bytes': bytes,
           'displayName': name,
         });
+        savedLocation = uri ?? '下载/BibleRecite/$name';
       } else {
         final location = await getSaveLocation(
           suggestedName: name,
@@ -858,11 +943,12 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           mimeType: 'application/json',
           name: name,
         ).saveTo(location.path);
+        savedLocation = location.path;
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('答题题库已导出（不含答题记录和模型密钥）')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('答题题库已导出至：$savedLocation（不含答题记录和模型密钥）')),
+        );
       }
     } catch (error) {
       if (mounted) {

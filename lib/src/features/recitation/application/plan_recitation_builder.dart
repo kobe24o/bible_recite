@@ -21,7 +21,7 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
           .toList()
         ..sort((left, right) => left.dayIndex.compareTo(right.dayIndex));
   if (pending.isEmpty) return null;
-  final quizScope = _quizScopeForPlan(plan, tasks);
+  final quizScopes = _quizScopesForPlan(plan, tasks);
 
   RecitationRequest? next;
   for (final task in pending.reversed) {
@@ -51,41 +51,28 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
       planTaskId: task.id,
       planId: plan.id,
       next: next,
-      // Every screen in the chain needs the scope so the final task can enter
-      // the quiz. Only that final screen starts preparation and reports errors.
-      quizScope: quizScope,
+      // Every screen in the chain needs the exact task scopes so the final
+      // task can enter the quiz. Discrete plan ranges must not be compressed
+      // into one continuous interval, otherwise gaps become quiz questions.
+      quizScope: quizScopes.isEmpty ? null : quizScopes.first,
+      quizScopes: quizScopes,
       todayQuizEntry: todayQuizEntry,
     );
   }
   return next;
 }
 
-QuizScope? _quizScopeForPlan(MemorizationPlan plan, List<PlanTask> tasks) {
-  final inPlanBook = tasks
-      .where((task) => task.bookId == plan.bookId)
-      .toList(growable: false);
-  if (inPlanBook.isEmpty) return null;
-  final ordered = [...inPlanBook]
-    ..sort((left, right) {
-      final chapter = left.startChapter.compareTo(right.startChapter);
-      if (chapter != 0) return chapter;
-      return left.startVerse.compareTo(right.startVerse);
-    });
-  final first = ordered.first;
-  final last = ordered.reduce((latest, task) {
-    final laterChapter = task.endChapter.compareTo(latest.endChapter);
-    if (laterChapter > 0 ||
-        (laterChapter == 0 && task.endVerse > latest.endVerse)) {
-      return task;
-    }
-    return latest;
-  });
-  return QuizScope(
-    translationId: plan.translationId,
-    bookId: plan.bookId,
-    startChapter: first.startChapter,
-    startVerse: first.startVerse,
-    endChapter: last.endChapter,
-    endVerse: last.endVerse,
-  );
-}
+List<QuizScope> _quizScopesForPlan(
+  MemorizationPlan plan,
+  List<PlanTask> tasks,
+) => {
+  for (final task in tasks)
+    QuizScope(
+      translationId: plan.translationId,
+      bookId: task.bookId,
+      startChapter: task.startChapter,
+      startVerse: task.startVerse,
+      endChapter: task.endChapter,
+      endVerse: task.endVerse,
+    ),
+}.toList(growable: false);

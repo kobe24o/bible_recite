@@ -640,6 +640,39 @@ final class SqlitePlanRepository {
     return selected;
   }
 
+  /// Selects a random local-bank practice set and reopens the selected
+  /// questions for a new attempt. This intentionally includes previously
+  /// answered questions so “随机答题” can draw from the entire local bank;
+  /// each new submission is recorded as a new quiz result.
+  Future<List<PendingQuizQuestion>> listRandomQuizQuestionsForPractice(
+    int count,
+  ) async {
+    if (count <= 0) return const [];
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      final rows = _database.select(
+        '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
+          end_offset, word, part_of_speech, meaning, reference, verse_text
+        FROM quiz_question WHERE quality_version = ?
+        ORDER BY RANDOM() LIMIT ?''',
+        [quizQuestionQualityVersion, count],
+      );
+      for (final row in rows) {
+        _database.execute(
+          '''UPDATE quiz_question
+          SET answered = 0, is_correct = NULL, answered_at = NULL
+          WHERE id = ?''',
+          [row['id']],
+        );
+      }
+      _database.execute('COMMIT');
+      return rows.map(_pendingQuestionFromRow).toList(growable: false);
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   /// All current-quality questions, without answer history. Used only for
   /// personal export and cloud-bank import/sync; credentials and statistics
   /// never leave the device.
