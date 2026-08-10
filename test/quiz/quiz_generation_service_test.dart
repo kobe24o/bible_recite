@@ -286,6 +286,86 @@ void main() {
     expect(outcome.error, contains('缺少答题模型配置'));
     expect(outcome.error, contains('API Key'));
   });
+
+  test(
+    'uses cached questions even when model configuration is incomplete',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: _FakeScripture([unit(16)]),
+        client: QuizModelClient(),
+        settingsLoader: () async => const QuizModelSettings(
+          baseUrl: 'https://example.test/v1',
+          model: 'test-model',
+          apiKey: '',
+        ),
+      );
+
+      final outcome = await service.prepare(scope());
+
+      expect(outcome.success, isTrue);
+      expect(outcome.error, isNull);
+    },
+  );
+
+  test(
+    'requeues one cached question when a verse has five questions',
+    () async {
+      await repository.saveQuizQuestions([
+        for (var offset = 0; offset < 5; offset++)
+          ValidatedQuizQuestion(
+            reference: '3:16',
+            translationId: 'cmn-cu89s',
+            bookId: 'JHN',
+            chapter: 3,
+            verse: 16,
+            start: offset,
+            end: offset + 1,
+            word: '神',
+            partOfSpeech: '名词',
+            meaning: '测试',
+            verseText: '神爱世人',
+          ),
+      ]);
+      for (var id = 1; id <= 5; id++) {
+        await repository.completeQuizQuestion(
+          questionId: id,
+          correct: true,
+          answeredAt: DateTime.now(),
+        );
+      }
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: _FakeScripture([unit(16)]),
+        client: QuizModelClient(),
+        settingsLoader: () async => const QuizModelSettings(
+          baseUrl: 'https://example.test/v1',
+          model: 'test-model',
+          apiKey: '',
+        ),
+      );
+
+      final outcome = await service.prepare(scope());
+
+      expect(outcome.success, isTrue);
+      expect(await repository.listPendingQuizQuestions(scope()), hasLength(1));
+    },
+  );
 }
 
 final class _FakeScripture implements ScriptureRepository {

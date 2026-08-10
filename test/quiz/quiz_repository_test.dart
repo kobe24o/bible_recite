@@ -79,6 +79,118 @@ void main() {
     },
   );
 
+  test(
+    'stores one question for one verse position even if saved repeatedly',
+    () async {
+      await repository.saveQuizQuestions([questionFor(), questionFor()]);
+      await repository.saveQuizQuestions([questionFor()]);
+
+      expect(
+        await repository.listPendingQuizQuestions(scopeFor()),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'five saved questions keep an answered verse out of generation',
+    () async {
+      await repository.saveQuizQuestions([
+        for (var offset = 0; offset < 5; offset++)
+          questionFor(start: offset, end: offset + 1),
+      ]);
+      for (var id = 1; id <= 5; id++) {
+        await repository.completeQuizQuestion(
+          questionId: id,
+          correct: true,
+          answeredAt: DateTime.now(),
+        );
+      }
+
+      expect(await repository.missingQuizVerses(scopeFor()), isEmpty);
+    },
+  );
+
+  test(
+    'import adds new questions without resetting existing answer history',
+    () async {
+      await repository.saveQuizQuestions([questionFor()]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+
+      final result = await repository.importQuizBankQuestions([
+        questionFor(),
+        questionFor(start: 0, end: 1),
+      ]);
+
+      expect(result.imported, 1);
+      expect(result.duplicates, 1);
+      final summary = await repository.getQuizSummary();
+      expect(summary.totalAnswered, 1);
+      expect(
+        await repository.listPendingQuizQuestions(scopeFor()),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('practice selects one random pending question for one verse', () async {
+    await repository.importQuizBankQuestions([
+      questionFor(start: 0, end: 1),
+      questionFor(start: 1, end: 2),
+    ]);
+
+    final questions = await repository.listQuizQuestionsForPractice(scopeFor());
+
+    expect(questions, hasLength(1));
+    expect(questions.single.verse, 16);
+  });
+
+  test(
+    'migration merges duplicate question positions before adding uniqueness',
+    () {
+      final oldDatabase = sqlite3.openInMemory();
+      oldDatabase.execute('''CREATE TABLE quiz_question (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      translation_id TEXT NOT NULL, book_id TEXT NOT NULL, chapter INTEGER NOT NULL,
+      verse INTEGER NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL,
+      word TEXT NOT NULL, part_of_speech TEXT NOT NULL, meaning TEXT NOT NULL,
+      reference TEXT NOT NULL, verse_text TEXT NOT NULL, quality_version INTEGER NOT NULL,
+      answered INTEGER NOT NULL, is_correct INTEGER, answered_at TEXT, created_at TEXT NOT NULL
+    )''');
+      oldDatabase.execute('''CREATE TABLE quiz_result (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL,
+      translation_id TEXT NOT NULL, book_id TEXT NOT NULL, chapter INTEGER NOT NULL,
+      verse INTEGER NOT NULL, correct INTEGER NOT NULL, answered_at TEXT NOT NULL
+    )''');
+      for (var id = 0; id < 2; id++) {
+        oldDatabase.execute('''INSERT INTO quiz_question
+        (translation_id, book_id, chapter, verse, start_offset, end_offset,
+         word, part_of_speech, meaning, reference, verse_text, quality_version,
+         answered, created_at)
+        VALUES ('cmn-cu89s', 'JHN', 3, 16, 2, 4, '世人', '名词', '世上的人',
+          '3:16', '神爱世人', 2, 1, '2026-01-01T00:00:00.000Z')''');
+      }
+      oldDatabase.execute('''INSERT INTO quiz_result
+      (question_id, translation_id, book_id, chapter, verse, correct, answered_at)
+      VALUES (2, 'cmn-cu89s', 'JHN', 3, 16, 1, '2026-01-01T00:00:00.000Z')''');
+
+      final migrated = SqlitePlanRepository(oldDatabase);
+
+      expect(oldDatabase.select('SELECT * FROM quiz_question'), hasLength(1));
+      expect(
+        oldDatabase
+            .select('SELECT question_id FROM quiz_result')
+            .single['question_id'],
+        1,
+      );
+      migrated.close();
+    },
+  );
+
   test('completion updates current and max correct streaks', () async {
     await repository.saveQuizQuestions([
       questionFor(verse: 16),

@@ -373,18 +373,18 @@ class _RecitationPracticeScreenState
     try {
       final service = await ref.read(quizGenerationServiceProvider.future);
       final outcome = await service.prepare(scope);
+      final questions = await service.repository.listQuizQuestionsForPractice(
+        scope,
+      );
+      if (questions.isNotEmpty) {
+        return _QuizPreparation(
+          request: QuizPracticeRequest(scope: scope, questions: questions),
+        );
+      }
       if (!outcome.success) {
         return _QuizPreparation(error: outcome.error);
       }
-      final questions = await service.repository.listPendingQuizQuestions(
-        scope,
-      );
-      if (questions.isEmpty) {
-        return const _QuizPreparation(error: '没有可开始的答题题目');
-      }
-      return _QuizPreparation(
-        request: QuizPracticeRequest(scope: scope, questions: questions),
-      );
+      return const _QuizPreparation(error: '没有可开始的答题题目');
     } catch (error) {
       return _QuizPreparation(error: '答题准备失败：$error');
     }

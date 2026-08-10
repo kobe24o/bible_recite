@@ -52,3 +52,12 @@ final class ValidatedQuizQuestion {
 
   int get length => end - start;
 }
+
+/// Result of importing portable question-only data. Existing questions are
+/// deliberately left untouched, including their local answer history.
+final class QuizBankImportResult {
+  const QuizBankImportResult({this.imported = 0, this.duplicates = 0});
+
+  final int imported;
+  final int duplicates;
+}

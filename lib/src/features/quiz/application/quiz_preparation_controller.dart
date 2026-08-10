@@ -85,7 +85,7 @@ final class QuizPreparationController extends ChangeNotifier {
     int generation,
   ) async {
     try {
-      final questions = await service.repository.listPendingQuizQuestions(
+      final questions = await service.repository.listQuizQuestionsForPractice(
         scope,
       );
       if (_disposed || generation != _generation || questions.isEmpty) {

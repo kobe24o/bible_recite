@@ -36,12 +36,6 @@ final class QuizGenerationService {
       return const QuizGenerationOutcome(error: '经文范围无效');
     }
     try {
-      final settings = await _loadSettings();
-      if (!settings.isConfigured) {
-        return QuizGenerationOutcome(
-          error: settings.missingConfigurationMessage,
-        );
-      }
       final passage = await scripture.getPassage(
         scope.translationId,
         _passageRange(scope),
@@ -64,6 +58,21 @@ final class QuizGenerationService {
           cachedVerseKeys.add((unit.start.chapter, verse));
           continue;
         }
+        if (await repository.hasQuizQuestionBankCapacity(
+          translationId: scope.translationId,
+          bookId: scope.bookId,
+          chapter: unit.start.chapter,
+          verse: verse,
+        )) {
+          await repository.requeueRandomQuizQuestion(
+            translationId: scope.translationId,
+            bookId: scope.bookId,
+            chapter: unit.start.chapter,
+            verse: verse,
+          );
+          cachedVerseKeys.add((unit.start.chapter, verse));
+          continue;
+        }
       }
       if (cachedVerseKeys.length == presentUnits.length) {
         return const QuizGenerationOutcome(skippedCachedVerses: 1);
@@ -80,6 +89,15 @@ final class QuizGenerationService {
               verse: unit.start.verse,
             ),
       ];
+      // A fully cached range remains usable without any model credentials.
+      // Only require configuration when one or more verses actually need a
+      // new question from the remote model.
+      final settings = await _loadSettings();
+      if (!settings.isConfigured) {
+        return QuizGenerationOutcome(
+          error: settings.missingConfigurationMessage,
+        );
+      }
       var questions = _validate(
         await client.generate(settings, generationVerses),
         generationVerses,

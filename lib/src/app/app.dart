@@ -10,6 +10,8 @@ import '../features/update/domain/update_status.dart';
 import '../features/update/presentation/update_available_notification.dart';
 import '../features/plans/application/plan_providers.dart';
 import '../features/plans/application/preset_plan_sync.dart';
+import '../features/quiz/application/quiz_bank_sync.dart';
+import '../features/quiz/application/quiz_providers.dart';
 import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
 
@@ -33,6 +35,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
       unawaited(_syncPresetPlansAtLaunch());
+      unawaited(_syncQuizBankAtLaunch());
     });
     _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       unawaited(_checkUpdateAtLaunch());
@@ -71,6 +74,20 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       }
     } catch (_) {
       // A plan feed failure must never delay app startup or offline use.
+    }
+  }
+
+  Future<void> _syncQuizBankAtLaunch() async {
+    try {
+      final result = await syncQuizBank(
+        repository: await ref.read(planRepositoryProvider.future),
+        client: ref.read(quizBankFeedClientProvider),
+      );
+      if (result.imported > 0) {
+        ref.read(profileRevisionProvider.notifier).refresh();
+      }
+    } catch (_) {
+      // A shared-bank failure must never delay startup or offline practice.
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -13,6 +15,9 @@ import '../../../app/empty_state_page.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../quiz/domain/quiz_result.dart';
+import '../../quiz/domain/quiz_bank_exchange.dart';
+import '../../quiz/application/quiz_bank_sync.dart';
+import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
@@ -246,6 +251,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   ),
                   const SizedBox(height: 12),
                   QuizModelSettingsCard(repository: repository),
+                  const SizedBox(height: 12),
+                  _QuizBankCard(repository: repository),
                   const SizedBox(height: 12),
                   _DailyReminderCard(repository: repository),
                   const SizedBox(height: 12),
@@ -709,6 +716,204 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       }
     }
   }
+}
+
+class _QuizBankCard extends ConsumerStatefulWidget {
+  const _QuizBankCard({required this.repository});
+
+  final SqlitePlanRepository repository;
+
+  @override
+  ConsumerState<_QuizBankCard> createState() => _QuizBankCardState();
+}
+
+class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
+  static const _jsonStoreChannel = MethodChannel(
+    'app.biblerecite/plan_json_store',
+  );
+  late Future<QuizBankSyncStatus> _status;
+  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = loadQuizBankSyncStatus(widget.repository);
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: FutureBuilder<QuizBankSyncStatus>(
+      future: _status,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        final subtitle = status == null
+            ? '正在读取题库状态'
+            : '${status.lastStatus}${status.lastSyncedAt == null ? '' : ' · ${_formatTime(status.lastSyncedAt!)}'}';
+        return Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.quiz_outlined),
+              title: const Text('共享答题题库'),
+              subtitle: Text(subtitle),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                '启动时先检查小索引；题库未变化不会下载。同步、导入只增加题目，不会上传答题记录或模型密钥。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  key: const Key('quiz-bank-import'),
+                  onPressed: _working ? null : _import,
+                  icon: const Icon(Icons.file_open_outlined),
+                  label: const Text('导入'),
+                ),
+                TextButton.icon(
+                  key: const Key('quiz-bank-export'),
+                  onPressed: _working ? null : _export,
+                  icon: const Icon(Icons.ios_share_outlined),
+                  label: const Text('导出'),
+                ),
+                FilledButton.icon(
+                  key: const Key('quiz-bank-sync'),
+                  onPressed: _working ? null : _sync,
+                  icon: _working
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_rounded),
+                  label: const Text('同步题库'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    ),
+  );
+
+  Future<void> _sync() async {
+    setState(() => _working = true);
+    try {
+      final result = await syncQuizBank(
+        repository: widget.repository,
+        client: ref.read(quizBankFeedClientProvider),
+      );
+      if (!mounted) return;
+      ref.read(profileRevisionProvider.notifier).refresh();
+      setState(() => _status = loadQuizBankSyncStatus(widget.repository));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.upToDate
+                ? '题库已是最新'
+                : '题库同步完成：新增 ${result.imported} 道，重复 ${result.duplicates} 道',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('题库同步失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _export() async {
+    try {
+      final source = QuizBankExchange.encode(
+        await widget.repository.listQuizBankQuestions(),
+      );
+      final bytes = utf8.encode(source);
+      const name = 'BibleRecite-quiz-bank.json';
+      if (Platform.isAndroid) {
+        await _jsonStoreChannel.invokeMethod<String>('saveJson', {
+          'bytes': bytes,
+          'displayName': name,
+        });
+      } else {
+        final location = await getSaveLocation(
+          suggestedName: name,
+          acceptedTypeGroups: const [
+            XTypeGroup(
+              label: 'JSON',
+              extensions: ['json'],
+              mimeTypes: ['application/json'],
+            ),
+          ],
+        );
+        if (location == null) return;
+        await XFile.fromData(
+          bytes,
+          mimeType: 'application/json',
+          name: name,
+        ).saveTo(location.path);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('答题题库已导出（不含答题记录和模型密钥）')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出题库失败：$error')));
+      }
+    }
+  }
+
+  Future<void> _import() async {
+    const jsonType = XTypeGroup(
+      label: 'JSON',
+      extensions: ['json'],
+      mimeTypes: ['application/json'],
+      uniformTypeIdentifiers: ['public.json', 'public.text'],
+      webWildCards: ['application/json'],
+    );
+    final selected = await openFile(acceptedTypeGroups: const [jsonType]);
+    if (selected == null) return;
+    setState(() => _working = true);
+    try {
+      final bytes = await selected.readAsBytes();
+      if (bytes.length > 10 * 1024 * 1024) {
+        throw const FormatException('题库 JSON 文件不能超过 10 MB');
+      }
+      final result = await widget.repository.importQuizBankQuestions(
+        QuizBankExchange.decode(utf8.decode(bytes)),
+      );
+      if (!mounted) return;
+      ref.read(profileRevisionProvider.notifier).refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已导入 ${result.imported} 道题目，重复 ${result.duplicates} 道；新题均为未作答',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导入题库失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  String _formatTime(DateTime value) =>
+      '${value.year}/${value.month.toString().padLeft(2, '0')}/${value.day.toString().padLeft(2, '0')} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 }
 
 class _DailyReminderCard extends ConsumerStatefulWidget {

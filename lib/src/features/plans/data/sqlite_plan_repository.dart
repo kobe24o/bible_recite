@@ -17,6 +17,7 @@ final class SqlitePlanRepository {
   /// Bump this when stricter question validation makes cached unanswered
   /// questions unsuitable. Answered history remains intact for statistics.
   static const quizQuestionQualityVersion = 2;
+  static const maxQuizQuestionsPerVerse = 5;
 
   SqlitePlanRepository(this._database) {
     _database.execute('PRAGMA foreign_keys = ON');
@@ -177,6 +178,28 @@ final class SqlitePlanRepository {
     ''');
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
       ON quiz_result(translation_id, book_id, chapter, verse)''');
+    _database.execute('''UPDATE quiz_result
+      SET question_id = (
+        SELECT MIN(canonical.id)
+        FROM quiz_question duplicate
+        JOIN quiz_question canonical
+          ON canonical.translation_id = duplicate.translation_id
+          AND canonical.book_id = duplicate.book_id
+          AND canonical.chapter = duplicate.chapter
+          AND canonical.verse = duplicate.verse
+          AND canonical.start_offset = duplicate.start_offset
+          AND canonical.end_offset = duplicate.end_offset
+        WHERE duplicate.id = quiz_result.question_id
+      )''');
+    _database.execute('''DELETE FROM quiz_question
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM quiz_question
+        GROUP BY translation_id, book_id, chapter, verse, start_offset, end_offset
+      )''');
+    _database.execute(
+      '''CREATE UNIQUE INDEX IF NOT EXISTS idx_quiz_question_position
+      ON quiz_question(translation_id, book_id, chapter, verse, start_offset, end_offset)''',
+    );
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
         plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
@@ -587,6 +610,66 @@ final class SqlitePlanRepository {
     return rows.map(_pendingQuestionFromRow).toList(growable: false);
   }
 
+  /// Returns at most one unanswered question per verse for a practice run.
+  /// A shared/imported bank may contain several questions for the same verse;
+  /// presenting all of them together would turn one verse into a burst of
+  /// repeated questions. Pick one locally, while leaving the other questions
+  /// available for a later practice run.
+  Future<List<PendingQuizQuestion>> listQuizQuestionsForPractice(
+    QuizScope scope,
+  ) async {
+    final pending = await listPendingQuizQuestions(scope);
+    final byVerse = <(int chapter, int verse), List<PendingQuizQuestion>>{};
+    for (final question in pending) {
+      byVerse
+          .putIfAbsent((question.chapter, question.verse), () => [])
+          .add(question);
+    }
+    final random = Random();
+    final selected = <PendingQuizQuestion>[
+      for (final questions in byVerse.values)
+        questions[random.nextInt(questions.length)],
+    ];
+    selected.sort((a, b) {
+      final chapter = a.chapter.compareTo(b.chapter);
+      if (chapter != 0) return chapter;
+      final verse = a.verse.compareTo(b.verse);
+      if (verse != 0) return verse;
+      return a.start.compareTo(b.start);
+    });
+    return selected;
+  }
+
+  /// All current-quality questions, without answer history. Used only for
+  /// personal export and cloud-bank import/sync; credentials and statistics
+  /// never leave the device.
+  Future<List<ValidatedQuizQuestion>> listQuizBankQuestions() async {
+    final rows = _database.select(
+      '''SELECT translation_id, book_id, chapter, verse, start_offset,
+        end_offset, word, part_of_speech, meaning, reference, verse_text
+      FROM quiz_question WHERE quality_version = ?
+      ORDER BY translation_id, book_id, chapter, verse, start_offset, end_offset''',
+      [quizQuestionQualityVersion],
+    );
+    return rows
+        .map(
+          (row) => ValidatedQuizQuestion(
+            reference: row['reference'] as String,
+            translationId: row['translation_id'] as String,
+            bookId: row['book_id'] as String,
+            chapter: row['chapter'] as int,
+            verse: row['verse'] as int,
+            start: row['start_offset'] as int,
+            end: row['end_offset'] as int,
+            word: row['word'] as String,
+            partOfSpeech: row['part_of_speech'] as String,
+            meaning: row['meaning'] as String,
+            verseText: row['verse_text'] as String,
+          ),
+        )
+        .toList(growable: false);
+  }
+
   /// Verses in the scope that still need a generated question, i.e. verses
   /// without any unanswered question.
   Future<List<({int chapter, int verse})>> missingQuizVerses(
@@ -614,7 +697,15 @@ final class SqlitePlanRepository {
         chapter: target.chapter,
         verse: target.verse,
       );
-      if (!pending) missing.add(target);
+      if (!pending &&
+          !await hasQuizQuestionBankCapacity(
+            translationId: scope.translationId,
+            bookId: scope.bookId,
+            chapter: target.chapter,
+            verse: target.verse,
+          )) {
+        missing.add(target);
+      }
     }
     return missing;
   }
@@ -662,6 +753,54 @@ final class SqlitePlanRepository {
     return rows.isNotEmpty;
   }
 
+  Future<bool> hasQuizQuestionBankCapacity({
+    required String translationId,
+    required String bookId,
+    required int chapter,
+    required int verse,
+  }) async {
+    final count =
+        _database
+                .select(
+                  '''SELECT COUNT(*) AS count FROM quiz_question
+          WHERE translation_id = ? AND book_id = ? AND chapter = ? AND verse = ?
+            AND quality_version = ?''',
+                  [
+                    translationId,
+                    bookId,
+                    chapter,
+                    verse,
+                    quizQuestionQualityVersion,
+                  ],
+                )
+                .single['count']
+            as int;
+    return count >= maxQuizQuestionsPerVerse;
+  }
+
+  Future<bool> requeueRandomQuizQuestion({
+    required String translationId,
+    required String bookId,
+    required int chapter,
+    required int verse,
+  }) async {
+    final rows = _database.select(
+      '''SELECT id FROM quiz_question
+      WHERE translation_id = ? AND book_id = ? AND chapter = ? AND verse = ?
+        AND quality_version = ?
+      ORDER BY RANDOM() LIMIT 1''',
+      [translationId, bookId, chapter, verse, quizQuestionQualityVersion],
+    );
+    if (rows.isEmpty) return false;
+    _database.execute(
+      '''UPDATE quiz_question
+      SET answered = 0, is_correct = NULL, answered_at = NULL
+      WHERE id = ?''',
+      [rows.single['id']],
+    );
+    return true;
+  }
+
   Future<void> saveQuizQuestions(List<ValidatedQuizQuestion> questions) async {
     if (questions.isEmpty) return;
     final now = DateTime.now().toUtc().toIso8601String();
@@ -670,7 +809,7 @@ final class SqlitePlanRepository {
       for (final question in questions) {
         _database.execute(
           '''
-          INSERT INTO quiz_question
+          INSERT OR IGNORE INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
            word, part_of_speech, meaning, reference, verse_text,
            quality_version, created_at)
@@ -698,6 +837,57 @@ final class SqlitePlanRepository {
       _database.execute('ROLLBACK');
       rethrow;
     }
+  }
+
+  /// Adds portable questions without changing the answer state of a matching
+  /// local question. New questions start unanswered so they can be practised;
+  /// existing history and accuracy remain strictly local.
+  Future<QuizBankImportResult> importQuizBankQuestions(
+    List<ValidatedQuizQuestion> questions,
+  ) async {
+    if (questions.isEmpty) return const QuizBankImportResult();
+    var imported = 0;
+    final now = DateTime.now().toUtc().toIso8601String();
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      for (final question in questions) {
+        _database.execute(
+          '''
+          INSERT OR IGNORE INTO quiz_question
+          (translation_id, book_id, chapter, verse, start_offset, end_offset,
+           word, part_of_speech, meaning, reference, verse_text,
+           quality_version, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+          [
+            question.translationId,
+            question.bookId,
+            question.chapter,
+            question.verse,
+            question.start,
+            question.end,
+            question.word,
+            question.partOfSpeech,
+            question.meaning,
+            question.reference,
+            question.verseText,
+            quizQuestionQualityVersion,
+            now,
+          ],
+        );
+        imported +=
+            _database.select('SELECT changes() AS changed').single['changed']
+                as int;
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+    return QuizBankImportResult(
+      imported: imported,
+      duplicates: questions.length - imported,
+    );
   }
 
   /// Completes one pending question and records exactly one quiz_result in a
