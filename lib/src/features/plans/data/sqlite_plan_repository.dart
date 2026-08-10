@@ -1134,17 +1134,67 @@ final class SqlitePlanRepository {
   }
 
   Future<void> resumePlan(int planId) async {
-    _database.execute(
-      "UPDATE memorization_plan SET status = 'active' WHERE id = ?",
-      [planId],
-    );
-    _database.execute(
-      '''
-      UPDATE ebbinghaus_cycle SET status = 'active'
-      WHERE status = 'paused' AND source_plan_id = ?
-    ''',
-      [planId],
-    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      final unfinished = _database.select(
+        '''SELECT day_index FROM plan_task
+        WHERE plan_id = ? AND completed = 0
+        ORDER BY day_index, id LIMIT 1''',
+        [planId],
+      );
+      if (unfinished.isNotEmpty) {
+        final firstUnfinishedDay = unfinished.single['day_index'] as int;
+        _database.execute(
+          '''UPDATE plan_task
+          SET due_date = date(?, '+' || (day_index - ?) || ' days')
+          WHERE plan_id = ? AND completed = 0''',
+          [_date(today), firstUnfinishedDay, planId],
+        );
+      }
+      final pausedCycles = _database.select(
+        '''SELECT c.id, MIN(r.interval_days) AS first_pending_interval
+        FROM ebbinghaus_cycle c
+        JOIN ebbinghaus_review r ON r.cycle_id = c.id
+        WHERE c.source_plan_id = ? AND c.status = 'paused'
+          AND r.status = 'pending'
+        GROUP BY c.id''',
+        [planId],
+      );
+      for (final cycle in pausedCycles) {
+        final cycleId = cycle['id'] as int;
+        final firstPendingInterval = cycle['first_pending_interval'] as int;
+        final rebasedDate = today.subtract(
+          Duration(days: firstPendingInterval),
+        );
+        _database.execute(
+          'UPDATE ebbinghaus_cycle SET base_date = ? WHERE id = ?',
+          [_date(rebasedDate), cycleId],
+        );
+        _database.execute(
+          '''UPDATE ebbinghaus_review
+          SET due_date = date(?, '+' || interval_days || ' days')
+          WHERE cycle_id = ? AND status = 'pending' ''',
+          [_date(rebasedDate), cycleId],
+        );
+      }
+      _database.execute(
+        "UPDATE memorization_plan SET status = 'active' WHERE id = ?",
+        [planId],
+      );
+      _database.execute(
+        '''
+        UPDATE ebbinghaus_cycle SET status = 'active'
+        WHERE status = 'paused' AND source_plan_id = ?
+      ''',
+        [planId],
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   Future<void> restartPlan(int planId, {DateTime? startDate}) async {

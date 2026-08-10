@@ -58,7 +58,12 @@ final class QuizPreparationController extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       if (outcome.success) {
         _questions = await service.repository.listPendingQuizQuestions(scope);
-        _phase = QuizPreparationPhase.ready;
+        if (_questions.isEmpty) {
+          _error = '没有可开始的答题题目';
+          _phase = QuizPreparationPhase.failed;
+        } else {
+          _phase = QuizPreparationPhase.ready;
+        }
       } else {
         _questions = const [];
         _error = outcome.error;

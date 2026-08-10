@@ -178,6 +178,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       plan: plan,
       tasks: await repository.listTasks(plan.id),
       selected: task,
+      todayQuizEntry: true,
     );
     if (!mounted || request == null) return;
     await Navigator.of(context).push(

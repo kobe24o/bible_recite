@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../plans/application/plan_providers.dart';
+import '../../quiz/application/quiz_preparation_controller.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
@@ -38,6 +39,7 @@ final class RecitationRequest {
     this.planId,
     this.next,
     this.quizScope,
+    this.todayQuizEntry = false,
   });
 
   final String translationId;
@@ -50,6 +52,7 @@ final class RecitationRequest {
   final int? planId;
   final RecitationRequest? next;
   final QuizScope? quizScope;
+  final bool todayQuizEntry;
 }
 
 final class _QuizPreparation {
@@ -97,6 +100,7 @@ class _RecitationPracticeScreenState
   int _currentVerse = 0;
   DateTime? _startedAt;
   Future<_QuizPreparation>? _preparedQuiz;
+  QuizPreparationController? _todayQuizPreparation;
   late final Future<void> _scriptureVisibilityLoading;
 
   List<VerseUnit> get _presentUnits => widget.request.units
@@ -141,7 +145,9 @@ class _RecitationPracticeScreenState
     );
     _scriptureVisibilityLoading = _loadScriptureVisibility();
     final quizScope = widget.request.quizScope;
-    if (quizScope != null && widget.request.next == null) {
+    if (widget.request.todayQuizEntry && quizScope != null) {
+      _armTodayQuiz(quizScope);
+    } else if (quizScope != null && widget.request.next == null) {
       _preparedQuiz = _prepareQuiz(quizScope);
     }
     _subscription = _recognizer.events.listen((event) {
@@ -160,6 +166,39 @@ class _RecitationPracticeScreenState
         }
       });
     });
+  }
+
+  void _armTodayQuiz(QuizScope scope) {
+    final preparation = QuizPreparationController(
+      scope: scope,
+      serviceLoader: () => ref.read(quizGenerationServiceProvider.future),
+    );
+    preparation.addListener(_onTodayQuizPreparationChanged);
+    _todayQuizPreparation = preparation;
+    preparation.arm();
+  }
+
+  void _onTodayQuizPreparationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openTodayQuiz() async {
+    final preparation = _todayQuizPreparation;
+    if (preparation == null ||
+        preparation.phase != QuizPreparationPhase.ready ||
+        preparation.questions.isEmpty) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => QuizPracticeScreen(
+          request: QuizPracticeRequest(
+            scope: preparation.scope,
+            questions: preparation.questions,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadScriptureVisibility() async {
@@ -352,6 +391,7 @@ class _RecitationPracticeScreenState
   }
 
   Future<void> _openPreparedQuiz() async {
+    if (widget.request.todayQuizEntry) return;
     if (widget.request.next != null) return;
     final scope = widget.request.quizScope;
     if (scope == null) return;
@@ -453,22 +493,48 @@ class _RecitationPracticeScreenState
       appBar: AppBar(title: Text(chinese ? '离线背诵' : 'Offline recitation')),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-        child: FilledButton.icon(
-          key: const Key('record-button'),
-          onPressed: _preparing ? null : _toggleRecording,
-          icon: _preparing
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
-          label: Text(
-            _preparing
-                ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
-                : _recording
-                ? (chinese ? '结束背诵' : 'Finish')
-                : (chinese ? '开始录音' : 'Start recording'),
-          ),
+        child: Row(
+          children: [
+            if (_todayQuizPreparation case final preparation?) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('today-quiz-entry-button'),
+                  onPressed:
+                      preparation.phase == QuizPreparationPhase.ready &&
+                          preparation.questions.isNotEmpty
+                      ? _openTodayQuiz
+                      : null,
+                  icon: const Icon(Icons.quiz_outlined),
+                  label: Text(
+                    _todayQuizButtonLabel(preparation, chinese),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              flex: _todayQuizPreparation == null ? 1 : 2,
+              child: FilledButton.icon(
+                key: const Key('record-button'),
+                onPressed: _preparing ? null : _toggleRecording,
+                icon: _preparing
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
+                label: Text(
+                  _preparing
+                      ? (chinese ? '正在准备离线模型…' : 'Preparing offline model…')
+                      : _recording
+                      ? (chinese ? '结束背诵' : 'Finish')
+                      : (chinese ? '开始录音' : 'Start recording'),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       body: Stack(
@@ -759,8 +825,26 @@ class _RecitationPracticeScreenState
     RecitationTokenKind.formatting => Theme.of(context).colorScheme.onSurface,
   };
 
+  String _todayQuizButtonLabel(
+    QuizPreparationController preparation,
+    bool chinese,
+  ) => switch (preparation.phase) {
+    QuizPreparationPhase.waiting =>
+      chinese ? '答题（5 秒后准备）' : 'Quiz (starts in 5s)',
+    QuizPreparationPhase.preparing => chinese ? '正在生成题目…' : 'Preparing quiz…',
+    QuizPreparationPhase.ready => chinese ? '开始答题' : 'Start quiz',
+    QuizPreparationPhase.failed =>
+      chinese
+          ? '答题失败：${preparation.error ?? '题目未生成'}'
+          : 'Quiz failed: ${preparation.error ?? 'No questions'}',
+    QuizPreparationPhase.idle => chinese ? '答题准备中' : 'Quiz pending',
+  };
+
   @override
   void dispose() {
+    final preparation = _todayQuizPreparation;
+    preparation?.removeListener(_onTodayQuizPreparationChanged);
+    preparation?.dispose();
     _subscription?.cancel();
     if (_ownsRecognizer) unawaited(_recognizer.dispose());
     super.dispose();

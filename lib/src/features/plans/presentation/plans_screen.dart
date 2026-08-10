@@ -39,6 +39,13 @@ final class _PresetPlansData {
   final Set<String> newPlanIds;
 }
 
+final class _PlansData {
+  const _PlansData({required this.plans, required this.tasksByPlan});
+
+  final List<MemorizationPlan> plans;
+  final Map<int, List<PlanTask>> tasksByPlan;
+}
+
 class _NewPlanBadge extends StatelessWidget {
   const _NewPlanBadge();
 
@@ -116,11 +123,12 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           repository.when(
             loading: () => const SizedBox.shrink(),
             error: (_, _) => const SizedBox.shrink(),
-            data: (repository) => FutureBuilder<List<MemorizationPlan>>(
+            data: (repository) => FutureBuilder<_PlansData>(
               key: ValueKey('$_revision-$recitationRevision'),
-              future: repository.listPlans(),
+              future: _loadPlans(repository),
               builder: (context, snapshot) {
-                final plans = snapshot.data ?? const <MemorizationPlan>[];
+                final planData = snapshot.data;
+                final plans = planData?.plans ?? const <MemorizationPlan>[];
                 if (plans.isEmpty) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -130,7 +138,12 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    for (final plan in plans) _planCard(plan, localizations),
+                    for (final plan in plans)
+                      _planCard(
+                        plan,
+                        localizations,
+                        planData?.tasksByPlan[plan.id] ?? const [],
+                      ),
                     const SizedBox(height: 18),
                     Text(
                       '我的复习计划（艾宾浩斯）',
@@ -207,6 +220,20 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<_PlansData> _loadPlans(SqlitePlanRepository repository) async {
+    final plans = await repository.listPlans();
+    final taskLists = await Future.wait([
+      for (final plan in plans) repository.listTasks(plan.id),
+    ]);
+    return _PlansData(
+      plans: plans,
+      tasksByPlan: {
+        for (var index = 0; index < plans.length; index++)
+          plans[index].id: taskLists[index],
+      },
     );
   }
 
@@ -482,16 +509,21 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     _ => '待复习',
   };
 
-  Widget _planCard(MemorizationPlan plan, AppLocalizations localizations) {
+  Widget _planCard(
+    MemorizationPlan plan,
+    AppLocalizations localizations,
+    List<PlanTask> tasks,
+  ) {
     final locked = plan.contentLocked;
     final completed =
         plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks;
+    final bookSummary = _planBookSummary(tasks, plan);
     final progress = plan.paused
-        ? '已暂停：不再推送每日计划和艾宾浩斯复习'
+        ? '$bookSummary · 已暂停：不再推送每日计划和艾宾浩斯复习'
         : locked
-        ? '${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
+        ? '$bookSummary · ${plan.totalTasks} 段经文 · ${plan.completedTasks}/${plan.totalTasks} · '
               '${_translationLabel(plan.translationId)} · ${localizations.daysCount(plan.days)}'
-        : '${plan.bookId} ${plan.startChapter}–${plan.endChapter}章 · '
+        : '$bookSummary · '
               '${plan.completedTasks}/${plan.totalTasks} · '
               '${_translationLabel(plan.translationId)}';
     final statistics = plan.recitationSessions == 0
@@ -595,6 +627,20 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         onTap: _working ? null : () => _showPlanSchedule(plan),
       ),
     );
+  }
+
+  String _planBookSummary(List<PlanTask> tasks, MemorizationPlan plan) {
+    final orderedBooks = <String>[];
+    for (final task in tasks) {
+      if (!orderedBooks.contains(task.bookId)) orderedBooks.add(task.bookId);
+    }
+    if (orderedBooks.isEmpty) orderedBooks.add(plan.bookId);
+    final catalog = ref.read(bookNameCatalogProvider);
+    final firstName = catalog.nameFor(
+      orderedBooks.first,
+      const Locale('zh', 'CN'),
+    );
+    return orderedBooks.length > 1 ? '$firstName等' : firstName;
   }
 
   String _formatDuration(int seconds) {

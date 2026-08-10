@@ -52,7 +52,7 @@ final class QuizGenerationService {
       if (presentUnits.isEmpty) {
         return const QuizGenerationOutcome(error: '该范围没有可用的经文');
       }
-      final pendingVerses = <int>[];
+      final cachedVerseKeys = <(int chapter, int verse)>{};
       for (final unit in presentUnits) {
         final verse = unit.start.verse;
         if (await repository.hasPendingQuizQuestion(
@@ -61,16 +61,16 @@ final class QuizGenerationService {
           chapter: unit.start.chapter,
           verse: verse,
         )) {
+          cachedVerseKeys.add((unit.start.chapter, verse));
           continue;
         }
-        pendingVerses.add(verse);
       }
-      if (pendingVerses.isEmpty) {
+      if (cachedVerseKeys.length == presentUnits.length) {
         return const QuizGenerationOutcome(skippedCachedVerses: 1);
       }
       final generationVerses = <QuizGenerationVerse>[
         for (final unit in presentUnits)
-          if (pendingVerses.contains(unit.start.verse))
+          if (!cachedVerseKeys.contains((unit.start.chapter, unit.start.verse)))
             QuizGenerationVerse(
               reference: _referenceFor(unit),
               text: unit.text,

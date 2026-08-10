@@ -144,8 +144,20 @@ final class FakeRepositoryForPassage implements ScriptureRepository {
   ];
 
   @override
-  Future<Passage> getPassage(String translationId, PassageRange range) =>
-      throw UnimplementedError();
+  Future<Passage> getPassage(String translationId, PassageRange range) async =>
+      Passage(
+        range: range,
+        translationId: translationId,
+        units: [
+          VerseUnit(
+            translationId: translationId,
+            start: range.start,
+            end: range.start,
+            text: 'For God so loved the world',
+            status: SourceTextStatus.present,
+          ),
+        ],
+      );
 
   @override
   Future<SelectedPassage> getSelection(

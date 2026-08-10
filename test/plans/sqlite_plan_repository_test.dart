@@ -430,8 +430,62 @@ void main() {
 
     await repository.resumePlan(id);
 
-    expect(await repository.dueTasks(DateTime(2026, 7, 15)), hasLength(1));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    expect(await repository.dueTasks(today), hasLength(1));
     expect((await repository.listPlans()).single.paused, isFalse);
+  });
+
+  test('resuming a plan reschedules unfinished tasks from today', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    final id = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '已暂停计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2020, 1, 1),
+        endDate: DateTime(2020, 1, 5),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+          NewPlanTask(
+            dayIndex: 2,
+            startChapter: 3,
+            startVerse: 17,
+            endChapter: 3,
+            endVerse: 17,
+          ),
+          NewPlanTask(
+            dayIndex: 4,
+            startChapter: 3,
+            startVerse: 18,
+            endChapter: 3,
+            endVerse: 18,
+          ),
+        ],
+      ),
+    );
+    final tasks = await repository.listTasks(id);
+    await repository.setTaskCompleted(tasks.first.id, true);
+    await repository.pausePlan(id);
+
+    await repository.resumePlan(id);
+
+    final resumed = await repository.listTasks(id);
+    expect(resumed[0].completed, isTrue);
+    expect(resumed[1].dueDate, startOfToday);
+    expect(resumed[2].dueDate, startOfToday.add(const Duration(days: 2)));
+    expect(await repository.dueTasks(startOfToday), hasLength(1));
   });
 
   test(

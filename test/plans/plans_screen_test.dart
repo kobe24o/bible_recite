@@ -184,6 +184,68 @@ void main() {
     expect(find.text('第 2 天'), findsOneWidget);
   });
 
+  testWidgets('summarizes custom multi-book plans with Chinese book names', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.createPlan(
+      NewMemorizationPlan(
+        title: '多卷摘要计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 1,
+        endChapter: 3,
+        startDate: DateTime(2026, 7, 25),
+        endDate: DateTime(2026, 7, 26),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            bookId: 'JHN',
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 5,
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            bookId: 'GEN',
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 3,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PlansScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('约翰福音等'), findsOneWidget);
+    expect(find.textContaining('JHN'), findsNothing);
+    expect(find.textContaining('1–3章'), findsNothing);
+  });
+
   testWidgets('keeps read and recite actions after a task is completed', (
     tester,
   ) async {

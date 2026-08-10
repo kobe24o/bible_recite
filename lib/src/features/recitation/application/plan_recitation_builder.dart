@@ -9,6 +9,7 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   required MemorizationPlan plan,
   required List<PlanTask> tasks,
   required PlanTask selected,
+  bool todayQuizEntry = false,
 }) async {
   final pending =
       tasks
@@ -53,6 +54,7 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
       // Every screen in the chain needs the scope so the final task can enter
       // the quiz. Only that final screen starts preparation and reports errors.
       quizScope: quizScope,
+      todayQuizEntry: todayQuizEntry,
     );
   }
   return next;

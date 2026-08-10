@@ -56,6 +56,24 @@ void main() {
     status: SourceTextStatus.present,
   );
 
+  VerseUnit unitAt(int chapter, int verse) => VerseUnit(
+    translationId: 'cmn-cu89s',
+    start: (
+      canonId: CanonId.protestant66,
+      osisBookId: 'JHN',
+      chapter: chapter,
+      verse: verse,
+    ),
+    end: (
+      canonId: CanonId.protestant66,
+      osisBookId: 'JHN',
+      chapter: chapter,
+      verse: verse,
+    ),
+    text: '神爱世人',
+    status: SourceTextStatus.present,
+  );
+
   _FakeScripture scripture() => _FakeScripture([unit(16), unit(17)]);
 
   test('generates and saves validated questions', () async {
@@ -137,6 +155,83 @@ void main() {
     expect(outcome.generated, 0);
     expect(calls, 0);
   });
+
+  test(
+    'excludes only the cached verse when equal verse numbers span chapters',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      String? prompt;
+      final client = QuizModelClient(
+        httpClient: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          final messages = body['messages']! as List<Object?>;
+          prompt =
+              ((messages.last! as Map<String, Object?>)['content'] as String);
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': jsonEncode([
+                      {
+                        'reference': '4:16',
+                        'word': '世人',
+                        'start': 2,
+                        'end': 4,
+                        'length': 2,
+                        'partOfSpeech': '名词',
+                        'meaning': '世人：世上的人',
+                      },
+                    ]),
+                  },
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: _FakeScripture([unitAt(3, 16), unitAt(4, 16)]),
+        client: client,
+        settingsLoader: () async => settings,
+      );
+      const crossChapterScope = QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 4,
+        endVerse: 16,
+      );
+
+      final outcome = await service.prepare(crossChapterScope);
+
+      expect(outcome.success, isTrue, reason: outcome.error);
+      expect(prompt, isNot(contains('3:16')));
+      expect(prompt, contains('4:16'));
+      expect(
+        await repository.listPendingQuizQuestions(crossChapterScope),
+        hasLength(2),
+      );
+    },
+  );
 
   test(
     'regenerates unanswered questions from an older quality version',

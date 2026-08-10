@@ -101,6 +101,29 @@ void main() {
     final restarted = await repository.listEbbinghausReviewsForPlan(planId);
     expect(restarted.where((review) => review.status == 'pending'), isNotEmpty);
   });
+
+  test('resuming a plan reschedules its pending reviews from today', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2020, 1, 1, 9);
+    final planId = await _plan(repository, base, enabled: true);
+    final source = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base, planId: planId),
+    );
+    await repository.processEbbinghausResult(resultId: source);
+    await repository.pausePlan(planId);
+
+    await repository.resumePlan(planId);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final pending = (await repository.listEbbinghausReviewsForPlan(
+      planId,
+    )).where((review) => review.status == 'pending').toList(growable: false);
+    expect(pending.first.dueDate, today);
+    expect(pending[1].dueDate, today.add(const Duration(days: 1)));
+    expect(pending[2].dueDate, today.add(const Duration(days: 3)));
+  });
 }
 
 Future<int> _plan(

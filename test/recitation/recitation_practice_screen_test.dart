@@ -12,6 +12,7 @@ import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/quiz/application/quiz_generation_service.dart';
 import 'package:bible_recite/src/features/quiz/application/quiz_providers.dart';
 import 'package:bible_recite/src/features/quiz/data/quiz_model_client.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_model_settings.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:flutter/material.dart';
@@ -541,6 +542,155 @@ void main() {
       }
       expect(find.textContaining('缺少答题模型配置：API Key'), findsNothing);
       expect(find.byKey(const Key('next-verse-button')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'today quiz entry shows preparation failure in its disabled button after five seconds',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            quizGenerationServiceProvider.overrideWith(
+              (ref) async => QuizGenerationService(
+                repository: repository,
+                scripture: FakeRepositoryForPassage(),
+                client: QuizModelClient(),
+                settingsLoader: () async => const QuizModelSettings(
+                  baseUrl: 'https://example.test/v1',
+                  model: 'test-model',
+                  apiKey: '',
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '神爱世人')],
+                todayQuizEntry: true,
+                quizScope: const QuizScope(
+                  translationId: 'cmn-cu89s',
+                  bookId: 'JHN',
+                  startChapter: 3,
+                  startVerse: 16,
+                  endChapter: 3,
+                  endVerse: 16,
+                ),
+              ),
+              recognizer: FakeRecognizer(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<OutlinedButton>(
+        find.byKey(const Key('today-quiz-entry-button')),
+      );
+      expect(button.onPressed, isNull);
+      expect(find.textContaining('答题失败：缺少答题模型配置'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'today quiz entry opens cached questions and returns to recitation',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await repository.saveQuizQuestions(const [
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            quizGenerationServiceProvider.overrideWith(
+              (ref) async => QuizGenerationService(
+                repository: repository,
+                scripture: FakeRepositoryForPassage(),
+                client: QuizModelClient(),
+                settingsLoader: () async => const QuizModelSettings(
+                  baseUrl: 'https://example.test/v1',
+                  model: 'test-model',
+                  apiKey: 'test-key',
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: RecitationPracticeScreen(
+              request: RecitationRequest(
+                translationId: 'cmn-cu89s',
+                bookId: 'JHN',
+                chapter: 3,
+                mode: RecitationMode.verse,
+                units: [_unit(16, '神爱世人')],
+                todayQuizEntry: true,
+                quizScope: const QuizScope(
+                  translationId: 'cmn-cu89s',
+                  bookId: 'JHN',
+                  startChapter: 3,
+                  startVerse: 16,
+                  endChapter: 3,
+                  endVerse: 16,
+                ),
+              ),
+              recognizer: FakeRecognizer(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      final button = tester.widget<OutlinedButton>(
+        find.byKey(const Key('today-quiz-entry-button')),
+      );
+      expect(button.onPressed, isNotNull);
+
+      await tester.tap(find.byKey(const Key('today-quiz-entry-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('经文答题'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('record-button')), findsOneWidget);
     },
   );
 }
