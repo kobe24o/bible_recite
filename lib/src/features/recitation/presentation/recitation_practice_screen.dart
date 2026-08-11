@@ -413,6 +413,14 @@ class _RecitationPracticeScreenState
       for (final question in await repository.listQuizQuestionsForPractice(
         scope,
       )) {
+        if (!scope.containsVerse(
+          translationId: question.translationId,
+          bookId: question.bookId,
+          chapter: question.chapter,
+          verse: question.verse,
+        )) {
+          continue;
+        }
         if (ids.add(question.id)) questions.add(question);
       }
     }

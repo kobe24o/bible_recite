@@ -92,6 +92,17 @@ final class QuizPreparationController extends ChangeNotifier {
       for (final scope in _effectiveScopes) {
         for (final question
             in await service.repository.listQuizQuestionsForPractice(scope)) {
+          // The repository query is range-limited as well. Keep this guard at
+          // the entry boundary so an old/corrupt cache can never surface a
+          // question from outside the plan passage.
+          if (!scope.containsVerse(
+            translationId: question.translationId,
+            bookId: question.bookId,
+            chapter: question.chapter,
+            verse: question.verse,
+          )) {
+            continue;
+          }
           if (ids.add(question.id)) questions.add(question);
         }
       }

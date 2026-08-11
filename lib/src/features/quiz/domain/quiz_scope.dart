@@ -50,6 +50,44 @@ final class QuizScope {
 
   bool get isSingleChapter => startChapter == endChapter;
 
+  /// Whether one exact verse belongs to this scope.  Keep this check close to
+  /// the scope model so generation, cached-question lookup and UI entry flows
+  /// all apply exactly the same range semantics.
+  bool containsVerse({
+    required String translationId,
+    required String bookId,
+    required int chapter,
+    required int verse,
+  }) {
+    if (translationId != this.translationId || bookId != this.bookId) {
+      return false;
+    }
+    final afterStart =
+        chapter > startChapter ||
+        (chapter == startChapter && verse >= startVerse);
+    final beforeEnd =
+        chapter < endChapter || (chapter == endChapter && verse <= endVerse);
+    return afterStart && beforeEnd;
+  }
+
+  /// A generation unit is usable only when it is completely contained in the
+  /// requested passage.  Some source editions have a unit spanning multiple
+  /// verses; retaining a boundary-spanning unit would show or generate a
+  /// question for text outside the selected plan range.
+  bool containsUnit(VerseUnit unit) =>
+      containsVerse(
+        translationId: unit.translationId,
+        bookId: unit.start.osisBookId,
+        chapter: unit.start.chapter,
+        verse: unit.start.verse,
+      ) &&
+      containsVerse(
+        translationId: unit.translationId,
+        bookId: unit.end.osisBookId,
+        chapter: unit.end.chapter,
+        verse: unit.end.verse,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is QuizScope &&

@@ -81,6 +81,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   late bool _ebbinghausEnabled;
+  late final ScrollController _passageScrollController;
   String? _error;
 
   @override
@@ -92,6 +93,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
     _ebbinghausEnabled = widget.initial.ebbinghausEnabled;
+    _passageScrollController = ScrollController();
   }
 
   @override
@@ -99,116 +101,127 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
     return AlertDialog(
       title: Text(chinese ? '编辑背诵计划' : 'Edit memorization plan'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              key: const Key('plan-title'),
-              controller: _title,
-              readOnly: widget.contentLocked,
-              decoration: InputDecoration(
-                labelText: chinese ? '计划名称' : 'Plan name',
-                border: const OutlineInputBorder(),
+      content: Scrollbar(
+        controller: _passageScrollController,
+        thumbVisibility: _passages.length > 100,
+        child: SingleChildScrollView(
+          controller: _passageScrollController,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('plan-title'),
+                controller: _title,
+                readOnly: widget.contentLocked,
+                decoration: InputDecoration(
+                  labelText: chinese ? '计划名称' : 'Plan name',
+                  border: const OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('plan-translation'),
-              initialValue: _translationId,
-              decoration: InputDecoration(
-                labelText: chinese ? '背诵版本' : 'Translation',
-                border: const OutlineInputBorder(),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: const Key('plan-translation'),
+                initialValue: _translationId,
+                decoration: InputDecoration(
+                  labelText: chinese ? '背诵版本' : 'Translation',
+                  border: const OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'cmn-cu89s', child: Text('简体中文')),
+                  DropdownMenuItem(value: 'cmn-cu89t', child: Text('繁體中文')),
+                  DropdownMenuItem(value: 'eng-web', child: Text('English')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _translationId = value);
+                },
               ),
-              items: const [
-                DropdownMenuItem(value: 'cmn-cu89s', child: Text('简体中文')),
-                DropdownMenuItem(value: 'cmn-cu89t', child: Text('繁體中文')),
-                DropdownMenuItem(value: 'eng-web', child: Text('English')),
+              const SizedBox(height: 12),
+              if (widget.contentLocked)
+                Container(
+                  key: const Key('locked-plan-content-note'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    chinese
+                        ? '经卷、章节和节数由发布方提供，不能在本机修改。'
+                        : 'Books and passage ranges are locked by the publisher.',
+                  ),
+                )
+              else ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(chinese ? '背诵经文' : 'Passages'),
+                ),
+                const SizedBox(height: 6),
+                for (final passage in _passages)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${_bookName(passage.bookId)} ${passage.startChapter}:${passage.startVerse}–${passage.endChapter}:${passage.endVerse}',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () =>
+                          setState(() => _passages.remove(passage)),
+                    ),
+                  ),
+                OutlinedButton.icon(
+                  key: const Key('add-plan-passage'),
+                  onPressed: widget.onAddPassages == null ? null : _addPassages,
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(chinese ? '添加经文' : 'Add passage'),
+                ),
               ],
-              onChanged: (value) {
-                if (value != null) setState(() => _translationId = value);
-              },
-            ),
-            const SizedBox(height: 12),
-            if (widget.contentLocked)
-              Container(
-                key: const Key('locked-plan-content-note'),
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
+              const SizedBox(height: 8),
+              ListTile(
+                key: const Key('plan-start-date'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(chinese ? '开始日期' : 'Start date'),
+                subtitle: Text(_format(_startDate)),
+                trailing: const Icon(Icons.calendar_month_outlined),
+                onTap: () => _pickDate(start: true),
+              ),
+              ListTile(
+                key: const Key('plan-end-date'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(chinese ? '结束日期' : 'End date'),
+                subtitle: Text(_format(_endDate)),
+                trailing: const Icon(Icons.event_available_outlined),
+                onTap: () => _pickDate(start: false),
+              ),
+              Text(chinese ? '共 $_days 天' : '$_days days'),
+              SwitchListTile(
+                key: const Key('plan-ebbinghaus-enabled'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(chinese ? '开启艾宾浩斯复习' : 'Enable Ebbinghaus reviews'),
+                subtitle: Text(
                   chinese
-                      ? '经卷、章节和节数由发布方提供，不能在本机修改。'
-                      : 'Books and passage ranges are locked by the publisher.',
+                      ? '仅本计划背诵通过后安排复习'
+                      : 'Only passed recitations in this plan are scheduled',
                 ),
-              )
-            else ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(chinese ? '背诵经文' : 'Passages'),
+                value: _ebbinghausEnabled,
+                onChanged: (value) =>
+                    setState(() => _ebbinghausEnabled = value),
               ),
-              const SizedBox(height: 6),
-              for (final passage in _passages)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${_bookName(passage.bookId)} ${passage.startChapter}:${passage.startVerse}–${passage.endChapter}:${passage.endVerse}',
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _passages.remove(passage)),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
-              OutlinedButton.icon(
-                key: const Key('add-plan-passage'),
-                onPressed: widget.onAddPassages == null ? null : _addPassages,
-                icon: const Icon(Icons.add_rounded),
-                label: Text(chinese ? '添加经文' : 'Add passage'),
-              ),
             ],
-            const SizedBox(height: 8),
-            ListTile(
-              key: const Key('plan-start-date'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(chinese ? '开始日期' : 'Start date'),
-              subtitle: Text(_format(_startDate)),
-              trailing: const Icon(Icons.calendar_month_outlined),
-              onTap: () => _pickDate(start: true),
-            ),
-            ListTile(
-              key: const Key('plan-end-date'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(chinese ? '结束日期' : 'End date'),
-              subtitle: Text(_format(_endDate)),
-              trailing: const Icon(Icons.event_available_outlined),
-              onTap: () => _pickDate(start: false),
-            ),
-            Text(chinese ? '共 $_days 天' : '$_days days'),
-            SwitchListTile(
-              key: const Key('plan-ebbinghaus-enabled'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(chinese ? '开启艾宾浩斯复习' : 'Enable Ebbinghaus reviews'),
-              subtitle: Text(
-                chinese
-                    ? '仅本计划背诵通过后安排复习'
-                    : 'Only passed recitations in this plan are scheduled',
-              ),
-              value: _ebbinghausEnabled,
-              onChanged: (value) => setState(() => _ebbinghausEnabled = value),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
       actions: [
@@ -302,6 +315,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
 
   @override
   void dispose() {
+    _passageScrollController.dispose();
     _title.dispose();
     super.dispose();
   }

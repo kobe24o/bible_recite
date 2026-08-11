@@ -52,6 +52,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     ref.watch(recitationDataRevisionProvider);
+    final quizBankRevision = ref.watch(quizBankRevisionProvider);
     final name = ref.watch(profileNameProvider).asData?.value ?? '';
     final repository = ref.watch(planRepositoryProvider);
     final locale = Localizations.localeOf(context);
@@ -256,7 +257,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 12),
                   QuizModelSettingsCard(repository: repository),
                   const SizedBox(height: 12),
-                  _QuizBankCard(repository: repository),
+                  _QuizBankCard(
+                    key: ValueKey(quizBankRevision),
+                    repository: repository,
+                  ),
                   const SizedBox(height: 12),
                   _DailyReminderCard(repository: repository),
                   const SizedBox(height: 12),
@@ -723,7 +727,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 }
 
 class _QuizBankCard extends ConsumerStatefulWidget {
-  const _QuizBankCard({required this.repository});
+  const _QuizBankCard({required this.repository, super.key});
 
   final SqlitePlanRepository repository;
 
@@ -735,24 +739,30 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
   static const _jsonStoreChannel = MethodChannel(
     'app.biblerecite/plan_json_store',
   );
-  late Future<QuizBankSyncStatus> _status;
+  late Future<_QuizBankCardData> _data;
   bool _working = false;
 
   @override
   void initState() {
     super.initState();
-    _status = loadQuizBankSyncStatus(widget.repository);
+    _data = _loadData();
   }
+
+  Future<_QuizBankCardData> _loadData() async => _QuizBankCardData(
+    status: await loadQuizBankSyncStatus(widget.repository),
+    questionCount: await widget.repository.countQuizBankQuestions(),
+  );
 
   @override
   Widget build(BuildContext context) => Card(
-    child: FutureBuilder<QuizBankSyncStatus>(
-      future: _status,
+    child: FutureBuilder<_QuizBankCardData>(
+      future: _data,
       builder: (context, snapshot) {
-        final status = snapshot.data;
+        final data = snapshot.data;
+        final status = data?.status;
         final subtitle = status == null
             ? '正在读取题库状态'
-            : '${status.lastStatus}${status.lastSyncedAt == null ? '' : ' · ${_formatTime(status.lastSyncedAt!)}'}';
+            : '${status.lastStatus}${status.lastSyncedAt == null ? '' : ' · ${_formatTime(status.lastSyncedAt!)}'} · 本机题库 ${data!.questionCount} 道';
         return Column(
           children: [
             ListTile(
@@ -818,8 +828,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
         client: ref.read(quizBankFeedClientProvider),
       );
       if (!mounted) return;
-      ref.read(profileRevisionProvider.notifier).refresh();
-      setState(() => _status = loadQuizBankSyncStatus(widget.repository));
+      ref.read(quizBankRevisionProvider.notifier).refresh();
+      setState(() => _data = _loadData());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -903,7 +913,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           ),
         ),
       );
-      if (mounted) ref.read(profileRevisionProvider.notifier).refresh();
+      if (mounted) ref.read(quizBankRevisionProvider.notifier).refresh();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -924,11 +934,14 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
       const name = 'BibleRecite-quiz-bank.json';
       late final String savedLocation;
       if (Platform.isAndroid) {
-        final uri = await _jsonStoreChannel.invokeMethod<String>('saveJson', {
+        await _jsonStoreChannel.invokeMethod<String>('saveJson', {
           'bytes': bytes,
           'displayName': name,
         });
-        savedLocation = uri ?? 'Download/BibleRecite/$name';
+        // Android returns a content URI for storage access. Present the same
+        // friendly folder path used by plan export so users know where to
+        // find both kinds of backup files.
+        savedLocation = 'Download/BibleRecite/$name';
       } else {
         final location = await getSaveLocation(
           suggestedName: name,
@@ -985,7 +998,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
         validation.accepted,
       );
       if (!mounted) return;
-      ref.read(profileRevisionProvider.notifier).refresh();
+      ref.read(quizBankRevisionProvider.notifier).refresh();
+      setState(() => _data = _loadData());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -1007,6 +1021,13 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
 
   String _formatTime(DateTime value) =>
       '${value.year}/${value.month.toString().padLeft(2, '0')}/${value.day.toString().padLeft(2, '0')} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+}
+
+final class _QuizBankCardData {
+  const _QuizBankCardData({required this.status, required this.questionCount});
+
+  final QuizBankSyncStatus status;
+  final int questionCount;
 }
 
 class _DailyReminderCard extends ConsumerStatefulWidget {

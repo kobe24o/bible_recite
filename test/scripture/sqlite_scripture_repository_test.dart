@@ -33,6 +33,32 @@ void main() {
     },
   );
 
+  test('keeps Genesis 11:6–12:7 as its exact 34-verse passage', () async {
+    final passage = await repository.getPassage(
+      'cmn-cu89s',
+      PassageRange(
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'GEN',
+          chapter: 11,
+          verse: 6,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'GEN',
+          chapter: 12,
+          verse: 7,
+        ),
+      ),
+    );
+
+    expect(passage.units, hasLength(34));
+    expect(passage.units.first.start.chapter, 11);
+    expect(passage.units.first.start.verse, 6);
+    expect(passage.units.last.end.chapter, 12);
+    expect(passage.units.last.end.verse, 7);
+  });
+
   test('parallel repository returns an approved cross-chapter group', () async {
     final range = PassageRange(
       start: (

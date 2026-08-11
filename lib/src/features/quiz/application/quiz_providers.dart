@@ -14,6 +14,19 @@ final quizBankFeedClientProvider = Provider<QuizBankFeedClient>(
   (ref) => QuizBankFeedClient(),
 );
 
+/// Refreshes widgets that display local question-bank state after a background
+/// sync, import, or export-independent bank mutation.
+final quizBankRevisionProvider = NotifierProvider<QuizBankRevision, int>(
+  QuizBankRevision.new,
+);
+
+final class QuizBankRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void refresh() => state++;
+}
+
 final quizGenerationServiceProvider = FutureProvider<QuizGenerationService>((
   ref,
 ) async {

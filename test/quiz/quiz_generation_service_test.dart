@@ -416,16 +416,114 @@ void main() {
       expect(fake.requestedRanges.map((range) => range.start.chapter), [3, 5]);
     },
   );
+
+  test(
+    'strictly filters an exact multi-chapter plan range before generation',
+    () async {
+      const planScope = QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'GEN',
+        startChapter: 11,
+        startVerse: 6,
+        endChapter: 12,
+        endVerse: 7,
+      );
+      VerseUnit genesisUnit(int chapter, int verse) => VerseUnit(
+        translationId: 'cmn-cu89s',
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'GEN',
+          chapter: chapter,
+          verse: verse,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: 'GEN',
+          chapter: chapter,
+          verse: verse,
+        ),
+        text: '神爱世人',
+        status: SourceTextStatus.present,
+      );
+      String? prompt;
+      final client = QuizModelClient(
+        httpClient: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          final messages = body['messages']! as List<Object?>;
+          prompt =
+              ((messages.last! as Map<String, Object?>)['content'] as String);
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': jsonEncode([
+                      for (final reference in ['11:6', '11:32', '12:1', '12:7'])
+                        {
+                          'reference': reference,
+                          'word': '世人',
+                          'start': 2,
+                          'end': 4,
+                          'length': 2,
+                          'partOfSpeech': '名词',
+                          'meaning': '世人：世上的人',
+                        },
+                    ]),
+                  },
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      final service = QuizGenerationService(
+        repository: repository,
+        // Deliberately simulate an over-wide source result. The service must
+        // still use only 创世记 11:6–12:7.
+        scripture: _FakeScripture([
+          genesisUnit(11, 5),
+          genesisUnit(11, 6),
+          genesisUnit(11, 32),
+          genesisUnit(12, 1),
+          genesisUnit(12, 7),
+          genesisUnit(12, 8),
+        ], ignoreRequestedRange: true),
+        client: client,
+        settingsLoader: () async => settings,
+      );
+
+      final outcome = await service.prepare(planScope);
+
+      expect(outcome.success, isTrue, reason: outcome.error);
+      expect(prompt, contains('11:6'));
+      expect(prompt, contains('12:7'));
+      expect(prompt, isNot(contains('11:5')));
+      expect(prompt, isNot(contains('12:8')));
+      final questions = await repository.listQuizQuestionsForPractice(
+        planScope,
+      );
+      expect(
+        questions.map((question) => '${question.chapter}:${question.verse}'),
+        ['11:6', '11:32', '12:1', '12:7'],
+      );
+    },
+  );
 }
 
 final class _FakeScripture implements ScriptureRepository {
-  _FakeScripture(this.units);
+  _FakeScripture(this.units, {this.ignoreRequestedRange = false});
   final List<VerseUnit> units;
+  final bool ignoreRequestedRange;
   final List<PassageRange> requestedRanges = [];
 
   @override
   Future<Passage> getPassage(String translationId, PassageRange range) async {
     requestedRanges.add(range);
+    if (ignoreRequestedRange) {
+      return Passage(range: range, translationId: translationId, units: units);
+    }
     final visible = units
         .where((unit) {
           if (unit.start.osisBookId != range.start.osisBookId) return false;

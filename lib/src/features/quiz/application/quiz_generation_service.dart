@@ -58,7 +58,13 @@ final class QuizGenerationService {
           _passageRange(scope),
         );
         for (final unit in passage.units) {
-          if (unit.status != SourceTextStatus.present) continue;
+          // Re-check locally even though the scripture repository is asked
+          // for this range. This is important for bridged source units and
+          // protects against a repository/cache returning a wider passage.
+          if (unit.status != SourceTextStatus.present ||
+              !scope.containsUnit(unit)) {
+            continue;
+          }
           final key = (
             unit.start.osisBookId,
             unit.start.chapter,

@@ -702,6 +702,16 @@ final class SqlitePlanRepository {
         .toList(growable: false);
   }
 
+  /// Number of current-quality questions stored locally, including questions
+  /// already answered. This is the personal-bank size shown in “我的”.
+  Future<int> countQuizBankQuestions() async =>
+      _database.select(
+            'SELECT COUNT(*) AS count FROM quiz_question '
+            'WHERE quality_version = ?',
+            [quizQuestionQualityVersion],
+          ).single['count']
+          as int;
+
   /// Verses in the scope that still need a generated question, i.e. verses
   /// without any unanswered question.
   Future<List<({int chapter, int verse})>> missingQuizVerses(

@@ -80,14 +80,15 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
 
   Future<void> _syncQuizBankAtLaunch() async {
     try {
-      final result = await syncQuizBank(
+      await syncQuizBank(
         repository: await ref.read(planRepositoryProvider.future),
         scripture: await ref.read(scriptureRepositoryProvider.future),
         client: ref.read(quizBankFeedClientProvider),
       );
-      if (result.imported > 0) {
-        ref.read(profileRevisionProvider.notifier).refresh();
-      }
+      // The sync is intentionally silent at launch, but “我的” must still
+      // show the latest status and local-bank count even when no new question
+      // was needed.
+      ref.read(quizBankRevisionProvider.notifier).refresh();
     } catch (_) {
       // A shared-bank failure must never delay startup or offline practice.
     }
