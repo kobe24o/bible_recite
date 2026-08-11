@@ -80,17 +80,37 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
 
   Future<void> _syncQuizBankAtLaunch() async {
     try {
-      await syncQuizBank(
-        repository: await ref.read(planRepositoryProvider.future),
-        scripture: await ref.read(scriptureRepositoryProvider.future),
-        client: ref.read(quizBankFeedClientProvider),
-      );
-      // The sync is intentionally silent at launch, but “我的” must still
-      // show the latest status and local-bank count even when no new question
-      // was needed.
-      ref.read(quizBankRevisionProvider.notifier).refresh();
+      final repository = await ref.read(planRepositoryProvider.future);
+      final scripture = await ref.read(scriptureRepositoryProvider.future);
+      // The release pipeline packages the newest validated bank. Import it
+      // first so offline users receive new questions immediately.
+      try {
+        await importBundledQuizBank(
+          repository: repository,
+          scripture: scripture,
+        );
+      } catch (_) {
+        // A malformed/missing bundled file must not block online sync.
+      } finally {
+        // The packaged import may add questions while the device is offline.
+        // Refresh “我的” even when the following network check cannot run.
+        ref.read(quizBankRevisionProvider.notifier).refresh();
+      }
+      try {
+        await syncQuizBank(
+          repository: repository,
+          scripture: scripture,
+          client: ref.read(quizBankFeedClientProvider),
+        );
+        // The sync is intentionally silent at launch, but “我的” must still
+        // show the latest status and local-bank count even when no new question
+        // was needed.
+        ref.read(quizBankRevisionProvider.notifier).refresh();
+      } catch (_) {
+        // A shared-bank failure must never delay startup or offline practice.
+      }
     } catch (_) {
-      // A shared-bank failure must never delay startup or offline practice.
+      // Repository initialization must never delay startup or offline use.
     }
   }
 

@@ -82,6 +82,143 @@ void main() {
       expect((await repository.listQuizBankQuestions()), hasLength(1));
     },
   );
+
+  test(
+    'checks every mirror, selects the highest revision and skips stale shards',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final staleBank = QuizBankExchange.encode(const [
+        QuizBankQuestion(
+          reference: '约翰福音 3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 0,
+          end: 1,
+          word: '神',
+          partOfSpeech: '名词',
+          meaning: '神明',
+        ),
+      ]);
+      final newestBank = QuizBankExchange.encode(const [
+        QuizBankQuestion(
+          reference: '约翰福音 3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+        ),
+      ]);
+      final staleIndex = await _indexFor(revision: 4, bank: staleBank);
+      final newestIndex = await _indexFor(revision: 16, bank: newestBank);
+      final checkedIndexes = <String>{};
+      final downloadedShards = <String>[];
+      final client = QuizBankFeedClient(
+        loader: (uri, _) async {
+          if (uri.path.endsWith(quizBankIndexPath)) {
+            checkedIndexes.add(uri.host);
+            return QuizBankFeedResponse(
+              statusCode: 200,
+              text: uri.host == 'gcore.jsdelivr.net' ? staleIndex : newestIndex,
+              etag: '"${uri.host}"',
+            );
+          }
+          downloadedShards.add(uri.host);
+          // Simulate a stale Fastly shard even though its index is current.
+          // The SHA check must make the client continue to cdn.jsdelivr.net.
+          return QuizBankFeedResponse(
+            statusCode: 200,
+            text: uri.host == 'fastly.jsdelivr.net' ? staleBank : newestBank,
+          );
+        },
+      );
+
+      final result = await syncQuizBank(
+        repository: repository,
+        scripture: _FakeScripture(),
+        client: client,
+      );
+
+      expect(result.imported, 1);
+      expect(result.downloadedShards, 1);
+      expect(checkedIndexes, {
+        'fastly.jsdelivr.net',
+        'cdn.jsdelivr.net',
+        'raw.githubusercontent.com',
+        'gcore.jsdelivr.net',
+      });
+      expect(downloadedShards, ['fastly.jsdelivr.net', 'cdn.jsdelivr.net']);
+      expect(await repository.getSetting('quiz_bank_revision', ''), '16');
+      expect((await repository.listQuizBankQuestions()).single.word, '世人');
+    },
+  );
+
+  test('imports the latest packaged bank once for offline practice', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final bank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+      ),
+    ]);
+    final index = await _indexFor(revision: 16, bank: bank);
+    Future<String> loader(String path) async => switch (path) {
+      bundledQuizBankIndexAsset => index,
+      bundledQuizBankShardAsset => bank,
+      _ => throw StateError('unknown asset $path'),
+    };
+
+    final first = await importBundledQuizBank(
+      repository: repository,
+      scripture: _FakeScripture(),
+      assetLoader: loader,
+    );
+    final second = await importBundledQuizBank(
+      repository: repository,
+      scripture: _FakeScripture(),
+      assetLoader: loader,
+    );
+
+    expect(first.imported, 1);
+    expect(second.imported, 0);
+    expect(await repository.getSetting('quiz_bank_revision', ''), '16');
+    expect((await repository.listQuizBankQuestions()), hasLength(1));
+  });
+}
+
+Future<String> _indexFor({required int revision, required String bank}) async {
+  final digest = await Sha256().hash(utf8.encode(bank));
+  final sha256 = digest.bytes
+      .map((item) => item.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return jsonEncode({
+    'format': 'bible-recite-quiz-bank-index',
+    'version': 1,
+    'revision': revision,
+    'shards': [
+      {
+        'path': 'quiz-bank.json',
+        'sha256': sha256,
+        'bytes': utf8.encode(bank).length,
+      },
+    ],
+  });
 }
 
 final class _FakeScripture implements ScriptureRepository {
