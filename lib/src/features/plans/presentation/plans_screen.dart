@@ -701,7 +701,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('计划 JSON 已保存至 下载/BibleRecite/$name')),
+      SnackBar(content: Text('计划 JSON 已保存至 Download/BibleRecite/$name')),
     );
   }
 

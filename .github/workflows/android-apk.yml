@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "题库改为仅保存题目元数据，答题从本机圣经读取原文并校验导入；清理解释中的答案词前缀。"
+              --notes "题库与计划 JSON 导出位置统一显示为 Download/BibleRecite。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "题库改为仅保存题目元数据，答题从本机圣经读取原文并校验导入；清理解释中的答案词前缀。" \
+              --release-notes "题库与计划 JSON 导出位置统一显示为 Download/BibleRecite。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

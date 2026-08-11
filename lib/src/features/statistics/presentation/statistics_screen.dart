@@ -928,7 +928,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           'bytes': bytes,
           'displayName': name,
         });
-        savedLocation = uri ?? '下载/BibleRecite/$name';
+        savedLocation = uri ?? 'Download/BibleRecite/$name';
       } else {
         final location = await getSaveLocation(
           suggestedName: name,
