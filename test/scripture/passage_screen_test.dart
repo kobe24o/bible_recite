@@ -88,6 +88,58 @@ void main() {
   });
 
   testWidgets(
+    'search target is centered with a green background and only its keyword bold',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
+          ],
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            supportedLocales: [Locale('zh'), Locale('en')],
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+              initialVerse: 16,
+              searchQuery: 'loved',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final verseText = find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.textSpan?.toPlainText() == 'For God so loved the world',
+      );
+      expect(verseText, findsOneWidget);
+      expect(tester.widget<Text>(verseText).textAlign, TextAlign.center);
+
+      final materials = tester.widgetList<Material>(
+        find.ancestor(of: verseText, matching: find.byType(Material)),
+      );
+      final colorScheme = Theme.of(tester.element(verseText)).colorScheme;
+      expect(
+        materials.any(
+          (material) => material.color == colorScheme.primaryContainer,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
     'opens the date editor when creating a plan from selected verses',
     (tester) async {
       await tester.pumpWidget(

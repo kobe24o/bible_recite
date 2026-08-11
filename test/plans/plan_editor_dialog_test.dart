@@ -242,9 +242,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('plan-passage-jump-bottom')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('plan-passage-jump-bottom')));
+    final jumpToBottom = find.byKey(const Key('plan-passage-jump-bottom'));
+    expect(jumpToBottom, findsOneWidget);
+    expect(
+      tester.getCenter(jumpToBottom).dx,
+      closeTo(
+        tester.getCenter(find.byKey(const Key('plan-passage-list'))).dx,
+        1,
+      ),
+    );
+    await tester.tap(jumpToBottom);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('plan-passage-jump-top')), findsOneWidget);
+    final jumpToTop = find.byKey(const Key('plan-passage-jump-top'));
+    expect(jumpToTop, findsOneWidget);
+    expect(
+      tester.getCenter(jumpToTop).dx,
+      closeTo(
+        tester.getCenter(find.byKey(const Key('plan-passage-list'))).dx,
+        1,
+      ),
+    );
   });
 }

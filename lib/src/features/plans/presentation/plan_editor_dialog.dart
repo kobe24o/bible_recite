@@ -380,23 +380,29 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           if (_showPassageJumpToTop)
             Positioned(
               top: 4,
+              left: 0,
               right: 0,
-              child: _passageJumpButton(
-                key: const Key('plan-passage-jump-top'),
-                tooltip: chinese ? '返回经文列表顶部' : 'Jump to top',
-                icon: Icons.keyboard_arrow_up_rounded,
-                onPressed: () => _jumpPassageList(toBottom: false),
+              child: Center(
+                child: _passageJumpButton(
+                  key: const Key('plan-passage-jump-top'),
+                  tooltip: chinese ? '返回经文列表顶部' : 'Jump to top',
+                  icon: Icons.keyboard_arrow_up_rounded,
+                  onPressed: () => _jumpPassageList(toBottom: false),
+                ),
               ),
             )
           else if (_showPassageJumpToBottom)
             Positioned(
               bottom: 4,
+              left: 0,
               right: 0,
-              child: _passageJumpButton(
-                key: const Key('plan-passage-jump-bottom'),
-                tooltip: chinese ? '跳到经文列表底部' : 'Jump to bottom',
-                icon: Icons.keyboard_arrow_down_rounded,
-                onPressed: () => _jumpPassageList(toBottom: true),
+              child: Center(
+                child: _passageJumpButton(
+                  key: const Key('plan-passage-jump-bottom'),
+                  tooltip: chinese ? '跳到经文列表底部' : 'Jump to bottom',
+                  icon: Icons.keyboard_arrow_down_rounded,
+                  onPressed: () => _jumpPassageList(toBottom: true),
+                ),
               ),
             ),
         ],
@@ -410,7 +416,9 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     required IconData icon,
     required VoidCallback onPressed,
   }) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    color: Theme.of(
+      context,
+    ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.78),
     shape: const CircleBorder(),
     elevation: 2,
     child: IconButton(

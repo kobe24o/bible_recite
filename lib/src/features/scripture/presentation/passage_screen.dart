@@ -724,9 +724,7 @@ class _SinglePassageState extends State<_SinglePassage> {
         return _VerseRow(
           key: index == _targetVerseIndex ? _targetVerseKey : null,
           unit: unit,
-          selected:
-              widget.selectedIndexes.contains(index) ||
-              (widget.searchQuery.trim().isEmpty && isTarget),
+          selected: widget.selectedIndexes.contains(index) || isTarget,
           searchQuery: widget.searchQuery,
           selectable: widget.selecting,
           onLongPress: () => widget.onLongPress(index),
@@ -799,7 +797,12 @@ class _VerseRow extends StatelessWidget {
               'This verse is omitted in this translation.'
         : unit.text;
     final style = Theme.of(context).textTheme.bodyLarge?.copyWith(
-      fontWeight: selected ? FontWeight.bold : null,
+      // Search navigation keeps the green verse background, but only the
+      // searched keyword itself is bold. Selection mode continues to bold the
+      // complete verse as before.
+      fontWeight: selected && searchQuery.trim().isEmpty
+          ? FontWeight.bold
+          : null,
     );
     return Text.rich(
       TextSpan(
