@@ -777,40 +777,72 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            OverflowBar(
-              alignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('quiz-bank-random-practice'),
-                  onPressed: _working ? null : _randomPractice,
-                  icon: const Icon(Icons.casino_outlined),
-                  label: const Text('随机答题'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                TextButton.icon(
-                  key: const Key('quiz-bank-import'),
-                  onPressed: _working ? null : _import,
-                  icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('导入'),
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('quiz-bank-random-practice'),
+                            onPressed: _working ? null : _randomPractice,
+                            icon: const Icon(Icons.casino_outlined),
+                            label: const Text('随机答题'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('quiz-bank-import'),
+                            onPressed: _working ? null : _import,
+                            icon: const Icon(Icons.file_open_outlined),
+                            label: const Text('导入题库'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('quiz-bank-export'),
+                            onPressed: _working ? null : _export,
+                            icon: const Icon(Icons.ios_share_outlined),
+                            label: const Text('导出题库'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            key: const Key('quiz-bank-sync'),
+                            onPressed: _working ? null : _sync,
+                            icon: _working
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.sync_rounded),
+                            label: const Text('同步题库'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                TextButton.icon(
-                  key: const Key('quiz-bank-export'),
-                  onPressed: _working ? null : _export,
-                  icon: const Icon(Icons.ios_share_outlined),
-                  label: const Text('导出'),
-                ),
-                FilledButton.icon(
-                  key: const Key('quiz-bank-sync'),
-                  onPressed: _working ? null : _sync,
-                  icon: _working
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.sync_rounded),
-                  label: const Text('同步题库'),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 8),
           ],

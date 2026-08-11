@@ -263,8 +263,16 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                     const _NewPlanBadge(),
                 ],
               ),
-              subtitle: Text(
-                '${template.description} · ${template.passages.length} 段经文',
+              subtitle: SizedBox(
+                height: 40,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    '${template.description} · ${template.passages.length} 段经文',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: _working ? null : () => _openPresetPlan(template),
