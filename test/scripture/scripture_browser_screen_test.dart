@@ -93,6 +93,10 @@ void main() {
 }
 
 final class FakeRepositoryForPassage implements ScriptureRepository {
+  FakeRepositoryForPassage({this.chapterUnits});
+
+  final List<VerseUnit>? chapterUnits;
+
   final translation = TranslationInfo(
     id: 'eng-web',
     languageTag: 'en',
@@ -123,25 +127,27 @@ final class FakeRepositoryForPassage implements ScriptureRepository {
     String translationId,
     String osisBookId,
     int chapter,
-  ) async => [
-    VerseUnit(
-      translationId: translationId,
-      start: (
-        canonId: CanonId.protestant66,
-        osisBookId: osisBookId,
-        chapter: chapter,
-        verse: 16,
-      ),
-      end: (
-        canonId: CanonId.protestant66,
-        osisBookId: osisBookId,
-        chapter: chapter,
-        verse: 16,
-      ),
-      text: 'For God so loved the world',
-      status: SourceTextStatus.present,
-    ),
-  ];
+  ) async =>
+      chapterUnits ??
+      [
+        VerseUnit(
+          translationId: translationId,
+          start: (
+            canonId: CanonId.protestant66,
+            osisBookId: osisBookId,
+            chapter: chapter,
+            verse: 16,
+          ),
+          end: (
+            canonId: CanonId.protestant66,
+            osisBookId: osisBookId,
+            chapter: chapter,
+            verse: 16,
+          ),
+          text: 'For God so loved the world',
+          status: SourceTextStatus.present,
+        ),
+      ];
 
   @override
   Future<Passage> getPassage(String translationId, PassageRange range) async =>

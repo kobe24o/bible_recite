@@ -1,5 +1,6 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/presentation/passage_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -139,6 +140,28 @@ void main() {
     },
   );
 
+  testWidgets('centers a searched verse in a long reading viewport', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      passageTestApp(initialVerse: 20, units: longChapterUnits()),
+    );
+    await tester.pumpAndSettle();
+
+    expectVerseCentered(tester, '20');
+  });
+
+  testWidgets('centers the first planned verse in the reading viewport', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      passageTestApp(initialVerse: 1, units: longChapterUnits()),
+    );
+    await tester.pumpAndSettle();
+
+    expectVerseCentered(tester, '1');
+  });
+
   testWidgets(
     'opens the date editor when creating a plan from selected verses',
     (tester) async {
@@ -267,3 +290,61 @@ void main() {
     );
   });
 }
+
+Widget passageTestApp({
+  required int initialVerse,
+  required List<VerseUnit> units,
+}) => ProviderScope(
+  overrides: [
+    scriptureRepositoryProvider.overrideWith(
+      (ref) async => FakeRepositoryForPassage(chapterUnits: units),
+    ),
+  ],
+  child: MaterialApp(
+    locale: const Locale('zh'),
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    supportedLocales: const [Locale('zh'), Locale('en')],
+    home: PassageScreen(
+      translationId: 'eng-web',
+      bookId: 'JHN',
+      chapter: 3,
+      initialVerse: initialVerse,
+    ),
+  ),
+);
+
+void expectVerseCentered(WidgetTester tester, String label) {
+  final target = find.text(label, skipOffstage: false);
+  final reader = find.byKey(const Key('passage-reader'));
+  expect(target, findsOneWidget);
+  expect(
+    (tester.getCenter(target).dy - tester.getCenter(reader).dy).abs(),
+    lessThan(80),
+  );
+}
+
+List<VerseUnit> longChapterUnits() => List.generate(
+  40,
+  (index) => VerseUnit(
+    translationId: 'eng-web',
+    start: (
+      canonId: CanonId.protestant66,
+      osisBookId: 'JHN',
+      chapter: 3,
+      verse: index + 1,
+    ),
+    end: (
+      canonId: CanonId.protestant66,
+      osisBookId: 'JHN',
+      chapter: 3,
+      verse: index + 1,
+    ),
+    text: 'Verse ${index + 1} ' * 20,
+    status: SourceTextStatus.present,
+  ),
+);

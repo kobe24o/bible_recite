@@ -671,34 +671,47 @@ class _SinglePassage extends StatefulWidget {
 }
 
 class _SinglePassageState extends State<_SinglePassage> {
-  late final ScrollController _controller;
-  late final GlobalKey _targetVerseKey;
-  late final int _targetVerseIndex;
+  final _controller = ScrollController();
+  final _targetVerseKey = GlobalKey();
+  double _leadingTargetInset = 0;
 
   @override
   void initState() {
     super.initState();
-    _targetVerseIndex = widget.initialVerse == null
-        ? 0
-        : widget.units.indexWhere(
-            (unit) =>
-                unit.start.verse <= widget.initialVerse! &&
-                unit.end.verse >= widget.initialVerse!,
-          );
-    _targetVerseKey = GlobalKey();
-    _controller = ScrollController();
-    if (_targetVerseIndex >= 0 && widget.initialVerse != null) {
+    if (widget.initialVerse != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final targetContext = _targetVerseKey.currentContext;
-        if (targetContext == null) return;
-        Scrollable.ensureVisible(
-          targetContext,
-          alignment: .5,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-        );
+        _centerInitialTarget();
       });
     }
+  }
+
+  bool _isTarget(int index) {
+    final initialVerse = widget.initialVerse;
+    if (initialVerse == null) return false;
+    final unit = widget.units[index];
+    return unit.start.verse <= initialVerse && unit.end.verse >= initialVerse;
+  }
+
+  void _centerInitialTarget() {
+    final targetContext = _targetVerseKey.currentContext;
+    if (targetContext == null || !_controller.hasClients) return;
+    if (_isTarget(0) && _leadingTargetInset == 0) {
+      final targetBox = targetContext.findRenderObject() as RenderBox;
+      final leadingInset =
+          _controller.position.viewportDimension / 2 -
+          20 -
+          targetBox.size.height / 2;
+      if (leadingInset > 0) {
+        setState(() => _leadingTargetInset = leadingInset);
+        return;
+      }
+    }
+    Scrollable.ensureVisible(
+      targetContext,
+      alignment: .5,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -709,28 +722,31 @@ class _SinglePassageState extends State<_SinglePassage> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
+    return SingleChildScrollView(
       controller: _controller,
       padding: const EdgeInsets.all(20),
-      itemCount: widget.units.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final unit = widget.units[index];
-        final isTarget =
-            widget.initialVerse != null &&
-            unit.start.verse <=
-                (widget.initialEndVerse ?? widget.initialVerse!) &&
-            unit.end.verse >= widget.initialVerse!;
-        return _VerseRow(
-          key: index == _targetVerseIndex ? _targetVerseKey : null,
-          unit: unit,
-          selected: widget.selectedIndexes.contains(index) || isTarget,
-          searchQuery: widget.searchQuery,
-          selectable: widget.selecting,
-          onLongPress: () => widget.onLongPress(index),
-          onTap: () => widget.onTap(index),
-        );
-      },
+      child: Column(
+        children: [
+          if (_isTarget(0)) SizedBox(height: _leadingTargetInset),
+          for (var index = 0; index < widget.units.length; index++) ...[
+            _VerseRow(
+              key: _isTarget(index) ? _targetVerseKey : null,
+              unit: widget.units[index],
+              selected:
+                  widget.selectedIndexes.contains(index) ||
+                  (widget.initialVerse != null &&
+                      widget.units[index].start.verse <=
+                          (widget.initialEndVerse ?? widget.initialVerse!) &&
+                      widget.units[index].end.verse >= widget.initialVerse!),
+              searchQuery: widget.searchQuery,
+              selectable: widget.selecting,
+              onLongPress: () => widget.onLongPress(index),
+              onTap: () => widget.onTap(index),
+            ),
+            if (index < widget.units.length - 1) const SizedBox(height: 12),
+          ],
+        ],
+      ),
     );
   }
 }

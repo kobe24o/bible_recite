@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "搜索跳转后的目标经文以绿色背景居中显示，仅加粗关键词；计划编辑经文列表的顶底跳转箭头居中半透明，不遮挡删除按钮。"
+              --notes "修复从搜索结果和背诵计划打开经文时的定位：目标经文会按实际排版居中显示，首节经文同样保持居中。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "搜索跳转后的目标经文以绿色背景居中显示，仅加粗关键词；计划编辑经文列表的顶底跳转箭头居中半透明，不遮挡删除按钮。" \
+              --release-notes "修复从搜索结果和背诵计划打开经文时的定位：目标经文会按实际排版居中显示，首节经文同样保持居中。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
