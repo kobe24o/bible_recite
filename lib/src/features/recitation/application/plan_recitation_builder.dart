@@ -21,7 +21,13 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
           .toList()
         ..sort((left, right) => left.dayIndex.compareTo(right.dayIndex));
   if (pending.isEmpty) return null;
-  final quizScopes = _quizScopesForPlan(plan, tasks);
+  // A Today task must only prepare questions for the passage the user opened
+  // today. Passing every range in a long plan here turns one task into a
+  // several-hundred-question run once the shared bank has accumulated data.
+  // Non-Today plan flows retain their plan-wide, disjoint-range behavior.
+  final quizScopes = todayQuizEntry
+      ? [_quizScopeForTask(plan, selected)]
+      : _quizScopesForPlan(plan, tasks);
 
   RecitationRequest? next;
   for (final task in pending.reversed) {
@@ -76,3 +82,12 @@ List<QuizScope> _quizScopesForPlan(
       endVerse: task.endVerse,
     ),
 }.toList(growable: false);
+
+QuizScope _quizScopeForTask(MemorizationPlan plan, PlanTask task) => QuizScope(
+  translationId: plan.translationId,
+  bookId: task.bookId,
+  startChapter: task.startChapter,
+  startVerse: task.startVerse,
+  endChapter: task.endChapter,
+  endVerse: task.endVerse,
+);

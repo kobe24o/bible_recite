@@ -164,6 +164,68 @@ void main() {
       );
     },
   );
+
+  test('Today quiz scopes contain only the selected task passage', () async {
+    final selected = PlanTask(
+      id: 1,
+      planId: 1,
+      dayIndex: 0,
+      dueDate: DateTime(2026, 8, 11),
+      bookId: 'GEN',
+      startChapter: 11,
+      startVerse: 6,
+      endChapter: 12,
+      endVerse: 7,
+      completed: false,
+    );
+    final later = PlanTask(
+      id: 2,
+      planId: 1,
+      dayIndex: 1,
+      dueDate: DateTime(2026, 8, 12),
+      bookId: 'GEN',
+      startChapter: 50,
+      startVerse: 1,
+      endChapter: 50,
+      endVerse: 26,
+      completed: false,
+    );
+    final plan = MemorizationPlan(
+      id: 1,
+      title: '整卷计划',
+      translationId: 'cmn-cu89s',
+      bookId: 'GEN',
+      startChapter: 1,
+      endChapter: 50,
+      days: 2,
+      startDate: DateTime(2026, 8, 11),
+      endDate: DateTime(2026, 8, 12),
+      totalTasks: 2,
+      completedTasks: 0,
+      sourceKind: PlanSourceKind.local,
+      sourceUrl: null,
+      externalId: null,
+      revision: 0,
+      contentLocked: false,
+    );
+
+    final request = await buildPlanRecitationRequest(
+      scripture: _PassageRepository(),
+      plan: plan,
+      tasks: [selected, later],
+      selected: selected,
+      todayQuizEntry: true,
+    );
+
+    expect(request, isNotNull);
+    expect(request!.quizScopes, hasLength(1));
+    final scope = request.quizScopes.single;
+    expect(scope.bookId, 'GEN');
+    expect(scope.startChapter, 11);
+    expect(scope.startVerse, 6);
+    expect(scope.endChapter, 12);
+    expect(scope.endVerse, 7);
+  });
 }
 
 PlanTask _task({

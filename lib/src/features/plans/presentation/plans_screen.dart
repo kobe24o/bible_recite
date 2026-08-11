@@ -14,6 +14,7 @@ import '../../scripture/domain/scripture_repository.dart';
 import '../../scripture/domain/book_name_catalog.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
+import '../../quiz/domain/quiz_scope.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../application/plan_providers.dart';
@@ -495,6 +496,17 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
             units: passage.units,
             planId: plan.id,
             reviewId: review.id,
+            quizScopes: [
+              QuizScope(
+                translationId: review.translationId,
+                bookId: review.bookId,
+                startChapter: review.startChapter,
+                startVerse: review.startVerse,
+                endChapter: review.endChapter,
+                endVerse: review.endVerse,
+              ),
+            ],
+            todayQuizEntry: true,
           ),
         ),
       ),

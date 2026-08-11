@@ -6,6 +6,7 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../plans/domain/plan_models.dart';
+import '../../quiz/domain/quiz_scope.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
@@ -220,6 +221,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             mode: RecitationMode.continuous,
             units: units,
             reviewId: review.id,
+            quizScopes: [
+              QuizScope(
+                translationId: review.translationId,
+                bookId: review.bookId,
+                startChapter: review.startChapter,
+                startVerse: review.startVerse,
+                endChapter: review.endChapter,
+                endVerse: review.endVerse,
+              ),
+            ],
+            todayQuizEntry: true,
           ),
         ),
       ),
