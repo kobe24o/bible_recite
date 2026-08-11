@@ -245,7 +245,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "题库与计划 JSON 导出位置统一显示为 Download/BibleRecite。"
+              --notes "修复计划答题范围越界；启动后台同步共享题库并显示本机题目数量；题库导出路径统一为 Download/BibleRecite。"
 
       - name: Publish signed update feed
         env:
@@ -272,7 +272,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "题库与计划 JSON 导出位置统一显示为 Download/BibleRecite。" \
+              --release-notes "修复计划答题范围越界；启动后台同步共享题库并显示本机题目数量；题库导出路径统一为 Download/BibleRecite。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
