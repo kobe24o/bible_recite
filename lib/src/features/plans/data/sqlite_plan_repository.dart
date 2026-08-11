@@ -630,9 +630,15 @@ final class SqlitePlanRepository {
       for (final questions in byVerse.values)
         questions[random.nextInt(questions.length)],
     ];
-    // Each verse contributes at most one question; shuffle the resulting
-    // verse set so a repeated practice does not follow the scripture order.
-    selected.shuffle(random);
+    // Pick one candidate at random for each verse, then keep the passages in
+    // scripture order so a multi-chapter practice remains easy to follow.
+    selected.sort((a, b) {
+      final chapter = a.chapter.compareTo(b.chapter);
+      if (chapter != 0) return chapter;
+      final verse = a.verse.compareTo(b.verse);
+      if (verse != 0) return verse;
+      return a.start.compareTo(b.start);
+    });
     return selected;
   }
 
