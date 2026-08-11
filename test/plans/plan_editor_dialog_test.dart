@@ -195,4 +195,56 @@ void main() {
     expect(result?.draft?.startChapter, 3);
     expect(result?.draft?.endChapter, 3);
   });
+
+  testWidgets('jumps between the top and bottom of a long passage list', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: PlanEditorDialog(
+            books: [
+              BibleBook(
+                osisId: 'JHN',
+                ordinal: 43,
+                name: '约翰福音',
+                chapterCount: 21,
+              ),
+            ],
+            initial: PlanEditorDraft(
+              title: '长计划',
+              translationId: 'cmn-cu89s',
+              bookId: 'JHN',
+              startChapter: 3,
+              endChapter: 3,
+              startDate: DateTime(2026, 8, 11),
+              endDate: DateTime(2026, 8, 18),
+              passages: [
+                for (var verse = 1; verse <= 8; verse++)
+                  PlanPassageSelection(
+                    bookId: 'JHN',
+                    startChapter: 3,
+                    startVerse: verse,
+                    endChapter: 3,
+                    endVerse: verse,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('plan-passage-jump-bottom')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('plan-passage-jump-bottom')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('plan-passage-jump-top')), findsOneWidget);
+  });
 }

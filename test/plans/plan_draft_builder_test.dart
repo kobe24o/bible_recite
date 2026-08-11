@@ -1,5 +1,6 @@
 import 'package:bible_recite/src/features/plans/domain/plan_draft_builder.dart';
 import 'package:bible_recite/src/features/plans/presentation/plan_editor_dialog.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,65 @@ void main() {
 
     expect(normalized.endDate, DateTime(2026, 7, 26));
   });
+
+  test(
+    'rebases unfinished passages onto today after an edited plan saves',
+    () async {
+      final draft = PlanEditorDraft(
+        title: '重排计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 8, 1),
+        endDate: DateTime(2026, 8, 2),
+        passages: const [
+          PlanPassageSelection(
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+          PlanPassageSelection(
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 17,
+            endChapter: 3,
+            endVerse: 17,
+          ),
+        ],
+      );
+      final completed = PlanTask(
+        id: 1,
+        planId: 1,
+        dayIndex: 0,
+        dueDate: DateTime(2026, 8, 1),
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 16,
+        completed: true,
+      );
+
+      final normalized = normalizeDraftForPendingWork(draft, [
+        completed,
+      ], now: DateTime(2026, 8, 5));
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        normalized,
+        completedTasks: [completed],
+        now: DateTime(2026, 8, 5),
+      );
+
+      expect(normalized.endDate, DateTime(2026, 8, 5));
+      expect(
+        plan.tasks.where((task) => task.startVerse == 17).single.dayIndex,
+        4,
+      );
+    },
+  );
 
   test('never splits one verse across multiple days', () async {
     final plan = await buildPlanFromDraft(

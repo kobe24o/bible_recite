@@ -36,6 +36,7 @@ final appRouter = GoRouter(
           initialEndVerse: int.tryParse(
             state.uri.queryParameters['endVerse'] ?? '',
           ),
+          searchQuery: state.uri.queryParameters['search'],
           reviewId: state.extra is int ? state.extra! as int : null,
         ),
       ),

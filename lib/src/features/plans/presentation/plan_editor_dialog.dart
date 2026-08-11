@@ -81,7 +81,9 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   late bool _ebbinghausEnabled;
-  late final ScrollController _passageScrollController;
+  late final ScrollController _passageListController;
+  var _showPassageJumpToTop = false;
+  var _showPassageJumpToBottom = false;
   String? _error;
 
   @override
@@ -93,19 +95,24 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
     _ebbinghausEnabled = widget.initial.ebbinghausEnabled;
-    _passageScrollController = ScrollController();
+    _passageListController = ScrollController()
+      ..addListener(_updatePassageJumpActions);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _updatePassageJumpActions(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final contentWidth = (MediaQuery.sizeOf(context).width - 96)
+        .clamp(280.0, 420.0)
+        .toDouble();
     return AlertDialog(
       title: Text(chinese ? '编辑背诵计划' : 'Edit memorization plan'),
-      content: Scrollbar(
-        controller: _passageScrollController,
-        thumbVisibility: _passages.length > 100,
+      content: SizedBox(
+        width: contentWidth,
         child: SingleChildScrollView(
-          controller: _passageScrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -159,17 +166,15 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                   child: Text(chinese ? '背诵经文' : 'Passages'),
                 ),
                 const SizedBox(height: 6),
-                for (final passage in _passages)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '${_bookName(passage.bookId)} ${passage.startChapter}:${passage.startVerse}–${passage.endChapter}:${passage.endVerse}',
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () =>
-                          setState(() => _passages.remove(passage)),
+                if (_passages.isNotEmpty) _buildPassageList(chinese),
+                if (_passages.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      chinese
+                          ? '长按经文并拖动可调整顺序'
+                          : 'Long press and drag to reorder',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                 OutlinedButton.icon(
@@ -315,7 +320,9 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
 
   @override
   void dispose() {
-    _passageScrollController.dispose();
+    _passageListController
+      ..removeListener(_updatePassageJumpActions)
+      ..dispose();
     _title.dispose();
     super.dispose();
   }
@@ -329,7 +336,129 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           _endDate = _startDate.add(Duration(days: _passages.length - 1));
         }
       });
+      _refreshPassageJumpActions();
     }
+  }
+
+  Widget _buildPassageList(bool chinese) {
+    final height = (_passages.length * 56.0).clamp(56.0, 240.0).toDouble();
+    return SizedBox(
+      height: height,
+      child: Stack(
+        children: [
+          ReorderableListView.builder(
+            key: const Key('plan-passage-list'),
+            scrollController: _passageListController,
+            shrinkWrap: true,
+            buildDefaultDragHandles: false,
+            itemCount: _passages.length,
+            onReorderItem: _reorderPassage,
+            itemBuilder: (context, index) {
+              final passage = _passages[index];
+              return ReorderableDelayedDragStartListener(
+                key: ObjectKey(passage),
+                index: index,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.drag_indicator_rounded),
+                  title: Text(
+                    '${_bookName(passage.bookId)} ${passage.startChapter}:${passage.startVerse}–${passage.endChapter}:${passage.endVerse}',
+                  ),
+                  trailing: IconButton(
+                    tooltip: chinese ? '移除经文' : 'Remove passage',
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () {
+                      setState(() => _passages.removeAt(index));
+                      _refreshPassageJumpActions();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          if (_showPassageJumpToTop)
+            Positioned(
+              top: 4,
+              right: 0,
+              child: _passageJumpButton(
+                key: const Key('plan-passage-jump-top'),
+                tooltip: chinese ? '返回经文列表顶部' : 'Jump to top',
+                icon: Icons.keyboard_arrow_up_rounded,
+                onPressed: () => _jumpPassageList(toBottom: false),
+              ),
+            )
+          else if (_showPassageJumpToBottom)
+            Positioned(
+              bottom: 4,
+              right: 0,
+              child: _passageJumpButton(
+                key: const Key('plan-passage-jump-bottom'),
+                tooltip: chinese ? '跳到经文列表底部' : 'Jump to bottom',
+                icon: Icons.keyboard_arrow_down_rounded,
+                onPressed: () => _jumpPassageList(toBottom: true),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _passageJumpButton({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    shape: const CircleBorder(),
+    elevation: 2,
+    child: IconButton(
+      key: key,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon),
+    ),
+  );
+
+  void _reorderPassage(int oldIndex, int newIndex) {
+    setState(() {
+      final passage = _passages.removeAt(oldIndex);
+      _passages.insert(newIndex, passage);
+    });
+    _refreshPassageJumpActions();
+  }
+
+  void _jumpPassageList({required bool toBottom}) {
+    if (!_passageListController.hasClients) return;
+    final position = _passageListController.position;
+    _passageListController.animateTo(
+      toBottom ? position.maxScrollExtent : position.minScrollExtent,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _refreshPassageJumpActions() {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _updatePassageJumpActions(),
+    );
+  }
+
+  void _updatePassageJumpActions() {
+    if (!mounted || !_passageListController.hasClients) return;
+    final position = _passageListController.position;
+    final canMoveUp = position.pixels > position.minScrollExtent + 1;
+    final canMoveDown = position.pixels < position.maxScrollExtent - 1;
+    final showTop = canMoveUp && !canMoveDown;
+    if (showTop == _showPassageJumpToTop &&
+        canMoveDown == _showPassageJumpToBottom) {
+      return;
+    }
+    setState(() {
+      _showPassageJumpToTop = showTop;
+      _showPassageJumpToBottom = canMoveDown;
+    });
   }
 
   String _bookName(String id) =>

@@ -15,6 +15,7 @@ import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../application/scripture_providers.dart';
 import '../domain/scripture_models.dart';
 import '../domain/scripture_repository.dart';
+import 'scripture_search_highlight.dart';
 
 class PassageScreen extends ConsumerStatefulWidget {
   const PassageScreen({
@@ -23,6 +24,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     required this.chapter,
     this.initialVerse,
     this.initialEndVerse,
+    this.searchQuery,
     this.reviewId,
     super.key,
   });
@@ -32,6 +34,7 @@ class PassageScreen extends ConsumerStatefulWidget {
   final int chapter;
   final int? initialVerse;
   final int? initialEndVerse;
+  final String? searchQuery;
   final int? reviewId;
 
   @override
@@ -359,6 +362,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                             units: data.units,
                             initialVerse: widget.initialVerse,
                             initialEndVerse: widget.initialEndVerse,
+                            searchQuery: widget.searchQuery ?? '',
                             selecting: _selectingVerses,
                             selectedIndexes: _selectedVerseIndexes,
                             onLongPress: (index) => setState(() {
@@ -647,6 +651,7 @@ class _SinglePassage extends StatefulWidget {
     required this.units,
     this.initialVerse,
     this.initialEndVerse,
+    required this.searchQuery,
     required this.selecting,
     required this.selectedIndexes,
     required this.onLongPress,
@@ -655,6 +660,7 @@ class _SinglePassage extends StatefulWidget {
   final List<VerseUnit> units;
   final int? initialVerse;
   final int? initialEndVerse;
+  final String searchQuery;
   final bool selecting;
   final Set<int> selectedIndexes;
   final ValueChanged<int> onLongPress;
@@ -666,30 +672,31 @@ class _SinglePassage extends StatefulWidget {
 
 class _SinglePassageState extends State<_SinglePassage> {
   late final ScrollController _controller;
+  late final GlobalKey _targetVerseKey;
+  late final int _targetVerseIndex;
 
   @override
   void initState() {
     super.initState();
-    final initialIndex = widget.initialVerse == null
+    _targetVerseIndex = widget.initialVerse == null
         ? 0
         : widget.units.indexWhere(
             (unit) =>
                 unit.start.verse <= widget.initialVerse! &&
                 unit.end.verse >= widget.initialVerse!,
           );
-    _controller = ScrollController(
-      initialScrollOffset: (initialIndex < 0 ? 0 : initialIndex) * 96.0,
-    );
-    if (initialIndex > 0) {
+    _targetVerseKey = GlobalKey();
+    _controller = ScrollController();
+    if (_targetVerseIndex >= 0 && widget.initialVerse != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_controller.hasClients) return;
-        const estimatedVerseRowHeight = 96.0;
-        final centered =
-            (initialIndex * estimatedVerseRowHeight -
-                    _controller.position.viewportDimension / 2 +
-                    estimatedVerseRowHeight / 2)
-                .clamp(0.0, _controller.position.maxScrollExtent);
-        _controller.jumpTo(centered);
+        final targetContext = _targetVerseKey.currentContext;
+        if (targetContext == null) return;
+        Scrollable.ensureVisible(
+          targetContext,
+          alignment: .5,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        );
       });
     }
   }
@@ -707,18 +714,25 @@ class _SinglePassageState extends State<_SinglePassage> {
       padding: const EdgeInsets.all(20),
       itemCount: widget.units.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _VerseRow(
-        unit: widget.units[index],
-        selected:
-            widget.selectedIndexes.contains(index) ||
-            (widget.initialVerse != null &&
-                widget.units[index].start.verse <=
-                    (widget.initialEndVerse ?? widget.initialVerse!) &&
-                widget.units[index].end.verse >= widget.initialVerse!),
-        selectable: widget.selecting,
-        onLongPress: () => widget.onLongPress(index),
-        onTap: () => widget.onTap(index),
-      ),
+      itemBuilder: (context, index) {
+        final unit = widget.units[index];
+        final isTarget =
+            widget.initialVerse != null &&
+            unit.start.verse <=
+                (widget.initialEndVerse ?? widget.initialVerse!) &&
+            unit.end.verse >= widget.initialVerse!;
+        return _VerseRow(
+          key: index == _targetVerseIndex ? _targetVerseKey : null,
+          unit: unit,
+          selected:
+              widget.selectedIndexes.contains(index) ||
+              (widget.searchQuery.trim().isEmpty && isTarget),
+          searchQuery: widget.searchQuery,
+          selectable: widget.selecting,
+          onLongPress: () => widget.onLongPress(index),
+          onTap: () => widget.onTap(index),
+        );
+      },
     );
   }
 }
@@ -726,12 +740,15 @@ class _SinglePassageState extends State<_SinglePassage> {
 class _VerseRow extends StatelessWidget {
   const _VerseRow({
     required this.unit,
+    this.searchQuery = '',
     this.selected = false,
     this.selectable = false,
     this.onLongPress,
     this.onTap,
+    super.key,
   });
   final VerseUnit unit;
+  final String searchQuery;
   final bool selected;
   final bool selectable;
   final VoidCallback? onLongPress;
@@ -767,22 +784,33 @@ class _VerseRow extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    unit.status == SourceTextStatus.omitted
-                        ? AppLocalizations.of(context)?.omittedVerse ??
-                              'This verse is omitted in this translation.'
-                        : unit.text,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: selected ? FontWeight.bold : null,
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildVerseText(context)),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVerseText(BuildContext context) {
+    final text = unit.status == SourceTextStatus.omitted
+        ? AppLocalizations.of(context)?.omittedVerse ??
+              'This verse is omitted in this translation.'
+        : unit.text;
+    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(
+      fontWeight: selected ? FontWeight.bold : null,
+    );
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: scriptureSearchHighlightSpans(
+          text: text,
+          query: searchQuery,
+          matchStyle: style?.copyWith(fontWeight: FontWeight.bold),
+        ),
+      ),
+      textAlign: searchQuery.trim().isEmpty ? null : TextAlign.center,
     );
   }
 }

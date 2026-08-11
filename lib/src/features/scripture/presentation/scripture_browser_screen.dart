@@ -14,6 +14,7 @@ import '../domain/scripture_repository.dart';
 import '../domain/scripture_search.dart';
 import 'book_grid.dart';
 import 'chapter_grid.dart';
+import 'scripture_search_highlight.dart';
 import 'translation_selector.dart';
 
 class ScriptureBrowserScreen extends ConsumerStatefulWidget {
@@ -283,9 +284,16 @@ class _ScriptureBrowserScreenState
         scripture: scripture,
         bookNames: ref.read(bookNameCatalogProvider),
         onOpen: (unit) async {
-          await this.context.push(
-            '/bible/$translation/${unit.start.osisBookId}/${unit.start.chapter}?verse=${unit.start.verse}&endVerse=${unit.end.verse}',
+          final destination = Uri(
+            path:
+                '/bible/$translation/${unit.start.osisBookId}/${unit.start.chapter}',
+            queryParameters: {
+              'verse': '${unit.start.verse}',
+              'endVerse': '${unit.end.verse}',
+              'search': trimmed,
+            },
           );
+          await this.context.push(destination.toString());
         },
         onAdd: _addSearchVersesToPlan,
       ),
@@ -317,6 +325,7 @@ class _ScriptureBrowserScreenState
     );
     if (action == 'existing') return _appendSearchVersesToPlan(units);
     if (action != 'new') return;
+    if (!mounted) return;
     final today = DateTime.now();
     final start = DateTime(today.year, today.month, today.day);
     final catalog = ref.read(bookNameCatalogProvider);
@@ -427,8 +436,9 @@ class _SearchResultsSheetState extends State<_SearchResultsSheet> {
           widget.query,
         ),
         builder: (context, snapshot) {
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final units = snapshot.data!;
           return Column(
             children: [
@@ -485,16 +495,26 @@ class _SearchResultsSheetState extends State<_SearchResultsSheet> {
                       title: Text(
                         '${widget.bookNames.nameFor(unit.start.osisBookId, const Locale('zh', 'CN'))} ${unit.start.chapter}:${unit.start.verse}',
                       ),
-                      subtitle: Text(
-                        unit.text,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _selected.contains(index)
-                            ? const TextStyle(fontWeight: FontWeight.bold)
-                            : null,
+                      subtitle: Text.rich(
+                        TextSpan(
+                          style: _selected.contains(index)
+                              ? const TextStyle(fontWeight: FontWeight.bold)
+                              : null,
+                          children: scriptureSearchHighlightSpans(
+                            text: unit.text,
+                            query: widget.query,
+                            matchStyle: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.tertiaryContainer,
+                            ),
+                          ),
+                        ),
                       ),
                       onTap: () {
                         if (!_selecting) {
+                          Navigator.of(context).pop();
                           widget.onOpen(unit);
                           return;
                         }
