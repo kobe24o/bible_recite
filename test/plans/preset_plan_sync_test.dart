@@ -38,6 +38,34 @@ void main() {
       expect(upgraded.newPlanIds, {'hope'});
     },
   );
+
+  test(
+    'checks all official mirrors and keeps the newer plan revision',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final checkedHosts = <String>{};
+      final client = CloudPlanFeedClient(
+        loader: (uri) async {
+          checkedHosts.add(uri.host);
+          return uri.host == 'gcore.jsdelivr.net' ? _manifest(1) : _manifest(2);
+        },
+      );
+
+      final result = await syncPresetPlans(
+        repository: repository,
+        client: client,
+      );
+
+      expect(result.manifest.plans.single.revision, 2);
+      expect(checkedHosts, {
+        'gcore.jsdelivr.net',
+        'fastly.jsdelivr.net',
+        'cdn.jsdelivr.net',
+        'raw.githubusercontent.com',
+      });
+    },
+  );
 }
 
 String _manifest(int revision) =>

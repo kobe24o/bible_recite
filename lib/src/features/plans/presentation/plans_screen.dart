@@ -1173,11 +1173,11 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           ),
         ),
       );
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('同步失败：$error')));
+        ).showSnackBar(const SnackBar(content: Text('同步失败，请检查网络后重试')));
       }
     } finally {
       if (mounted) setState(() => _working = false);

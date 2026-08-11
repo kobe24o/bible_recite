@@ -27,7 +27,10 @@ Future<PresetPlanSyncResult> syncPresetPlans({
     defaultCloudPlanSourceUrl,
   );
   final previous = await loadCachedPresetPlanManifest(repository);
-  final manifest = await client.fetchFirst(cloudPlanSourceCandidates(source));
+  final manifest = await _fetchNewestManifest(
+    client,
+    cloudPlanSourceCandidates(source),
+  );
   final previouslyKnown = {
     for (final plan in previous?.plans ?? const <CloudPlanTemplate>[])
       plan.id: plan.revision,
@@ -52,6 +55,36 @@ Future<PresetPlanSyncResult> syncPresetPlans({
   );
   return PresetPlanSyncResult(manifest: manifest, newPlanIds: nextNew);
 }
+
+/// Fetch every official mirror and use the manifest with the highest combined
+/// template revision. A single stale CDN must not hide a newly published plan
+/// description merely because it answered first.
+Future<CloudPlanManifest> _fetchNewestManifest(
+  CloudPlanFeedClient client,
+  Iterable<Uri> sources,
+) async {
+  final manifests = <CloudPlanManifest>[];
+  final errors = <String>[];
+  for (final source in sources) {
+    try {
+      manifests.add(await client.fetch(source));
+    } on CloudPlanFeedException catch (error) {
+      errors.add('${source.host}: ${error.message}');
+    }
+  }
+  if (manifests.isEmpty) {
+    throw CloudPlanFeedException(
+      errors.isEmpty ? '未获取到云端计划' : errors.join('；'),
+    );
+  }
+  manifests.sort(
+    (left, right) => _revisionScore(right).compareTo(_revisionScore(left)),
+  );
+  return manifests.first;
+}
+
+int _revisionScore(CloudPlanManifest manifest) =>
+    manifest.plans.fold(0, (score, plan) => score + plan.revision);
 
 Future<CloudPlanManifest?> loadCachedPresetPlanManifest(
   SqlitePlanRepository repository,

@@ -840,11 +840,11 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           ),
         ),
       );
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('题库同步失败：$error')));
+        ).showSnackBar(const SnackBar(content: Text('题库同步失败，请检查网络后重试')));
       }
     } finally {
       if (mounted) setState(() => _working = false);
