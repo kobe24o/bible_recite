@@ -451,7 +451,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
               onTap: () {
                 Navigator.pop(sheetContext);
                 context.push(
-                  '/bible/${review.translationId}/${review.bookId}/${review.startChapter}?verse=${review.startVerse}&endVerse=${review.endVerse}',
+                  '/bible/${review.translationId}/${review.bookId}/${review.startChapter}?verse=${review.startVerse}&endChapter=${review.endChapter}&endVerse=${review.endVerse}',
                 );
               },
             ),
@@ -827,7 +827,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
                               context.push(
-                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}&endVerse=${task.endVerse}',
+                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}&endChapter=${task.endChapter}&endVerse=${task.endVerse}',
                               );
                             },
                             child: const Text('阅读'),
@@ -843,6 +843,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                                 plan: plan,
                                 tasks: tasks,
                                 selected: task,
+                                todayQuizEntry: true,
                               );
                               if (!mounted || request == null) return;
                               await Navigator.of(context).push(

@@ -24,6 +24,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     required this.chapter,
     this.initialVerse,
     this.initialEndVerse,
+    this.initialEndChapter,
     this.searchQuery,
     this.reviewId,
     super.key,
@@ -34,6 +35,7 @@ class PassageScreen extends ConsumerStatefulWidget {
   final int chapter;
   final int? initialVerse;
   final int? initialEndVerse;
+  final int? initialEndChapter;
   final String? searchQuery;
   final int? reviewId;
 
@@ -59,7 +61,8 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
         oldWidget.bookId != widget.bookId ||
         oldWidget.translationId != widget.translationId ||
         oldWidget.initialVerse != widget.initialVerse ||
-        oldWidget.initialEndVerse != widget.initialEndVerse) {
+        oldWidget.initialEndVerse != widget.initialEndVerse ||
+        oldWidget.initialEndChapter != widget.initialEndChapter) {
       _parallelTranslationId = null;
       _selectingVerses = false;
       _selectedVerseIndexes.clear();
@@ -88,7 +91,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
             bookId: widget.bookId,
             startChapter: widget.chapter,
             startVerse: widget.initialVerse!,
-            endChapter: widget.chapter,
+            endChapter: widget.initialEndChapter ?? widget.chapter,
             endVerse: (widget.initialEndVerse ?? widget.initialVerse)!,
           )
         : QuizScope(
@@ -142,11 +145,32 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     ]);
     final translations = values[0] as List<TranslationInfo>;
     final books = values[1] as List<BibleBook>;
-    final units = await repository.getChapter(
-      widget.translationId,
-      widget.bookId,
-      widget.chapter,
-    );
+    final units =
+        widget.initialVerse != null &&
+            widget.initialEndChapter != null &&
+            widget.initialEndChapter != widget.chapter
+        ? (await repository.getPassage(
+            widget.translationId,
+            PassageRange(
+              start: (
+                canonId: CanonId.protestant66,
+                osisBookId: widget.bookId,
+                chapter: widget.chapter,
+                verse: widget.initialVerse!,
+              ),
+              end: (
+                canonId: CanonId.protestant66,
+                osisBookId: widget.bookId,
+                chapter: widget.initialEndChapter!,
+                verse: widget.initialEndVerse ?? widget.initialVerse!,
+              ),
+            ),
+          )).units
+        : await repository.getChapter(
+            widget.translationId,
+            widget.bookId,
+            widget.chapter,
+          );
     ParallelPassage? parallel;
     if (_parallelTranslationId != null && units.isNotEmpty) {
       parallel = await repository.resolveParallelPassage(
@@ -362,6 +386,8 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                             units: data.units,
                             initialVerse: widget.initialVerse,
                             initialEndVerse: widget.initialEndVerse,
+                            initialEndChapter: widget.initialEndChapter,
+                            initialChapter: widget.chapter,
                             searchQuery: widget.searchQuery ?? '',
                             selecting: _selectingVerses,
                             selectedIndexes: _selectedVerseIndexes,
@@ -651,6 +677,8 @@ class _SinglePassage extends StatefulWidget {
     required this.units,
     this.initialVerse,
     this.initialEndVerse,
+    this.initialEndChapter,
+    required this.initialChapter,
     required this.searchQuery,
     required this.selecting,
     required this.selectedIndexes,
@@ -660,6 +688,8 @@ class _SinglePassage extends StatefulWidget {
   final List<VerseUnit> units;
   final int? initialVerse;
   final int? initialEndVerse;
+  final int? initialEndChapter;
+  final int initialChapter;
   final String searchQuery;
   final bool selecting;
   final Set<int> selectedIndexes;
@@ -688,8 +718,41 @@ class _SinglePassageState extends State<_SinglePassage> {
   bool _isTarget(int index) {
     final initialVerse = widget.initialVerse;
     if (initialVerse == null) return false;
-    final unit = widget.units[index];
-    return unit.start.verse <= initialVerse && unit.end.verse >= initialVerse;
+    return _contains(
+      widget.units[index],
+      chapter: widget.initialChapter,
+      verse: initialVerse,
+    );
+  }
+
+  bool _contains(VerseUnit unit, {required int chapter, required int verse}) =>
+      _compare(unit.start.chapter, unit.start.verse, chapter, verse) <= 0 &&
+      _compare(unit.end.chapter, unit.end.verse, chapter, verse) >= 0;
+
+  int _compare(
+    int leftChapter,
+    int leftVerse,
+    int rightChapter,
+    int rightVerse,
+  ) {
+    final chapterOrder = leftChapter.compareTo(rightChapter);
+    return chapterOrder == 0 ? leftVerse.compareTo(rightVerse) : chapterOrder;
+  }
+
+  bool _isInInitialRange(VerseUnit unit) {
+    final initialVerse = widget.initialVerse;
+    if (initialVerse == null) return false;
+    final endChapter = widget.initialEndChapter ?? widget.initialChapter;
+    final endVerse = widget.initialEndVerse ?? initialVerse;
+    return _compare(
+              unit.end.chapter,
+              unit.end.verse,
+              widget.initialChapter,
+              initialVerse,
+            ) >=
+            0 &&
+        _compare(unit.start.chapter, unit.start.verse, endChapter, endVerse) <=
+            0;
   }
 
   void _centerInitialTarget() {
@@ -734,10 +797,7 @@ class _SinglePassageState extends State<_SinglePassage> {
               unit: widget.units[index],
               selected:
                   widget.selectedIndexes.contains(index) ||
-                  (widget.initialVerse != null &&
-                      widget.units[index].start.verse <=
-                          (widget.initialEndVerse ?? widget.initialVerse!) &&
-                      widget.units[index].end.verse >= widget.initialVerse!),
+                  _isInInitialRange(widget.units[index]),
               searchQuery: widget.searchQuery,
               selectable: widget.selecting,
               onLongPress: () => widget.onLongPress(index),

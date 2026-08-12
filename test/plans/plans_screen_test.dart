@@ -322,19 +322,23 @@ void main() {
             dayIndex: 0,
             startChapter: 3,
             startVerse: 16,
-            endChapter: 3,
-            endVerse: 16,
+            endChapter: 4,
+            endVerse: 2,
           ),
         ],
       ),
     );
     final task = (await repository.listTasks(planId)).single;
+    Uri? openedReadUri;
     final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const PlansScreen()),
         GoRoute(
           path: '/bible/:translation/:book/:chapter',
-          builder: (_, _) => const Scaffold(body: Text('经文阅读页')),
+          builder: (_, state) {
+            openedReadUri = state.uri;
+            return const Scaffold(body: Text('经文阅读页'));
+          },
         ),
       ],
     );
@@ -366,10 +370,70 @@ void main() {
     await tester.tap(find.byKey(Key('read-task-${task.id}')));
     await tester.pumpAndSettle();
     expect(find.text('经文阅读页'), findsOneWidget);
+    final query = openedReadUri!.queryParameters;
+    expect(query['verse'], '16');
+    expect(query['endChapter'], '4');
+    expect(query['endVerse'], '2');
 
     router.pop();
     await tester.pumpAndSettle();
     expect(find.text('每天背诵安排 · 1 天'), findsOneWidget);
     expect(find.byKey(Key('recite-task-${task.id}')), findsOneWidget);
+  });
+
+  testWidgets('plan recitation exposes the prepared quiz entry', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '答题背诵计划',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 8, 12),
+        endDate: DateTime(2026, 8, 12),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      ),
+    );
+    final task = (await repository.listTasks(planId)).single;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PlansScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('答题背诵计划'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('recite-task-${task.id}')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('today-quiz-entry-button')), findsOneWidget);
   });
 }

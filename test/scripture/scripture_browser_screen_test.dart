@@ -93,9 +93,10 @@ void main() {
 }
 
 final class FakeRepositoryForPassage implements ScriptureRepository {
-  FakeRepositoryForPassage({this.chapterUnits});
+  FakeRepositoryForPassage({this.chapterUnits, this.passageUnits});
 
   final List<VerseUnit>? chapterUnits;
+  final List<VerseUnit>? passageUnits;
 
   final translation = TranslationInfo(
     id: 'eng-web',
@@ -154,15 +155,17 @@ final class FakeRepositoryForPassage implements ScriptureRepository {
       Passage(
         range: range,
         translationId: translationId,
-        units: [
-          VerseUnit(
-            translationId: translationId,
-            start: range.start,
-            end: range.start,
-            text: 'For God so loved the world',
-            status: SourceTextStatus.present,
-          ),
-        ],
+        units:
+            passageUnits ??
+            [
+              VerseUnit(
+                translationId: translationId,
+                start: range.start,
+                end: range.start,
+                text: 'For God so loved the world',
+                status: SourceTextStatus.present,
+              ),
+            ],
       );
 
   @override

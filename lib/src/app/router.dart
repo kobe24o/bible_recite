@@ -36,6 +36,9 @@ final appRouter = GoRouter(
           initialEndVerse: int.tryParse(
             state.uri.queryParameters['endVerse'] ?? '',
           ),
+          initialEndChapter: int.tryParse(
+            state.uri.queryParameters['endChapter'] ?? '',
+          ),
           searchQuery: state.uri.queryParameters['search'],
           reviewId: state.extra is int ? state.extra! as int : null,
         ),
@@ -56,9 +59,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/quiz',
       builder: (context, state) => ResponsiveShell(
-        child: QuizPracticeScreen(
-          request: state.extra! as QuizPracticeRequest,
-        ),
+        child: QuizPracticeScreen(request: state.extra! as QuizPracticeRequest),
       ),
     ),
     GoRoute(

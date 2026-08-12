@@ -162,6 +162,59 @@ void main() {
     expectVerseCentered(tester, '1');
   });
 
+  testWidgets('highlights every verse in a cross-chapter plan range', (
+    tester,
+  ) async {
+    final units = [
+      crossChapterUnit(chapter: 3, verse: 30),
+      crossChapterUnit(chapter: 3, verse: 31),
+      crossChapterUnit(chapter: 3, verse: 36),
+      crossChapterUnit(chapter: 4, verse: 1),
+      crossChapterUnit(chapter: 4, verse: 2),
+    ];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(passageUnits: units),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: [Locale('zh'), Locale('en')],
+          home: PassageScreen(
+            translationId: 'eng-web',
+            bookId: 'JHN',
+            chapter: 3,
+            initialVerse: 30,
+            initialEndChapter: 4,
+            initialEndVerse: 2,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final selectedColor = Theme.of(
+      tester.element(find.text('Cross chapter 3:30')),
+    ).colorScheme.primaryContainer;
+    for (final unit in units) {
+      final text = find.text(
+        'Cross chapter ${unit.start.chapter}:${unit.start.verse}',
+      );
+      final material = tester.widget<Material>(
+        find.ancestor(of: text, matching: find.byType(Material)).first,
+      );
+      expect(material.color, selectedColor);
+    }
+  });
+
   testWidgets(
     'opens the date editor when creating a plan from selected verses',
     (tester) async {
@@ -348,3 +401,22 @@ List<VerseUnit> longChapterUnits() => List.generate(
     status: SourceTextStatus.present,
   ),
 );
+
+VerseUnit crossChapterUnit({required int chapter, required int verse}) =>
+    VerseUnit(
+      translationId: 'eng-web',
+      start: (
+        canonId: CanonId.protestant66,
+        osisBookId: 'JHN',
+        chapter: chapter,
+        verse: verse,
+      ),
+      end: (
+        canonId: CanonId.protestant66,
+        osisBookId: 'JHN',
+        chapter: chapter,
+        verse: verse,
+      ),
+      text: 'Cross chapter $chapter:$verse',
+      status: SourceTextStatus.present,
+    );
