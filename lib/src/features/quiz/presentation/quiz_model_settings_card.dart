@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -99,6 +101,7 @@ class _QuizModelSettingsCardState extends ConsumerState<QuizModelSettingsCard> {
                       ? QuizModelSettings.defaultModel
                       : modelController.text.trim(),
                   apiKey: keyController.text,
+                  modelAnsweringEnabled: current.modelAnsweringEnabled,
                 ),
               ),
             ),
@@ -146,6 +149,19 @@ class _QuizModelSettingsCardState extends ConsumerState<QuizModelSettingsCard> {
     }
   }
 
+  Future<void> _setModelAnsweringEnabled(
+    QuizModelSettings settings,
+    bool enabled,
+  ) async {
+    final updated = settings.copyWith(modelAnsweringEnabled: enabled);
+    await widget.repository.saveQuizModelSettings(updated);
+    if (mounted) {
+      setState(() {
+        _future = Future.value(updated);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
@@ -160,14 +176,28 @@ class _QuizModelSettingsCardState extends ConsumerState<QuizModelSettingsCard> {
         return Card(
           child: Column(
             children: [
+              SwitchListTile(
+                key: const Key('quiz-model-answering-toggle'),
+                title: Text(
+                  chinese ? '使用大模型出题' : 'Use model-generated quizzes',
+                ),
+                subtitle: Text(
+                  chinese
+                      ? '默认关闭；关闭或模型不可用时，优先使用对应范围的本机题库。'
+                      : 'Off by default. The local bank is used when unavailable.',
+                ),
+                value: settings.modelAnsweringEnabled,
+                onChanged: (enabled) =>
+                    unawaited(_setModelAnsweringEnabled(settings, enabled)),
+              ),
               ListTile(
                 key: const Key('quiz-model-settings-open'),
                 leading: const Icon(Icons.smart_toy_outlined),
                 title: Text(chinese ? '答题模型' : 'Quiz model'),
                 subtitle: Text(
                   configured
-                      ? '${settings.model} · 已配置密钥'
-                      : '${settings.model} · 未配置密钥',
+                      ? '${settings.model} · 已配置密钥${settings.modelAnsweringEnabled ? '' : ' · 已关闭'}'
+                      : '${settings.model} · 未配置密钥${settings.modelAnsweringEnabled ? '' : ' · 已关闭'}',
                 ),
                 trailing: const Icon(Icons.edit_outlined),
                 onTap: () => _openEditor(settings),

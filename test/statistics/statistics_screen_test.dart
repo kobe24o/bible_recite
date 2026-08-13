@@ -5,6 +5,8 @@ import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:bible_recite/src/features/statistics/presentation/statistics_screen.dart';
+import 'package:bible_recite/src/features/statistics/presentation/random_quiz_options_dialog.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -184,6 +186,40 @@ void main() {
     expect(find.text('路得的成就'), findsOneWidget);
     expect(find.text('我的成就'), findsNothing);
   });
+
+  testWidgets(
+    'random quiz dialog lets the user choose a scripture range and maximum count',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RandomQuizOptionsDialog(
+              books: [
+                BibleBook(
+                  osisId: 'GEN',
+                  ordinal: 1,
+                  name: '创世记',
+                  chapterCount: 50,
+                ),
+                BibleBook(
+                  osisId: 'JHN',
+                  ordinal: 43,
+                  name: '约翰福音',
+                  chapterCount: 21,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('开始卷'), findsOneWidget);
+      expect(find.text('开始章'), findsOneWidget);
+      expect(find.text('结束卷'), findsOneWidget);
+      expect(find.text('结束章'), findsOneWidget);
+      expect(find.text('最大题数'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpScreen(

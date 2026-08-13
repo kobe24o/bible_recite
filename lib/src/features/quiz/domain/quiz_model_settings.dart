@@ -8,6 +8,7 @@ final class QuizModelSettings {
     required this.baseUrl,
     required this.model,
     required this.apiKey,
+    this.modelAnsweringEnabled = false,
   });
 
   static const defaultBaseUrl = 'https://open.bigmodel.cn/api/paas/v4';
@@ -18,11 +19,13 @@ final class QuizModelSettings {
     baseUrl: defaultBaseUrl,
     model: defaultModel,
     apiKey: '',
+    modelAnsweringEnabled: false,
   );
 
   final String baseUrl;
   final String model;
   final String apiKey;
+  final bool modelAnsweringEnabled;
 
   List<String> get missingConfigurationFields => [
     if (baseUrl.trim().isEmpty) '服务地址',
@@ -39,9 +42,11 @@ final class QuizModelSettings {
     String? baseUrl,
     String? model,
     String? apiKey,
+    bool? modelAnsweringEnabled,
   }) => QuizModelSettings(
     baseUrl: baseUrl ?? this.baseUrl,
     model: model ?? this.model,
     apiKey: apiKey ?? this.apiKey,
+    modelAnsweringEnabled: modelAnsweringEnabled ?? this.modelAnsweringEnabled,
   );
 }

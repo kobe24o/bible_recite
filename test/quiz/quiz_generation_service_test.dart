@@ -18,6 +18,7 @@ void main() {
     baseUrl: 'https://example.test/v1',
     model: 'GLM-4.7-Flash',
     apiKey: 'test-key',
+    modelAnsweringEnabled: true,
   );
 
   late SqlitePlanRepository repository;
@@ -36,6 +37,15 @@ void main() {
     startVerse: 16,
     endChapter: 3,
     endVerse: 16,
+  );
+
+  QuizScope scopeThroughVerse17() => const QuizScope(
+    translationId: 'cmn-cu89s',
+    bookId: 'JHN',
+    startChapter: 3,
+    startVerse: 16,
+    endChapter: 3,
+    endVerse: 17,
   );
 
   VerseUnit unit(int verse) => VerseUnit(
@@ -157,6 +167,49 @@ void main() {
   });
 
   test(
+    'uses local questions without requesting the model when model answering is disabled',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      var calls = 0;
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: scripture(),
+        client: QuizModelClient(
+          httpClient: MockClient((request) async {
+            calls++;
+            return http.Response('{"choices":[]}', 200);
+          }),
+        ),
+        settingsLoader: () async =>
+            settings.copyWith(modelAnsweringEnabled: false),
+      );
+
+      final outcome = await service.prepare(scopeThroughVerse17());
+
+      expect(calls, 0);
+      expect(outcome.success, isFalse);
+      expect(
+        await repository.listQuizQuestionsForPractice(scopeThroughVerse17()),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'excludes only the cached verse when equal verse numbers span chapters',
     () async {
       await repository.saveQuizQuestions([
@@ -271,6 +324,7 @@ void main() {
       baseUrl: 'https://example.test',
       model: 'GLM-4.7-Flash',
       apiKey: '',
+      modelAnsweringEnabled: true,
     );
     expect(incomplete.isConfigured, isFalse);
     expect(incomplete.missingConfigurationMessage, contains('API Key'));

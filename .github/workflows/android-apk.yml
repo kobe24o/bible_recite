@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "修复跨章节计划经文的阅读与答题范围：完整高亮起止两章的目标经文；计划背诵加入预生成答题入口。"
+              --notes "新增大模型答题开关（默认关闭），本地题库优先并按入口经文范围回退；随机答题可选择卷、章节范围与最大题数。APK 内置最新共享题库。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "修复跨章节计划经文的阅读与答题范围：完整高亮起止两章的目标经文；计划背诵加入预生成答题入口。" \
+              --release-notes "新增大模型答题开关（默认关闭），本地题库优先并按入口经文范围回退；随机答题可选择卷、章节范围与最大题数。APK 内置最新共享题库。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

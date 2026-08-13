@@ -29,6 +29,14 @@ void main() {
 
     expect(find.textContaining('glm-4.7-flash'), findsWidgets);
     expect(find.textContaining('未配置密钥'), findsOneWidget);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const Key('quiz-model-answering-toggle')),
+          )
+          .value,
+      isFalse,
+    );
 
     await tester.tap(find.byKey(const Key('quiz-model-settings-open')));
     await tester.pumpAndSettle();
@@ -44,6 +52,13 @@ void main() {
     expect(saved.apiKey, 'super-secret');
     expect(saved.model, 'glm-4.7-flash');
     expect(saved.baseUrl, QuizModelSettings.defaultBaseUrl);
+
+    await tester.tap(find.byKey(const Key('quiz-model-answering-toggle')));
+    await tester.pumpAndSettle();
+    expect(
+      (await repository.getQuizModelSettings()).modelAnsweringEnabled,
+      isTrue,
+    );
 
     await tester.tap(find.byKey(const Key('quiz-model-clear-key')));
     await tester.pumpAndSettle();

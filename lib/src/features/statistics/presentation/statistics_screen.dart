@@ -23,12 +23,14 @@ import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
+import 'random_quiz_options_dialog.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/data/sqlite_scripture_repository.dart';
 import '../../scripture/domain/scripture_models.dart';
+import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 
@@ -884,47 +886,45 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
   }
 
   Future<void> _randomPractice() async {
-    final controller = TextEditingController(text: '10');
-    final count = await showDialog<int>(
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final books = await scripture.listBooks('cmn-cu89s', CanonId.protestant66);
+    if (!mounted || books.isEmpty) return;
+    final options = await showDialog<RandomQuizOptions>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('随机答题'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: '题目数量',
-            helperText: '默认 10 道，最多 50 道',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = int.tryParse(controller.text.trim());
-              if (value == null || value < 1 || value > 50) return;
-              Navigator.pop(dialogContext, value);
-            },
-            child: const Text('开始答题'),
-          ),
-        ],
-      ),
+      builder: (_) => RandomQuizOptionsDialog(books: books),
     );
-    controller.dispose();
-    if (count == null) return;
+    if (options == null || !mounted) return;
     setState(() => _working = true);
     try {
-      final questions = await widget.repository
-          .listRandomQuizQuestionsForPractice(count);
+      final scopes = await _randomQuizScopes(options.scopes, scripture);
+      var questions = await widget.repository
+          .listRandomQuizQuestionsForPracticeInScopes(
+            scopes,
+            options.maxQuestionCount,
+          );
+      String? modelError;
+      // Random practice follows the same fallback rule as every scripture
+      // entry: do not call the model when its own local range already has
+      // questions; only try it after the scoped local selection is empty.
+      if (questions.isEmpty) {
+        final service = await ref.read(quizGenerationServiceProvider.future);
+        final outcome = await service.prepareScopes(scopes);
+        modelError = outcome.error;
+        questions = await widget.repository
+            .listRandomQuizQuestionsForPracticeInScopes(
+              scopes,
+              options.maxQuestionCount,
+            );
+      }
       if (!mounted) return;
       if (questions.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('本机题库暂无可答题目，请先同步或导入题库')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              modelError == null ? '该范围本机题库暂无可答题目' : '该范围暂无可答题目：$modelError',
+            ),
+          ),
+        );
         return;
       }
       final first = questions.first;
@@ -955,6 +955,32 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  Future<List<QuizScope>> _randomQuizScopes(
+    List<QuizScope> chapterScopes,
+    ScriptureRepository scripture,
+  ) async {
+    final scopes = <QuizScope>[];
+    for (final scope in chapterScopes) {
+      final finalChapter = await scripture.getChapter(
+        scope.translationId,
+        scope.bookId,
+        scope.endChapter,
+      );
+      if (finalChapter.isEmpty) continue;
+      scopes.add(
+        QuizScope(
+          translationId: scope.translationId,
+          bookId: scope.bookId,
+          startChapter: scope.startChapter,
+          startVerse: 1,
+          endChapter: scope.endChapter,
+          endVerse: finalChapter.last.end.verse,
+        ),
+      );
+    }
+    return scopes;
   }
 
   Future<void> _export() async {

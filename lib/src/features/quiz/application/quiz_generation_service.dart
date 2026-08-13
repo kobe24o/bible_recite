@@ -135,6 +135,9 @@ final class QuizGenerationService {
       // Only require configuration when one or more verses actually need a
       // new question from the remote model.
       final settings = await _loadSettings();
+      if (!settings.modelAnsweringEnabled) {
+        return const QuizGenerationOutcome(error: '本地题库没有该范围可用题目');
+      }
       if (!settings.isConfigured) {
         return QuizGenerationOutcome(
           error: settings.missingConfigurationMessage,

@@ -556,7 +556,7 @@ final class SqlitePlanRepository {
     );
   }
 
-  /// Quiz model settings live in app_setting under three keys.
+  /// Quiz model settings live in app_setting and model answering is opt-in.
   Future<QuizModelSettings> getQuizModelSettings() async {
     final baseUrl = await getSetting(
       'quiz_model_url',
@@ -567,13 +567,24 @@ final class SqlitePlanRepository {
       QuizModelSettings.defaultModel,
     );
     final apiKey = await getSetting('quiz_model_api_key', '');
-    return QuizModelSettings(baseUrl: baseUrl, model: model, apiKey: apiKey);
+    final modelAnsweringEnabled =
+        await getSetting('quiz_model_answering_enabled', 'false') == 'true';
+    return QuizModelSettings(
+      baseUrl: baseUrl,
+      model: model,
+      apiKey: apiKey,
+      modelAnsweringEnabled: modelAnsweringEnabled,
+    );
   }
 
   Future<void> saveQuizModelSettings(QuizModelSettings settings) async {
     await setSetting('quiz_model_url', settings.baseUrl.trim());
     await setSetting('quiz_model_name', settings.model.trim());
     await setSetting('quiz_model_api_key', settings.apiKey);
+    await setSetting(
+      'quiz_model_answering_enabled',
+      settings.modelAnsweringEnabled.toString(),
+    );
   }
 
   Future<void> clearQuizModelApiKey() async {
@@ -658,6 +669,54 @@ final class SqlitePlanRepository {
         FROM quiz_question WHERE quality_version = ?
         ORDER BY RANDOM() LIMIT ?''',
         [quizQuestionQualityVersion, count],
+      );
+      for (final row in rows) {
+        _database.execute(
+          '''UPDATE quiz_question
+          SET answered = 0, is_correct = NULL, answered_at = NULL
+          WHERE id = ?''',
+          [row['id']],
+        );
+      }
+      _database.execute('COMMIT');
+      return rows.map(_pendingQuestionFromRow).toList(growable: false);
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// Selects a random local-bank practice set constrained to the supplied
+  /// whole-chapter ranges. Completed questions are reopened for the new run,
+  /// just like the unrestricted random-practice entry point.
+  Future<List<PendingQuizQuestion>> listRandomQuizQuestionsForPracticeInScopes(
+    Iterable<QuizScope> requestedScopes,
+    int count,
+  ) async {
+    final scopes = {...requestedScopes}.toList(growable: false);
+    if (count <= 0 || scopes.isEmpty) return const [];
+    final conditions = <String>[];
+    final arguments = <Object?>[quizQuestionQualityVersion];
+    for (final scope in scopes) {
+      conditions.add(
+        '(translation_id = ? AND book_id = ? AND chapter BETWEEN ? AND ?)',
+      );
+      arguments.addAll([
+        scope.translationId,
+        scope.bookId,
+        scope.startChapter,
+        scope.endChapter,
+      ]);
+    }
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      final rows = _database.select(
+        '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
+          end_offset, word, part_of_speech, meaning, reference
+        FROM quiz_question
+        WHERE quality_version = ? AND (${conditions.join(' OR ')})
+        ORDER BY RANDOM() LIMIT ?''',
+        [...arguments, count],
       );
       for (final row in rows) {
         _database.execute(

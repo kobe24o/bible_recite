@@ -179,6 +179,43 @@ void main() {
   );
 
   test(
+    'random local practice stays inside the selected chapter range',
+    () async {
+      await repository.saveQuizQuestions([
+        questionFor(verse: 16),
+        const ValidatedQuizQuestion(
+          reference: '约翰福音 4:1',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 4,
+          verse: 1,
+          start: 0,
+          end: 1,
+          word: '神',
+          partOfSpeech: '名词',
+          meaning: '神',
+          verseText: '神就是爱',
+        ),
+      ]);
+
+      final selected = await repository
+          .listRandomQuizQuestionsForPracticeInScopes(const [
+            QuizScope(
+              translationId: 'cmn-cu89s',
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 1,
+              endChapter: 3,
+              endVerse: 36,
+            ),
+          ], 10);
+
+      expect(selected, hasLength(1));
+      expect(selected.single.chapter, 3);
+    },
+  );
+
+  test(
     'migration merges duplicate question positions before adding uniqueness',
     () {
       final oldDatabase = sqlite3.openInMemory();
@@ -279,18 +316,21 @@ void main() {
     expect(defaults.baseUrl, contains('bigmodel'));
     expect(defaults.model, 'glm-4.7-flash');
     expect(defaults.apiKey, isEmpty);
+    expect(defaults.modelAnsweringEnabled, isFalse);
 
     await repository.saveQuizModelSettings(
       const QuizModelSettings(
         baseUrl: 'https://example.test/v1',
         model: 'custom-model',
         apiKey: 'shhh',
+        modelAnsweringEnabled: true,
       ),
     );
     final saved = await repository.getQuizModelSettings();
     expect(saved.baseUrl, 'https://example.test/v1');
     expect(saved.model, 'custom-model');
     expect(saved.apiKey, 'shhh');
+    expect(saved.modelAnsweringEnabled, isTrue);
 
     await repository.clearQuizModelApiKey();
     expect((await repository.getQuizModelSettings()).apiKey, isEmpty);
