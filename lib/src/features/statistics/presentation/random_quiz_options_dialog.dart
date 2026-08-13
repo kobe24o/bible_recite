@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../quiz/domain/quiz_scope.dart';
+import '../../scripture/data/asset_book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
 
 final class RandomQuizOptions {
@@ -24,6 +25,9 @@ class RandomQuizOptionsDialog extends StatefulWidget {
 }
 
 class _RandomQuizOptionsDialogState extends State<RandomQuizOptionsDialog> {
+  static const _bookNames = AssetBookNameCatalog.protestant66();
+  static const _chinese = Locale('zh', 'CN');
+
   late BibleBook _startBook;
   late BibleBook _endBook;
   int _startChapter = 1;
@@ -124,7 +128,10 @@ class _RandomQuizOptionsDialogState extends State<RandomQuizOptionsDialog> {
     decoration: InputDecoration(labelText: label),
     items: [
       for (final book in books)
-        DropdownMenuItem(value: book.osisId, child: Text(book.name)),
+        DropdownMenuItem(
+          value: book.osisId,
+          child: Text(_bookNames.nameFor(book.osisId, _chinese)),
+        ),
     ],
     onChanged: (id) => onChanged(books.firstWhere((book) => book.osisId == id)),
   );

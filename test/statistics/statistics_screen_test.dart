@@ -198,13 +198,13 @@ void main() {
                 BibleBook(
                   osisId: 'GEN',
                   ordinal: 1,
-                  name: '创世记',
+                  name: 'Genesis',
                   chapterCount: 50,
                 ),
                 BibleBook(
                   osisId: 'JHN',
                   ordinal: 43,
-                  name: '约翰福音',
+                  name: 'John',
                   chapterCount: 21,
                 ),
               ],
@@ -214,6 +214,7 @@ void main() {
       );
 
       expect(find.text('开始卷'), findsOneWidget);
+      expect(find.text('创世记'), findsOneWidget);
       expect(find.text('开始章'), findsOneWidget);
       expect(find.text('结束卷'), findsOneWidget);
       expect(find.text('结束章'), findsOneWidget);
