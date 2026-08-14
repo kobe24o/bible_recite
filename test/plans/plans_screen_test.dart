@@ -2,6 +2,7 @@ import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/plans/presentation/plans_screen.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +46,75 @@ void main() {
     );
     await tester.scrollUntilVisible(find.text('自定义计划'), 240);
     expect(find.text('自定义计划'), findsOneWidget);
+  });
+
+  testWidgets('saves a preset plan after adding it to my plans', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          bundledCloudPlanManifestProvider.overrideWith(
+            (ref) async => const CloudPlanManifest(
+              protocolVersion: 1,
+              publisher: 'test',
+              plans: [
+                CloudPlanTemplate(
+                  id: 'preset-test',
+                  title: '预置保存测试',
+                  description: '',
+                  push: false,
+                  revision: 1,
+                  defaultTranslationId: 'eng-web',
+                  defaultStartDate: null,
+                  defaultEndDate: null,
+                  sourceName: 'test',
+                  tag: '',
+                  passages: [
+                    CloudPlanPassage(
+                      order: 1,
+                      bookId: 'JHN',
+                      startChapter: 3,
+                      startVerse: 16,
+                      endChapter: 3,
+                      endVerse: 16,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PlansScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('预置保存测试'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-preset-plan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-plan-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await repository.listPlans()).map((plan) => plan.title),
+      contains('预置保存测试'),
+    );
   });
 
   testWidgets('opens an existing plan for chapter and date editing', (

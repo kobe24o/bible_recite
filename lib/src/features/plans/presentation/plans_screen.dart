@@ -927,6 +927,16 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           endChapter: first.endChapter,
           startDate: start,
           endDate: end,
+          passages: [
+            for (final passage in template.passages)
+              PlanPassageSelection(
+                bookId: passage.bookId,
+                startChapter: passage.startChapter,
+                startVerse: passage.startVerse,
+                endChapter: passage.endChapter,
+                endVerse: passage.endVerse,
+              ),
+          ],
         ),
       ),
     );
