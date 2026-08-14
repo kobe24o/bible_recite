@@ -163,8 +163,9 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       3,
     );
-    await tester.scrollUntilVisible(find.byKey(const Key('about-open')), 120);
-    await tester.tap(find.byKey(const Key('about-open')));
+    final about = find.byKey(const Key('about-open')).last;
+    await tester.ensureVisible(about);
+    await tester.tap(about);
     await tester.pumpAndSettle();
 
     expect(appRouter.routerDelegate.currentConfiguration.uri.path, '/about');
