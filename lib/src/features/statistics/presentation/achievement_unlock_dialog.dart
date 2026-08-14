@@ -12,7 +12,7 @@ Future<void> showAchievementUnlockDialog(
       AchievementUnlockDialog(progress: progress, newlyUnlocked: newlyUnlocked),
 );
 
-class AchievementUnlockDialog extends StatelessWidget {
+class AchievementUnlockDialog extends StatefulWidget {
   const AchievementUnlockDialog({
     required this.progress,
     required this.newlyUnlocked,
@@ -23,7 +23,37 @@ class AchievementUnlockDialog extends StatelessWidget {
   final bool newlyUnlocked;
 
   @override
+  State<AchievementUnlockDialog> createState() =>
+      _AchievementUnlockDialogState();
+}
+
+class _AchievementUnlockDialogState extends State<AchievementUnlockDialog>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _badgeController;
+  late final Animation<double> _badgeScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _badgeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 780),
+    )..forward();
+    _badgeScale = Tween<double>(begin: 0.32, end: 1).animate(
+      CurvedAnimation(parent: _badgeController, curve: Curves.elasticOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _badgeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final progress = widget.progress;
+    final newlyUnlocked = widget.newlyUnlocked;
     final unlocked = progress.unlockedAt != null;
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -71,7 +101,16 @@ class AchievementUnlockDialog extends StatelessWidget {
                       size: 18,
                     ),
                   ),
-                  AchievementBadgeArtwork(progress: progress, size: 132),
+                  ScaleTransition(
+                    key: const Key('achievement-detail-badge-animation'),
+                    scale: _badgeScale,
+                    child: AchievementBadgeArtwork(
+                      key: const Key('achievement-detail-badge-artwork'),
+                      progress: progress,
+                      size: 132,
+                      showSymbol: false,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -124,12 +163,14 @@ class AchievementBadgeArtwork extends StatelessWidget {
     required this.progress,
     this.size = 48,
     this.compact = false,
+    this.showSymbol = true,
     super.key,
   });
 
   final AchievementProgress progress;
   final double size;
   final bool compact;
+  final bool showSymbol;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +199,14 @@ class AchievementBadgeArtwork extends StatelessWidget {
           size: size * .58,
           color: const Color(0xFF7B5615),
         ),
+      );
+    }
+    if (!showSymbol) {
+      return Image.asset(
+        'assets/achievements/golden_bible_badge.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.high,
       );
     }
     return SizedBox(

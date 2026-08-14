@@ -144,10 +144,23 @@ void main() {
     );
     await tester.ensureVisible(firstBadge);
     await tester.tap(firstBadge);
+    await tester.pump();
+    final badgeAnimation = tester.widget<ScaleTransition>(
+      find.byKey(const Key('achievement-detail-badge-animation')),
+    );
+    expect(badgeAnimation.scale.value, lessThan(1));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('achievement-unlock-animation')),
       findsOneWidget,
+    );
+    final detailArtwork = find.byKey(
+      const Key('achievement-detail-badge-artwork'),
+    );
+    expect(detailArtwork, findsOneWidget);
+    expect(
+      find.descendant(of: detailArtwork, matching: find.byType(Icon)),
+      findsNothing,
     );
     expect(find.textContaining('当前进度：100%'), findsOneWidget);
     final timeText = tester
