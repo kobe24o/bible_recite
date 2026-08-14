@@ -5,6 +5,7 @@ import 'package:bible_recite/src/features/update/presentation/about_screen.dart'
 import 'package:bible_recite/src/features/update/presentation/update_available_notification.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -136,6 +137,13 @@ void main() {
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
           aboutUpdateActionsProvider.overrideWith((ref) => actions),
+          bundledCloudPlanManifestProvider.overrideWith(
+            (ref) async => const CloudPlanManifest(
+              protocolVersion: 1,
+              publisher: 'test',
+              plans: [],
+            ),
+          ),
           installedPackageInfoProvider.overrideWith(
             (ref) async => PackageInfo(
               appName: 'Bible Recite',

@@ -1493,9 +1493,16 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [Icon(icon), const SizedBox(width: 8), Text(text)],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 292),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon),
+            const SizedBox(width: 8),
+            Flexible(child: Text(text)),
+          ],
+        ),
       ),
     ),
   );

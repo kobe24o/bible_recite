@@ -1,6 +1,7 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
@@ -17,6 +18,35 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../scripture/scripture_browser_screen_test.dart'
     show FakeRepositoryForPassage;
+
+const _bundledManifest = CloudPlanManifest(
+  protocolVersion: 1,
+  publisher: 'test',
+  plans: [
+    CloudPlanTemplate(
+      id: 'classic-passages',
+      title: '圣经经典篇章',
+      description: '',
+      push: false,
+      revision: 1,
+      defaultTranslationId: 'cmn-cu89s',
+      defaultStartDate: null,
+      defaultEndDate: null,
+      sourceName: 'test',
+      tag: '',
+      passages: [
+        CloudPlanPassage(
+          order: 1,
+          bookId: 'GEN',
+          startChapter: 1,
+          startVerse: 1,
+          endChapter: 1,
+          endVerse: 1,
+        ),
+      ],
+    ),
+  ],
+);
 
 void main() {
   testWidgets('shows Ebbinghaus settings before any recitation exists', (
@@ -329,6 +359,9 @@ Future<void> _pumpScreen(
     ProviderScope(
       overrides: [
         planRepositoryProvider.overrideWith((ref) async => repository),
+        bundledCloudPlanManifestProvider.overrideWith(
+          (ref) async => _bundledManifest,
+        ),
         if (scripture != null)
           scriptureRepositoryProvider.overrideWith((ref) async => scripture),
       ],

@@ -97,7 +97,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
                             if (await _allTodayCompleted(repository)) {
-                              _celebrate();
+                              await _celebrate();
                             }
                           },
                           repository: repository,
@@ -137,7 +137,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
                             if (await _allTodayCompleted(repository)) {
-                              _celebrate();
+                              await _celebrate();
                             }
                           },
                           repository: repository,
@@ -162,11 +162,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  void _celebrate() {
+  Future<void> _celebrate() async {
     setState(() => _celebrating = true);
-    Future<void>.delayed(const Duration(seconds: 8), () {
-      if (mounted) setState(() => _celebrating = false);
-    });
+    await Future<void>.delayed(const Duration(seconds: 8));
+    if (mounted) setState(() => _celebrating = false);
   }
 
   Future<void> _startTask(
@@ -350,6 +349,14 @@ class _TaskCard extends StatelessWidget {
               task.id,
               !completed,
             );
+            Future<void>? completionCelebration;
+            if (!completed) {
+              final remaining = await repository.dueTasks(DateTime.now());
+              if (remaining.isEmpty) {
+                completionCelebration = onAllTodayCompleted();
+              }
+            }
+            await completionCelebration;
             if (!completed && context.mounted) {
               for (final achievement in unlocked) {
                 await showAchievementUnlockDialog(
@@ -364,10 +371,6 @@ class _TaskCard extends StatelessWidget {
                 );
                 break;
               }
-            }
-            if (!completed) {
-              final remaining = await repository.dueTasks(DateTime.now());
-              if (remaining.isEmpty) await onAllTodayCompleted();
             }
             onChanged();
           },
