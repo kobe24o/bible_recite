@@ -17,6 +17,8 @@ import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
+import '../../statistics/domain/achievement.dart';
+import '../../statistics/presentation/achievement_unlock_dialog.dart';
 import '../../../widgets/completion_confetti.dart';
 import '../application/recitation_scoring_provider.dart';
 import '../application/recitation_recognizer_provider.dart';
@@ -333,45 +335,39 @@ class _RecitationPracticeScreenState
         if (mounted) setState(() => _error = '背诵已保存，但复习排期失败：$error');
       }
       var allTodayCompleted = false;
+      Future<void>? completionCelebration;
+      final unlocked = <AchievementUnlock>[];
       if (widget.request.planTaskId != null) {
-        await repository.setTaskCompleted(widget.request.planTaskId!, true);
+        unlocked.addAll(
+          await repository.setTaskCompleted(widget.request.planTaskId!, true),
+        );
         allTodayCompleted =
             (await repository.dueTasks(DateTime.now())).isEmpty &&
             (await repository.dueEbbinghausReviews(DateTime.now())).isEmpty;
-        if (allTodayCompleted) unawaited(_celebrateCompletion());
+        if (allTodayCompleted) {
+          completionCelebration = _celebrateCompletion();
+        }
         await ref
             .read(dailyTaskReminderSchedulerProvider)
             .reschedule(repository);
       }
-      final unlocked = await repository.evaluateAndUnlockAchievements(
-        source: 'recitation',
+      unlocked.addAll(
+        await repository.evaluateAndUnlockAchievements(source: 'recitation'),
       );
       ref.read(recitationDataRevisionProvider.notifier).refresh();
-      for (final achievement in unlocked.where(
-        (item) => !item.definition.hiddenUntilUnlocked,
-      )) {
+      await completionCelebration;
+      for (final achievement in unlocked) {
         if (!mounted) break;
         unawaited(HapticFeedback.lightImpact().catchError((_) {}));
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            icon: const Icon(
-              Icons.workspace_premium_rounded,
-              color: Color(0xFFB88A22),
-              size: 42,
-            ),
-            title: const Text('获得新成就'),
-            content: Text(
-              '${achievement.definition.title}\n${achievement.definition.description}',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('太棒了'),
-              ),
-            ],
+        await showAchievementUnlockDialog(
+          context,
+          AchievementProgress(
+            definition: achievement.definition,
+            current: achievement.definition.target,
+            satisfied: true,
+            unlockedAt: achievement.unlockedAt,
           ),
+          newlyUnlocked: true,
         );
         break;
       }

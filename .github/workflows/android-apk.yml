@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-              --notes "修复预置计划点击“添加到我的计划”后保存无反应的问题：预置经文会完整带入锁定计划，保存后可正常出现在“我的计划”。APK 内置最新共享题库。"
+              --notes "新增预置计划标题勋章：未添加也会显示为锁定状态，完成计划后解锁。所有勋章支持弹出动画，隐藏勋章也会展示；每日撒花与勋章动画按顺序播放，避免重叠。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "修复预置计划点击“添加到我的计划”后保存无反应的问题：预置经文会完整带入锁定计划，保存后可正常出现在“我的计划”。APK 内置最新共享题库。" \
+              --release-notes "新增预置计划标题勋章：未添加也会显示为锁定状态，完成计划后解锁。所有勋章支持弹出动画，隐藏勋章也会展示；每日撒花与勋章动画按顺序播放，避免重叠。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

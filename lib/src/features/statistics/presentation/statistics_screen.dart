@@ -13,7 +13,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/empty_state_page.dart';
 import '../../plans/application/plan_providers.dart';
+import '../../plans/application/preset_plan_sync.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../plans/domain/plan_models.dart';
 import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/domain/quiz_bank_exchange.dart';
 import '../../quiz/domain/quiz_scope.dart';
@@ -33,6 +35,7 @@ import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
+import 'achievement_unlock_dialog.dart';
 
 class StatisticsScreen extends ConsumerStatefulWidget {
   const StatisticsScreen({super.key});
@@ -74,8 +77,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             }
             final data = snapshot.data!;
             final hasStatistics =
-                data.results.isNotEmpty ||
-                data.achievements.any((item) => item.unlockedAt != null);
+                data.results.isNotEmpty || data.achievements.isNotEmpty;
             final summary = data.summary;
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -451,7 +453,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       results: await repository.listRecitationResults(),
       achievements: [
         ...await repository.listAchievementProgress(),
-        ...coverage,
+        ...coverage.progress,
       ],
       settings: await repository.getEbbinghausSettings(),
       ignoreFinalNasal:
@@ -463,11 +465,81 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  Future<List<AchievementProgress>> _coverageAchievements(
+  Future<ExternalAchievementSyncResult> _coverageAchievements(
     SqlitePlanRepository repository,
   ) async {
     final metrics = await repository.listRecitationVerseMetrics();
-    if (metrics.isEmpty) return const [];
+    final definitions = <AchievementDefinition>[];
+    final satisfied = <String>{};
+    final currentValues = <String, double>{};
+    final plans = await repository.listPlans();
+    final presetPlans = plans
+        .where(
+          (plan) =>
+              plan.sourceKind == PlanSourceKind.preset ||
+              plan.sourceKind == PlanSourceKind.cloud,
+        )
+        .toList();
+    final savedByExternalId = {
+      for (final plan in presetPlans)
+        if (plan.externalId != null) plan.externalId!: plan,
+    };
+    final cachedManifest = await loadCachedPresetPlanManifest(repository);
+    final manifest =
+        cachedManifest ??
+        (await ref.read(bundledCloudPlanManifestProvider.future))!;
+    final knownExternalIds = <String>{};
+    for (final template in manifest.plans) {
+      final id = 'preset_plan_${template.id}';
+      final saved = savedByExternalId[template.id];
+      definitions.add(
+        AchievementDefinition(
+          id: id,
+          title: '${template.title}勋章',
+          description: '完成预置计划《${template.title}》',
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      );
+      if (saved != null &&
+          saved.totalTasks > 0 &&
+          saved.completedTasks == saved.totalTasks) {
+        satisfied.add(id);
+      }
+      currentValues[id] = saved == null || saved.totalTasks == 0
+          ? 0
+          : saved.completedTasks / saved.totalTasks;
+      knownExternalIds.add(template.id);
+    }
+    for (final plan in presetPlans.where(
+      (plan) =>
+          plan.externalId == null ||
+          !knownExternalIds.contains(plan.externalId),
+    )) {
+      final id = 'preset_plan_${plan.externalId ?? plan.id}';
+      definitions.add(
+        AchievementDefinition(
+          id: id,
+          title: '${plan.title}勋章',
+          description: '完成预置计划《${plan.title}》',
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      );
+      if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
+        satisfied.add(id);
+      }
+      currentValues[id] = plan.totalTasks == 0
+          ? 0
+          : plan.completedTasks / plan.totalTasks;
+    }
+    if (metrics.isEmpty) {
+      return repository.syncExternalAchievementsWithUnlocks(
+        definitions,
+        satisfied,
+        currentValues,
+      );
+    }
     final scripture = await ref.read(scriptureRepositoryProvider.future);
     final books = await scripture.listBooks('cmn-cu89s', CanonId.protestant66);
     final names = ref.read(bookNameCatalogProvider);
@@ -487,28 +559,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       covered
           .putIfAbsent('${item.bookId}:${item.chapter}', () => <int>{})
           .add(item.verse);
-    }
-    final definitions = <AchievementDefinition>[];
-    final satisfied = <String>{};
-    final currentValues = <String, double>{};
-    final plans = await repository.listPlans();
-    for (final plan in plans.where((plan) => plan.sourceKind.name == 'cloud')) {
-      final id = 'preset_plan_${plan.externalId ?? plan.id}';
-      definitions.add(
-        AchievementDefinition(
-          id: id,
-          title: '${plan.title}勋章',
-          description: '完成预置计划《${plan.title}》',
-          metric: AchievementMetric.sessions,
-          target: 1,
-        ),
-      );
-      if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
-        satisfied.add(id);
-      }
-      currentValues[id] = plan.totalTasks == 0
-          ? 0
-          : plan.completedTasks / plan.totalTasks;
     }
     var oldCovered = 0;
     var oldTotal = 0;
@@ -569,38 +619,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       currentValues[entry.id] = scopeProgress[entry.id]!;
       if (scopeProgress[entry.id]! >= 1) satisfied.add(entry.id);
     }
-    return repository.syncExternalAchievements(
+    return repository.syncExternalAchievementsWithUnlocks(
       definitions,
       satisfied,
       currentValues,
     );
   }
 
-  Future<void> _showAchievement(
-    AchievementProgress progress,
-  ) => showDialog<void>(
-    context: context,
-    builder: (context) {
-      final unlocked = progress.unlockedAt != null;
-      return AlertDialog(
-        icon: Icon(
-          unlocked ? Icons.workspace_premium_rounded : Icons.lock_outline,
-        ),
-        title: Text(progress.definition.title),
-        content: Text(
-          '${progress.definition.description}\n\n'
-          '当前进度：${(progress.fraction * 100).round()}%\n'
-          '${unlocked ? '获得状态：已获得\n获得时间：${_formatDateTime(progress.unlockedAt!)}' : '获得状态：尚未获得'}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
-        ],
-      );
-    },
-  );
+  Future<void> _showAchievement(AchievementProgress progress) =>
+      showAchievementUnlockDialog(context, progress);
 
   Future<void> _showSharePlatforms() async {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
@@ -1380,13 +1407,6 @@ String _formatDuration(Duration duration, {bool includeSeconds = true}) {
   return parts.isEmpty ? '0秒' : parts.join();
 }
 
-String _formatDateTime(DateTime value) {
-  final local = value.toLocal();
-  String two(int number) => number.toString().padLeft(2, '0');
-  return '${local.year}-${two(local.month)}-${two(local.day)} '
-      '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
-}
-
 class _AchievementCard extends StatelessWidget {
   const _AchievementCard({required this.progress, required this.onTap});
 
@@ -1412,18 +1432,25 @@ class _AchievementCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    unlocked
-                        ? Icons.workspace_premium_rounded
-                        : Icons.lock_outline,
-                    color: unlocked ? const Color(0xFFB88A22) : colors.outline,
+                  AchievementBadgeArtwork(
+                    progress: progress,
+                    size: 28,
+                    compact: true,
                   ),
-                  const Spacer(),
-                  Text(
-                    unlocked
-                        ? '已获得 · ${(progress.fraction * 100).round()}%'
-                        : '${(progress.fraction * 100).round()}%',
-                    style: Theme.of(context).textTheme.labelMedium,
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          unlocked
+                              ? '已获得 · ${(progress.fraction * 100).round()}%'
+                              : '${(progress.fraction * 100).round()}%',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

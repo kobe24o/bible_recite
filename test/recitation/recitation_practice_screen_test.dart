@@ -68,6 +68,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(await repository.listRecitationResults(), hasLength(1));
     expect(find.text('获得新成就'), findsOneWidget);
+    expect(
+      find.byKey(const Key('achievement-unlock-animation')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('太棒了'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('next-verse-button')), findsOneWidget);
@@ -343,6 +347,10 @@ void main() {
       expect(
         find.byKey(const Key('recitation-completion-confetti')),
         findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('achievement-unlock-animation')),
+        findsNothing,
       );
       await tester.pump(const Duration(seconds: 8));
     },

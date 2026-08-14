@@ -503,7 +503,6 @@ final class SqlitePlanRepository {
         );
       }
       _database.execute('COMMIT');
-      await evaluateAndUnlockAchievements(source: 'plan');
       return id;
     } catch (_) {
       _database.execute('ROLLBACK');
@@ -1582,13 +1581,54 @@ final class SqlitePlanRepository {
     }
   }
 
-  Future<void> setTaskCompleted(int taskId, bool completed) async {
+  Future<List<AchievementUnlock>> setTaskCompleted(
+    int taskId,
+    bool completed,
+  ) async {
     _database.execute(
       '''UPDATE plan_task SET completed = ?, due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END
       WHERE id = ?''',
       [completed ? 1 : 0, completed ? 1 : 0, _date(DateTime.now()), taskId],
     );
-    await evaluateAndUnlockAchievements(source: 'plan');
+    final unlocked = <AchievementUnlock>[];
+    if (completed) {
+      unlocked.addAll(await _unlockCompletedPresetPlan(taskId));
+    }
+    unlocked.addAll(await evaluateAndUnlockAchievements(source: 'plan'));
+    return unlocked;
+  }
+
+  Future<List<AchievementUnlock>> _unlockCompletedPresetPlan(int taskId) async {
+    final taskRows = _database.select(
+      'SELECT plan_id FROM plan_task WHERE id = ?',
+      [taskId],
+    );
+    if (taskRows.isEmpty) return const [];
+    final planId = taskRows.single['plan_id'] as int;
+    final plan = (await listPlans())
+        .where((item) => item.id == planId)
+        .firstOrNull;
+    if (plan == null ||
+        (plan.sourceKind != PlanSourceKind.preset &&
+            plan.sourceKind != PlanSourceKind.cloud) ||
+        plan.totalTasks == 0 ||
+        plan.completedTasks != plan.totalTasks) {
+      return const [];
+    }
+    final id = 'preset_plan_${plan.externalId ?? plan.id}';
+    return (await syncExternalAchievementsWithUnlocks(
+      [
+        AchievementDefinition(
+          id: id,
+          title: '${plan.title}勋章',
+          description: '完成预置计划《${plan.title}》',
+          metric: AchievementMetric.sessions,
+          target: 1,
+        ),
+      ],
+      {id},
+      {id: 1},
+    )).unlocked;
   }
 
   Future<void> deleteTask(int taskId) async {
@@ -2021,14 +2061,42 @@ final class SqlitePlanRepository {
     List<AchievementDefinition> definitions,
     Set<String> satisfiedIds,
     Map<String, double> currentValues,
+  ) async => (await syncExternalAchievementsWithUnlocks(
+    definitions,
+    satisfiedIds,
+    currentValues,
+  )).progress;
+
+  Future<ExternalAchievementSyncResult> syncExternalAchievementsWithUnlocks(
+    List<AchievementDefinition> definitions,
+    Set<String> satisfiedIds,
+    Map<String, double> currentValues,
   ) async {
     final now = DateTime.now().toUtc().toIso8601String();
-    for (final id in satisfiedIds) {
+    final existing = _database
+        .select('SELECT achievement_id FROM achievement_unlock')
+        .map((row) => row['achievement_id'] as String)
+        .toSet();
+    final definitionsById = {
+      for (final definition in definitions) definition.id: definition,
+    };
+    final unlocked = <AchievementUnlock>[];
+    for (final id in satisfiedIds.where((id) => !existing.contains(id))) {
       _database.execute(
         '''INSERT OR IGNORE INTO achievement_unlock
         (achievement_id, unlocked_at, source) VALUES (?, ?, 'coverage')''',
         [id, now],
       );
+      final definition = definitionsById[id];
+      if (definition != null) {
+        unlocked.add(
+          AchievementUnlock(
+            definition: definition,
+            unlockedAt: DateTime.parse(now).toLocal(),
+            source: 'coverage',
+          ),
+        );
+      }
     }
     final unlocks = <String, DateTime>{
       for (final row in _database.select(
@@ -2038,7 +2106,7 @@ final class SqlitePlanRepository {
           row['unlocked_at'] as String,
         ).toLocal(),
     };
-    return [
+    final progress = [
       for (final definition in definitions)
         AchievementProgress(
           definition: definition,
@@ -2049,6 +2117,10 @@ final class SqlitePlanRepository {
           unlockedAt: unlocks[definition.id],
         ),
     ];
+    return ExternalAchievementSyncResult(
+      progress: progress,
+      unlocked: unlocked,
+    );
   }
 
   AchievementSnapshot _achievementSnapshot() {

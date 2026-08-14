@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../statistics/domain/achievement.dart';
+import '../../statistics/presentation/achievement_unlock_dialog.dart';
 import '../../plans/domain/plan_models.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../review/domain/ebbinghaus_models.dart';
@@ -344,7 +346,25 @@ class _TaskCard extends StatelessWidget {
           key: Key('${completed ? 'undo' : 'complete'}-task-${task.id}'),
           tooltip: completed ? '撤销完成' : '完成',
           onPressed: () async {
-            await repository.setTaskCompleted(task.id, !completed);
+            final unlocked = await repository.setTaskCompleted(
+              task.id,
+              !completed,
+            );
+            if (!completed && context.mounted) {
+              for (final achievement in unlocked) {
+                await showAchievementUnlockDialog(
+                  context,
+                  AchievementProgress(
+                    definition: achievement.definition,
+                    current: achievement.definition.target,
+                    satisfied: true,
+                    unlockedAt: achievement.unlockedAt,
+                  ),
+                  newlyUnlocked: true,
+                );
+                break;
+              }
+            }
             if (!completed) {
               final remaining = await repository.dueTasks(DateTime.now());
               if (remaining.isEmpty) await onAllTodayCompleted();

@@ -1,17 +1,22 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:bible_recite/src/features/statistics/presentation/statistics_screen.dart';
 import 'package:bible_recite/src/features/statistics/presentation/random_quiz_options_dialog.dart';
+import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+
+import '../scripture/scripture_browser_screen_test.dart'
+    show FakeRepositoryForPassage;
 
 void main() {
   testWidgets('shows Ebbinghaus settings before any recitation exists', (
@@ -23,6 +28,11 @@ void main() {
 
     expect(find.widgetWithText(AppBar, '我的'), findsOneWidget);
     expect(find.text('艾宾浩斯背诵法'), findsOneWidget);
+    expect(find.text('圣经经典篇章勋章'), findsOneWidget);
+    expect(
+      find.byKey(const Key('achievement-preset_plan_classic-passages-locked')),
+      findsOneWidget,
+    );
     expect(find.text('通过阈值 80%'), findsOneWidget);
     expect(find.text('复习间隔：1、2、4、7、15、30 天'), findsOneWidget);
 
@@ -105,6 +115,10 @@ void main() {
     await tester.ensureVisible(firstBadge);
     await tester.tap(firstBadge);
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('achievement-unlock-animation')),
+      findsOneWidget,
+    );
     expect(find.textContaining('当前进度：100%'), findsOneWidget);
     final timeText = tester
         .widgetList<Text>(find.byType(Text))
@@ -187,6 +201,89 @@ void main() {
     expect(find.text('我的成就'), findsNothing);
   });
 
+  testWidgets('unlocks a title badge after completing a preset plan', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final planId = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '恩典之路',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 8, 15),
+        endDate: DateTime(2026, 8, 15),
+        sourceKind: PlanSourceKind.preset,
+        externalId: 'grace-path',
+        contentLocked: true,
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      ),
+    );
+    final task = (await repository.listTasks(planId)).single;
+    await repository.setTaskCompleted(task.id, true);
+    await repository.saveRecitationResult(
+      NewRecitationResult(
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        planId: planId,
+        verseMetrics: const [
+          NewRecitationVerseMetric(
+            bookId: 'JHN',
+            chapter: 3,
+            verse: 16,
+            accuracy: 1,
+            durationSeconds: 10,
+          ),
+        ],
+        mode: 'continuous',
+        durationSeconds: 10,
+        correctCount: 10,
+        incorrectCount: 0,
+        omittedCount: 0,
+        reorderedCount: 0,
+        accuracy: 1,
+        completedAt: DateTime(2026, 8, 15),
+      ),
+    );
+
+    await _pumpScreen(
+      tester,
+      repository,
+      scripture: FakeRepositoryForPassage(),
+    );
+
+    expect(find.text('恩典之路勋章'), findsWidgets);
+    expect(
+      find.byKey(const Key('achievement-preset_plan_grace-path-unlocked')),
+      findsOneWidget,
+    );
+    expect(find.text('获得新成就'), findsNothing);
+    final titleBadge = find.byKey(
+      const Key('achievement-preset_plan_grace-path-unlocked'),
+    );
+    await tester.ensureVisible(titleBadge);
+    await tester.tap(titleBadge);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('achievement-unlock-animation')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'random quiz dialog lets the user choose a scripture range and maximum count',
     (tester) async {
@@ -225,12 +322,15 @@ void main() {
 
 Future<void> _pumpScreen(
   WidgetTester tester,
-  SqlitePlanRepository repository,
-) async {
+  SqlitePlanRepository repository, {
+  FakeRepositoryForPassage? scripture,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         planRepositoryProvider.overrideWith((ref) async => repository),
+        if (scripture != null)
+          scriptureRepositoryProvider.overrideWith((ref) async => scripture),
       ],
       child: const MaterialApp(
         locale: Locale('zh'),

@@ -234,3 +234,13 @@ final class AchievementUnlock {
   final DateTime unlockedAt;
   final String source;
 }
+
+final class ExternalAchievementSyncResult {
+  const ExternalAchievementSyncResult({
+    required this.progress,
+    required this.unlocked,
+  });
+
+  final List<AchievementProgress> progress;
+  final List<AchievementUnlock> unlocked;
+}

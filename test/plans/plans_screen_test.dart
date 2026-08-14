@@ -48,7 +48,9 @@ void main() {
     expect(find.text('自定义计划'), findsOneWidget);
   });
 
-  testWidgets('saves a preset plan after adding it to my plans', (tester) async {
+  testWidgets('saving a preset plan does not show its completion animation', (
+    tester,
+  ) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(
@@ -109,8 +111,10 @@ void main() {
     await tester.tap(find.byKey(const Key('add-preset-plan-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-plan-button')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
 
+    expect(find.text('获得新成就'), findsNothing);
+    expect(find.byKey(const Key('achievement-unlock-animation')), findsNothing);
     expect(
       (await repository.listPlans()).map((plan) => plan.title),
       contains('预置保存测试'),
