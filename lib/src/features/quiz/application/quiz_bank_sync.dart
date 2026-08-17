@@ -53,6 +53,7 @@ final class QuizBankSyncResult {
     required this.rejected,
     required this.downloadedShards,
     required this.upToDate,
+    this.updated = 0,
   });
 
   final int imported;
@@ -60,6 +61,7 @@ final class QuizBankSyncResult {
   final int rejected;
   final int downloadedShards;
   final bool upToDate;
+  final int updated;
 }
 
 final class QuizBankSyncStatus {
@@ -111,6 +113,7 @@ Future<QuizBankSyncResult> syncQuizBank({
   }
   final knownHashes = await _loadShardHashes(repository);
   var imported = 0;
+  var updated = 0;
   var duplicates = 0;
   var rejected = 0;
   var downloaded = 0;
@@ -127,6 +130,7 @@ Future<QuizBankSyncResult> syncQuizBank({
     ).validate(QuizBankExchange.decode(response.text));
     final result = await repository.importQuizBankQuestions(validated.accepted);
     imported += result.imported;
+    updated += result.updated;
     duplicates += result.duplicates;
     rejected += validated.rejected;
     downloaded++;
@@ -139,7 +143,7 @@ Future<QuizBankSyncResult> syncQuizBank({
   await repository.setSetting(_quizBankRevisionKey, '${index.revision}');
   await _saveStatus(
     repository,
-    downloaded == 0 ? '题库已是最新' : '同步新增 $imported 道题目',
+    downloaded == 0 ? '题库已是最新' : '同步新增 $imported 道题目，更新 $updated 道释义',
     revision: index.revision,
   );
   return QuizBankSyncResult(
@@ -148,6 +152,7 @@ Future<QuizBankSyncResult> syncQuizBank({
     rejected: rejected,
     downloadedShards: downloaded,
     upToDate: downloaded == 0,
+    updated: updated,
   );
 }
 

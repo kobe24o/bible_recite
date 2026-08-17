@@ -18,6 +18,45 @@ void main() {
     },
   );
 
+  test(
+    'requires existing plans to opt in again after plan-level migration',
+    () async {
+      final database = sqlite3.openInMemory();
+      database.execute('''
+      CREATE TABLE memorization_plan (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        start_chapter INTEGER NOT NULL,
+        end_chapter INTEGER NOT NULL,
+        days INTEGER NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        source_kind TEXT NOT NULL DEFAULT 'local',
+        source_url TEXT,
+        external_id TEXT,
+        revision INTEGER NOT NULL DEFAULT 0,
+        content_locked INTEGER NOT NULL DEFAULT 0,
+        ebbinghaus_enabled INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL
+      )
+    ''');
+      database.execute('''
+      INSERT INTO memorization_plan
+      (title, translation_id, book_id, start_chapter, end_chapter, days,
+       start_date, end_date, ebbinghaus_enabled, created_at)
+      VALUES ('旧计划', 'cmn-cu89s', 'GEN', 1, 1, 1,
+              '2026-08-01', '2026-08-01', 1, '2026-08-01T00:00:00Z')
+    ''');
+      final repository = SqlitePlanRepository(database);
+      addTearDown(repository.close);
+
+      expect((await repository.listPlans()).single.ebbinghausEnabled, isFalse);
+    },
+  );
+
   test('only an enabled source plan creates an exact-range review', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
@@ -45,6 +84,28 @@ void main() {
     expect(reviews, hasLength(1));
     expect(reviews.single.startVerse, 16);
     expect(reviews.single.endVerse, 16);
+  });
+
+  test('turning off a plan stops its existing Ebbinghaus tasks', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final base = DateTime(2026, 8, 9, 9);
+    final planId = await _plan(repository, base, enabled: true);
+    final source = await repository.saveRecitationResult(
+      _result(accuracy: 1, completedAt: base, planId: planId),
+    );
+    await repository.processEbbinghausResult(resultId: source);
+    expect(
+      await repository.dueEbbinghausReviews(base.add(const Duration(days: 1))),
+      isNotEmpty,
+    );
+
+    await repository.updatePlan(planId, _planDefinition(base, enabled: false));
+
+    expect(
+      await repository.dueEbbinghausReviews(base.add(const Duration(days: 1))),
+      isEmpty,
+    );
   });
 
   test(
@@ -132,25 +193,31 @@ Future<int> _plan(
   required bool enabled,
   String title = '复习计划',
 }) => repository.createPlan(
-  NewMemorizationPlan(
-    title: title,
-    translationId: 'cmn-cu89s',
-    bookId: 'JHN',
-    startChapter: 3,
-    endChapter: 3,
-    startDate: date,
-    endDate: date,
-    ebbinghausEnabled: enabled,
-    tasks: const [
-      NewPlanTask(
-        dayIndex: 0,
-        startChapter: 3,
-        startVerse: 1,
-        endChapter: 3,
-        endVerse: 36,
-      ),
-    ],
-  ),
+  _planDefinition(date, enabled: enabled, title: title),
+);
+
+NewMemorizationPlan _planDefinition(
+  DateTime date, {
+  required bool enabled,
+  String title = '复习计划',
+}) => NewMemorizationPlan(
+  title: title,
+  translationId: 'cmn-cu89s',
+  bookId: 'JHN',
+  startChapter: 3,
+  endChapter: 3,
+  startDate: date,
+  endDate: date,
+  ebbinghausEnabled: enabled,
+  tasks: const [
+    NewPlanTask(
+      dayIndex: 0,
+      startChapter: 3,
+      startVerse: 1,
+      endChapter: 3,
+      endVerse: 36,
+    ),
+  ],
 );
 
 NewRecitationResult _result({

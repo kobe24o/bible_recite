@@ -84,6 +84,68 @@ void main() {
   );
 
   test(
+    'refreshes a local meaning when a newer cloud shard changes it',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      var bank = QuizBankExchange.encode(const [
+        QuizBankQuestion(
+          reference: '约翰福音 3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+        ),
+      ]);
+      var index = await _indexFor(revision: 1, bank: bank);
+      final client = QuizBankFeedClient(
+        loader: (uri, _) async => uri.path.endsWith(quizBankIndexPath)
+            ? QuizBankFeedResponse(statusCode: 200, text: index, etag: '"live"')
+            : QuizBankFeedResponse(statusCode: 200, text: bank),
+      );
+
+      await syncQuizBank(
+        repository: repository,
+        scripture: _FakeScripture(),
+        client: client,
+      );
+      bank = QuizBankExchange.encode(const [
+        QuizBankQuestion(
+          reference: '约翰福音 3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上所有的人',
+        ),
+      ]);
+      index = await _indexFor(revision: 2, bank: bank);
+
+      final refreshed = await syncQuizBank(
+        repository: repository,
+        scripture: _FakeScripture(),
+        client: client,
+      );
+
+      expect(refreshed.imported, 0);
+      expect(refreshed.updated, 1);
+      expect(
+        (await repository.listQuizBankQuestions()).single.meaning,
+        '世上所有的人',
+      );
+    },
+  );
+
+  test(
     'checks every mirror, selects the highest revision and skips stale shards',
     () async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());

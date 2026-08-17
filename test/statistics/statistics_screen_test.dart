@@ -149,6 +149,11 @@ void main() {
       find.byKey(const Key('achievement-detail-badge-animation')),
     );
     expect(badgeAnimation.scale.value, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 340));
+    final badgeGlow = tester.widget<FadeTransition>(
+      find.byKey(const Key('achievement-detail-badge-glow')),
+    );
+    expect(badgeGlow.opacity.value, greaterThan(.5));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('achievement-unlock-animation')),

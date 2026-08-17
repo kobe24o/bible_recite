@@ -18,6 +18,8 @@ final class SqlitePlanRepository {
   /// questions unsuitable. Answered history remains intact for statistics.
   static const quizQuestionQualityVersion = 2;
   static const maxQuizQuestionsPerVerse = 5;
+  static const _perPlanEbbinghausConsentMigrationKey =
+      'per_plan_ebbinghaus_consent_v1';
 
   SqlitePlanRepository(this._database) {
     _database.execute('PRAGMA foreign_keys = ON');
@@ -301,8 +303,6 @@ final class SqlitePlanRepository {
       _database.execute(
         'ALTER TABLE memorization_plan ADD COLUMN ebbinghaus_enabled INTEGER NOT NULL DEFAULT 0',
       );
-      _database.execute('''UPDATE memorization_plan SET ebbinghaus_enabled =
-        COALESCE((SELECT enabled FROM ebbinghaus_settings WHERE id = 1), 0)''');
     }
     final taskColumns = _database
         .select('PRAGMA table_info(plan_task)')
@@ -384,10 +384,41 @@ final class SqlitePlanRepository {
       end_chapter = (SELECT chapter FROM recitation_result WHERE id = source_result_id),
       end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''',
     );
+    _migratePerPlanEbbinghausConsent();
     _database.execute('PRAGMA user_version = 8');
   }
 
   final Database _database;
+
+  /// The old global setting was copied to every plan when per-plan reviews
+  /// were introduced. That was not a deliberate choice for each plan, so a
+  /// one-time migration resets those inherited flags and pauses their cycles.
+  /// Users can opt in again from the individual plan editor.
+  void _migratePerPlanEbbinghausConsent() {
+    final migrated = _database.select(
+      'SELECT 1 FROM app_setting WHERE setting_key = ?',
+      [_perPlanEbbinghausConsentMigrationKey],
+    );
+    if (migrated.isNotEmpty) return;
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute(
+        'UPDATE memorization_plan SET ebbinghaus_enabled = 0 '
+        'WHERE ebbinghaus_enabled = 1',
+      );
+      _database.execute('''UPDATE ebbinghaus_cycle SET status = 'paused'
+           WHERE status = 'active' AND source_plan_id IN
+             (SELECT id FROM memorization_plan)''');
+      _database.execute(
+        'INSERT INTO app_setting(setting_key, setting_value) VALUES (?, ?)',
+        [_perPlanEbbinghausConsentMigrationKey, '1'],
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
 
   static const _storedDayLimit = 365;
 
@@ -942,24 +973,25 @@ final class SqlitePlanRepository {
 
   /// Adds portable questions without changing the answer state of a matching
   /// local question. New questions start unanswered so they can be practised;
-  /// existing history and accuracy remain strictly local.
+  /// existing history and accuracy remain strictly local, while bank-managed
+  /// fields such as the meaning are refreshed from the newest bank.
   Future<QuizBankImportResult> importQuizBankQuestions(
     List<ValidatedQuizQuestion> questions,
   ) async {
     if (questions.isEmpty) return const QuizBankImportResult();
     var imported = 0;
+    var updated = 0;
     final now = DateTime.now().toUtc().toIso8601String();
     _database.execute('BEGIN IMMEDIATE');
     try {
       for (final question in questions) {
-        _database.execute(
-          '''
-          INSERT OR IGNORE INTO quiz_question
-          (translation_id, book_id, chapter, verse, start_offset, end_offset,
-           word, part_of_speech, meaning, reference,
-           quality_version, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''',
+        final meaning = compactQuizMeaning(question.word, question.meaning);
+        final existing = _database.select(
+          '''SELECT id, word, part_of_speech, meaning, reference,
+                    quality_version
+             FROM quiz_question
+             WHERE translation_id = ? AND book_id = ? AND chapter = ?
+               AND verse = ? AND start_offset = ? AND end_offset = ?''',
           [
             question.translationId,
             question.bookId,
@@ -967,17 +999,58 @@ final class SqlitePlanRepository {
             question.verse,
             question.start,
             question.end,
-            question.word,
-            question.partOfSpeech,
-            compactQuizMeaning(question.word, question.meaning),
-            question.reference,
-            quizQuestionQualityVersion,
-            now,
           ],
         );
-        imported +=
-            _database.select('SELECT changes() AS changed').single['changed']
-                as int;
+        if (existing.isEmpty) {
+          _database.execute(
+            '''
+            INSERT INTO quiz_question
+            (translation_id, book_id, chapter, verse, start_offset, end_offset,
+             word, part_of_speech, meaning, reference,
+             quality_version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ''',
+            [
+              question.translationId,
+              question.bookId,
+              question.chapter,
+              question.verse,
+              question.start,
+              question.end,
+              question.word,
+              question.partOfSpeech,
+              meaning,
+              question.reference,
+              quizQuestionQualityVersion,
+              now,
+            ],
+          );
+          imported++;
+          continue;
+        }
+        final row = existing.single;
+        final changed =
+            row['word'] != question.word ||
+            row['part_of_speech'] != question.partOfSpeech ||
+            row['meaning'] != meaning ||
+            row['reference'] != question.reference ||
+            row['quality_version'] != quizQuestionQualityVersion;
+        if (!changed) continue;
+        _database.execute(
+          '''UPDATE quiz_question
+             SET word = ?, part_of_speech = ?, meaning = ?, reference = ?,
+                 quality_version = ?
+             WHERE id = ?''',
+          [
+            question.word,
+            question.partOfSpeech,
+            meaning,
+            question.reference,
+            quizQuestionQualityVersion,
+            row['id'],
+          ],
+        );
+        updated++;
       }
       _database.execute('COMMIT');
     } catch (_) {
@@ -987,6 +1060,7 @@ final class SqlitePlanRepository {
     return QuizBankImportResult(
       imported: imported,
       duplicates: questions.length - imported,
+      updated: updated,
     );
   }
 
@@ -1437,6 +1511,13 @@ final class SqlitePlanRepository {
           planId,
         ],
       );
+      if (!plan.ebbinghausEnabled) {
+        _database.execute(
+          "UPDATE ebbinghaus_cycle SET status = 'paused' "
+          "WHERE source_plan_id = ? AND status = 'active'",
+          [planId],
+        );
+      }
       _saveScheduleSpan(planId, plan.startDate, plan.days);
       _database.execute('DELETE FROM plan_task WHERE plan_id = ?', [planId]);
       for (final task in plan.tasks) {
@@ -1934,7 +2015,8 @@ final class SqlitePlanRepository {
           )
           AND NOT EXISTS (
             SELECT 1 FROM memorization_plan p
-            WHERE p.id = c.source_plan_id AND p.status = 'paused'
+            WHERE p.id = c.source_plan_id
+              AND (p.status = 'paused' OR p.ebbinghaus_enabled = 0)
           )
           ORDER BY r.interval_days DESC, r.due_date DESC, r.id DESC
         ''',

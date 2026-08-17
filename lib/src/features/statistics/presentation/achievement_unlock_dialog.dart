@@ -31,16 +31,36 @@ class _AchievementUnlockDialogState extends State<AchievementUnlockDialog>
     with SingleTickerProviderStateMixin {
   late final AnimationController _badgeController;
   late final Animation<double> _badgeScale;
+  late final Animation<double> _badgeGlowOpacity;
+  late final Animation<double> _badgeGlowScale;
 
   @override
   void initState() {
     super.initState();
     _badgeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 780),
+      duration: const Duration(milliseconds: 1600),
     )..forward();
-    _badgeScale = Tween<double>(begin: 0.32, end: 1).animate(
-      CurvedAnimation(parent: _badgeController, curve: Curves.elasticOut),
+    _badgeScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: .32,
+          end: 1.13,
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 42,
+      ),
+      TweenSequenceItem(tween: Tween(begin: 1.13, end: .96), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: .96, end: 1.04), weight: 18),
+      TweenSequenceItem(tween: Tween(begin: 1.04, end: 1), weight: 20),
+    ]).animate(_badgeController);
+    _badgeGlowOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: .96), weight: 18),
+      TweenSequenceItem(tween: Tween(begin: .96, end: .28), weight: 18),
+      TweenSequenceItem(tween: Tween(begin: .28, end: .88), weight: 24),
+      TweenSequenceItem(tween: Tween(begin: .88, end: 0), weight: 40),
+    ]).animate(_badgeController);
+    _badgeGlowScale = Tween<double>(begin: .72, end: 1.3).animate(
+      CurvedAnimation(parent: _badgeController, curve: Curves.easeOutCubic),
     );
   }
 
@@ -87,6 +107,28 @@ class _AchievementUnlockDialogState extends State<AchievementUnlockDialog>
               Stack(
                 alignment: Alignment.center,
                 children: [
+                  FadeTransition(
+                    key: const Key('achievement-detail-badge-glow'),
+                    opacity: _badgeGlowOpacity,
+                    child: ScaleTransition(
+                      scale: _badgeGlowScale,
+                      child: Container(
+                        width: 156,
+                        height: 156,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const RadialGradient(
+                            colors: [Color(0xA6FFF1A8), Color(0x00FFF1A8)],
+                            stops: [.1, 1],
+                          ),
+                          border: Border.all(
+                            color: const Color(0xCCF1C960),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const Positioned(
                     top: 0,
                     right: 7,

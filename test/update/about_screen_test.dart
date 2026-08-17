@@ -34,6 +34,19 @@ void main() {
     expect(actions.checks, 2);
   });
 
+  testWidgets('shows the Lord\'s Prayer beneath the update panel', (
+    tester,
+  ) async {
+    await _pumpAbout(
+      tester,
+      status: UpdateCurrent(installedVersion: AppVersion.parse('1.0.4', '7')),
+    );
+
+    expect(find.text('主祷文'), findsOneWidget);
+    expect(find.text('马太福音 6:9–13'), findsOneWidget);
+    expect(find.textContaining('我们在天上的父'), findsOneWidget);
+  });
+
   testWidgets('Android presents update, progress, cancellation, and install', (
     tester,
   ) async {

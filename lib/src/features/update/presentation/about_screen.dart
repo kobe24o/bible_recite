@@ -217,11 +217,58 @@ class _AboutScreenState extends ConsumerState<AboutScreen>
             ),
             const SizedBox(height: 24),
             _UpdatePanel(status: status, isAndroid: isAndroid),
+            const SizedBox(height: 32),
+            const _LordPrayerCard(),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
+}
+
+class _LordPrayerCard extends StatelessWidget {
+  const _LordPrayerCard();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFE6D6AA)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '主祷文',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: const Color(0xFF7B5615),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '马太福音 6:9–13',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: const Color(0xFF7B6C52)),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          '我们在天上的父：\n'
+          '愿人都尊你的名为圣。\n'
+          '愿你的国降临；愿你的旨意行在地上，如同行在天上。\n'
+          '我们日用的饮食，今日赐给我们。\n'
+          '免我们的债，如同我们免了人的债。\n'
+          '不叫我们遇见试探；救我们脱离凶恶。\n'
+          '因为国度、权柄、荣耀，全是你的，直到永远。阿们！',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.72),
+        ),
+      ],
+    ),
+  );
 }
 
 class _UpdatePanel extends ConsumerWidget {

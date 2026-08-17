@@ -109,11 +109,16 @@ String compactQuizMeaning(String word, String meaning) {
   return compact;
 }
 
-/// Result of importing portable question-only data. Existing questions are
-/// deliberately left untouched, including their local answer history.
+/// Result of importing portable question-only data. Existing answer history is
+/// deliberately left untouched even when bank-managed question fields update.
 final class QuizBankImportResult {
-  const QuizBankImportResult({this.imported = 0, this.duplicates = 0});
+  const QuizBankImportResult({
+    this.imported = 0,
+    this.duplicates = 0,
+    this.updated = 0,
+  });
 
   final int imported;
   final int duplicates;
+  final int updated;
 }

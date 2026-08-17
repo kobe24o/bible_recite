@@ -18,6 +18,7 @@ void main() {
     int verse = 16,
     int start = 2,
     int end = 4,
+    String meaning = '世上的人',
   }) => ValidatedQuizQuestion(
     reference: '约翰福音 3:$verse',
     translationId: 'cmn-cu89s',
@@ -28,7 +29,7 @@ void main() {
     end: end,
     word: '世人',
     partOfSpeech: '名词',
-    meaning: '世上的人',
+    meaning: meaning,
     verseText: '神爱世人',
   );
 
@@ -134,6 +135,30 @@ void main() {
         await repository.listPendingQuizQuestions(scopeFor()),
         hasLength(1),
       );
+    },
+  );
+
+  test(
+    'import refreshes a matching question meaning without resetting history',
+    () async {
+      await repository.saveQuizQuestions([questionFor()]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+
+      final result = await repository.importQuizBankQuestions([
+        questionFor(meaning: '世上所有的人'),
+      ]);
+
+      expect(result.imported, 0);
+      expect(result.updated, 1);
+      expect(
+        (await repository.listQuizBankQuestions()).single.meaning,
+        '世上所有的人',
+      );
+      expect((await repository.getQuizSummary()).totalAnswered, 1);
     },
   );
 
