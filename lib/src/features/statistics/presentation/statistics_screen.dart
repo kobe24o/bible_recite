@@ -22,6 +22,7 @@ import '../../quiz/domain/quiz_scope.dart';
 import '../../quiz/application/quiz_bank_sync.dart';
 import '../../quiz/application/quiz_bank_local_validator.dart';
 import '../../quiz/application/quiz_providers.dart';
+import '../../quiz/data/quiz_bank_feed_client.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
