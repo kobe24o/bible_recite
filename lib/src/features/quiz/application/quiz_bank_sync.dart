@@ -102,13 +102,8 @@ Future<QuizBankSyncResult> syncQuizBank({
   // A temporarily stale set of mirrors must not roll a newer packaged/local
   // bank backward. Revisions are append-only in the shared bank.
   if (index.revision < knownRevision) {
-    await _saveStatus(repository, '题库已是最新', revision: null);
-    return const QuizBankSyncResult(
-      imported: 0,
-      duplicates: 0,
-      rejected: 0,
-      downloadedShards: 0,
-      upToDate: true,
+    throw QuizBankFeedException(
+      '云端题库索引版本回退（云端 ${index.revision}，本机 $knownRevision）',
     );
   }
   final knownHashes = await _loadShardHashes(repository);

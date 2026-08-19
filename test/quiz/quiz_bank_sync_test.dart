@@ -222,6 +222,47 @@ void main() {
     },
   );
 
+  test('does not report an older cloud index as up to date', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.setSetting('quiz_bank_revision', '649');
+    final bank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+      ),
+    ]);
+    final olderIndex = await _indexFor(revision: 131, bank: bank);
+    final client = QuizBankFeedClient(
+      loader: (uri, _) async => uri.path.endsWith(quizBankIndexPath)
+          ? QuizBankFeedResponse(statusCode: 200, text: olderIndex)
+          : QuizBankFeedResponse(statusCode: 200, text: bank),
+    );
+
+    expect(
+      () => syncQuizBank(
+        repository: repository,
+        scripture: _FakeScripture(),
+        client: client,
+      ),
+      throwsA(
+        isA<QuizBankFeedException>().having(
+          (error) => error.message,
+          'message',
+          contains('版本回退'),
+        ),
+      ),
+    );
+  });
+
   test('imports the latest packaged bank once for offline practice', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
