@@ -897,6 +897,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
           content: Text(
             result.upToDate
                 ? '题库已是最新'
+                : result.replacedSnapshot
+                ? '题库质量更新完成：已替换 ${result.imported} 道题；历史答题记录已保留。'
                 : '题库同步完成：新增 ${result.imported} 道，重复 ${result.duplicates} 道，'
                       '本机原文不匹配 ${result.rejected} 道',
           ),

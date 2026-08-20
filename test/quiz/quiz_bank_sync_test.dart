@@ -303,24 +303,180 @@ void main() {
     expect(await repository.getSetting('quiz_bank_revision', ''), '16');
     expect((await repository.listQuizBankQuestions()), hasLength(1));
   });
+
+  test('replace activates only after every shard validates', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final oldBank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+      ),
+    ]);
+    final firstBank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 0,
+        end: 1,
+        word: '神',
+        partOfSpeech: '名词',
+        meaning: '创造万有并受敬拜的主',
+      ),
+    ]);
+    final secondBank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+      ),
+    ]);
+    var index = await _indexFor(revision: 1, bank: oldBank);
+    final client = QuizBankFeedClient(
+      loader: (uri, _) async {
+        if (uri.path.endsWith(quizBankIndexPath))
+          return QuizBankFeedResponse(statusCode: 200, text: index);
+        return QuizBankFeedResponse(
+          statusCode: 200,
+          text: uri.path.endsWith('01.json') ? firstBank : secondBank,
+        );
+      },
+    );
+    await syncQuizBank(
+      repository: repository,
+      scripture: _FakeScripture(),
+      client: client,
+    );
+    index = await _indexForBanks(
+      revision: 702,
+      banks: {'quiz-bank-01.json': firstBank, 'quiz-bank-02.json': secondBank},
+      replace: true,
+    );
+
+    final result = await syncQuizBank(
+      repository: repository,
+      scripture: _FakeScripture(),
+      client: client,
+    );
+
+    expect(result.replacedSnapshot, isTrue);
+    expect(await repository.listQuizBankQuestions(), hasLength(2));
+  });
+
+  test('bad later replacement shard preserves the old active bank', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final oldBank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+      ),
+    ]);
+    final firstBank = QuizBankExchange.encode(const [
+      QuizBankQuestion(
+        reference: '约翰福音 3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 0,
+        end: 1,
+        word: '神',
+        partOfSpeech: '名词',
+        meaning: '创造万有并受敬拜的主',
+      ),
+    ]);
+    var index = await _indexFor(revision: 1, bank: oldBank);
+    final client = QuizBankFeedClient(
+      loader: (uri, _) async {
+        if (uri.path.endsWith(quizBankIndexPath))
+          return QuizBankFeedResponse(statusCode: 200, text: index);
+        if (uri.path.endsWith('quiz-bank.json'))
+          return QuizBankFeedResponse(statusCode: 200, text: oldBank);
+        if (uri.path.endsWith('01.json'))
+          return QuizBankFeedResponse(statusCode: 200, text: firstBank);
+        return const QuizBankFeedResponse(statusCode: 200, text: 'corrupt');
+      },
+    );
+    await syncQuizBank(
+      repository: repository,
+      scripture: _FakeScripture(),
+      client: client,
+    );
+    index = await _indexForBanks(
+      revision: 702,
+      banks: {'quiz-bank-01.json': firstBank, 'quiz-bank-02.json': oldBank},
+      replace: true,
+    );
+
+    await expectLater(
+      syncQuizBank(
+        repository: repository,
+        scripture: _FakeScripture(),
+        client: client,
+      ),
+      throwsA(isA<QuizBankFeedException>()),
+    );
+
+    final active = await repository.listQuizBankQuestions();
+    expect(active, hasLength(1));
+    expect(active.single.start, 2);
+  });
 }
 
 Future<String> _indexFor({required int revision, required String bank}) async {
-  final digest = await Sha256().hash(utf8.encode(bank));
-  final sha256 = digest.bytes
-      .map((item) => item.toRadixString(16).padLeft(2, '0'))
-      .join();
+  return _indexForBanks(revision: revision, banks: {'quiz-bank.json': bank});
+}
+
+Future<String> _indexForBanks({
+  required int revision,
+  required Map<String, String> banks,
+  bool replace = false,
+}) async {
+  final shards = <Map<String, Object>>[];
+  for (final entry in banks.entries) {
+    final digest = await Sha256().hash(utf8.encode(entry.value));
+    shards.add({
+      'path': entry.key,
+      'sha256': digest.bytes
+          .map((item) => item.toRadixString(16).padLeft(2, '0'))
+          .join(),
+      'bytes': utf8.encode(entry.value).length,
+    });
+  }
   return jsonEncode({
     'format': 'bible-recite-quiz-bank-index',
     'version': 1,
     'revision': revision,
-    'shards': [
-      {
-        'path': 'quiz-bank.json',
-        'sha256': sha256,
-        'bytes': utf8.encode(bank).length,
-      },
-    ],
+    if (replace) 'snapshotMode': 'replace',
+    if (replace) 'qualityVersion': 3,
+    'shards': shards,
   });
 }
 

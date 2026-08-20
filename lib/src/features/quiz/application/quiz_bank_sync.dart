@@ -54,6 +54,7 @@ final class QuizBankSyncResult {
     required this.downloadedShards,
     required this.upToDate,
     this.updated = 0,
+    this.replacedSnapshot = false,
   });
 
   final int imported;
@@ -62,6 +63,7 @@ final class QuizBankSyncResult {
   final int downloadedShards;
   final bool upToDate;
   final int updated;
+  final bool replacedSnapshot;
 }
 
 final class QuizBankSyncStatus {
@@ -107,29 +109,50 @@ Future<QuizBankSyncResult> syncQuizBank({
     );
   }
   final knownHashes = await _loadShardHashes(repository);
+  final replacing = index.snapshotMode == QuizBankSnapshotMode.replace;
   var imported = 0;
   var updated = 0;
   var duplicates = 0;
   var rejected = 0;
   var downloaded = 0;
   final nextHashes = <String, String>{...knownHashes};
-  for (final shard in index.shards) {
-    if (knownHashes[shard.path] == shard.sha256) continue;
-    final response = await _downloadMatchingShard(
-      client: client,
-      shard: shard,
-      indexSource: newest.source,
-    );
-    final validated = await QuizBankLocalValidator(
-      scripture,
-    ).validate(QuizBankExchange.decode(response.text));
-    final result = await repository.importQuizBankQuestions(validated.accepted);
-    imported += result.imported;
-    updated += result.updated;
-    duplicates += result.duplicates;
-    rejected += validated.rejected;
-    downloaded++;
-    nextHashes[shard.path] = shard.sha256;
+  if (replacing) await repository.discardStagedQuizBankSnapshot(index.revision);
+  try {
+    for (final shard in index.shards) {
+      if (!replacing && knownHashes[shard.path] == shard.sha256) continue;
+      final response = await _downloadMatchingShard(
+        client: client,
+        shard: shard,
+        indexSource: newest.source,
+      );
+      final validated = await QuizBankLocalValidator(
+        scripture,
+      ).validate(QuizBankExchange.decode(response.text));
+      if (replacing) {
+        await repository.stageQuizBankSnapshot(
+          index.revision,
+          validated.accepted,
+        );
+      } else {
+        final result = await repository.importQuizBankQuestions(
+          validated.accepted,
+        );
+        imported += result.imported;
+        updated += result.updated;
+        duplicates += result.duplicates;
+      }
+      rejected += validated.rejected;
+      downloaded++;
+      nextHashes[shard.path] = shard.sha256;
+    }
+    if (replacing) {
+      await repository.activateStagedQuizBankSnapshot(index.revision);
+      imported = (await repository.listQuizBankQuestions()).length;
+    }
+  } catch (_) {
+    if (replacing)
+      await repository.discardStagedQuizBankSnapshot(index.revision);
+    rethrow;
   }
   nextHashes.removeWhere(
     (path, _) => !index.shards.any((shard) => shard.path == path),
@@ -138,7 +161,11 @@ Future<QuizBankSyncResult> syncQuizBank({
   await repository.setSetting(_quizBankRevisionKey, '${index.revision}');
   await _saveStatus(
     repository,
-    downloaded == 0 ? '题库已是最新' : '同步新增 $imported 道题目，更新 $updated 道释义',
+    downloaded == 0
+        ? '题库已是最新'
+        : replacing
+        ? '题库质量更新完成：已替换 $imported 道题；历史答题记录已保留。'
+        : '同步新增 $imported 道题目，更新 $updated 道释义',
     revision: index.revision,
   );
   return QuizBankSyncResult(
@@ -148,6 +175,7 @@ Future<QuizBankSyncResult> syncQuizBank({
     downloadedShards: downloaded,
     upToDate: downloaded == 0,
     updated: updated,
+    replacedSnapshot: replacing,
   );
 }
 
