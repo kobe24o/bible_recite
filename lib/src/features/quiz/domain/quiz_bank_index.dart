@@ -1,16 +1,25 @@
 import 'dart:convert';
 
+enum QuizBankSnapshotMode { incremental, replace }
+
 /// Small manifest fetched before any shared-bank shard. Its revision, ETag
 /// and per-shard SHA-256 allow ordinary launches to avoid downloading a large
 /// bank that has not changed.
 final class QuizBankIndex {
-  const QuizBankIndex({required this.revision, required this.shards});
+  const QuizBankIndex({
+    required this.revision,
+    required this.shards,
+    this.snapshotMode = QuizBankSnapshotMode.incremental,
+    this.qualityVersion = 2,
+  });
 
   static const format = 'bible-recite-quiz-bank-index';
   static const version = 1;
 
   final int revision;
   final List<QuizBankShard> shards;
+  final QuizBankSnapshotMode snapshotMode;
+  final int qualityVersion;
 
   factory QuizBankIndex.parse(String source) {
     final root = jsonDecode(source);
@@ -42,7 +51,31 @@ final class QuizBankIndex {
       }
       shards.add(QuizBankShard(path: path, sha256: sha256, bytes: bytes));
     }
-    return QuizBankIndex(revision: root['revision']! as int, shards: shards);
+    final snapshotMode = _parseSnapshotMode(root['snapshotMode']);
+    final qualityVersion = _parseQualityVersion(root['qualityVersion']);
+    return QuizBankIndex(
+      revision: root['revision']! as int,
+      shards: shards,
+      snapshotMode: snapshotMode,
+      qualityVersion: qualityVersion,
+    );
+  }
+
+  static QuizBankSnapshotMode _parseSnapshotMode(Object? value) {
+    if (value == null) return QuizBankSnapshotMode.incremental;
+    return switch (value) {
+      'incremental' => QuizBankSnapshotMode.incremental,
+      'replace' => QuizBankSnapshotMode.replace,
+      _ => throw const FormatException('云端题库快照模式无效'),
+    };
+  }
+
+  static int _parseQualityVersion(Object? value) {
+    if (value == null) return 2;
+    if (value is! int || value < 1) {
+      throw const FormatException('云端题库质量版本无效');
+    }
+    return value;
   }
 
   static bool _safePath(String path) =>
