@@ -7,9 +7,11 @@ import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   late SqlitePlanRepository repository;
+  late Database database;
 
   setUp(() {
-    repository = SqlitePlanRepository(sqlite3.openInMemory());
+    database = sqlite3.openInMemory();
+    repository = SqlitePlanRepository(database);
   });
 
   tearDown(() => repository.close());
@@ -161,6 +163,44 @@ void main() {
       expect((await repository.getQuizSummary()).totalAnswered, 1);
     },
   );
+
+  test('replacement removes active questions and preserves results', () async {
+    await repository.saveQuizQuestions([questionFor()]);
+    await repository.completeQuizQuestion(
+      questionId: 1,
+      correct: true,
+      answeredAt: DateTime.utc(2026, 8, 21),
+    );
+    await repository.stageQuizBankSnapshot(702, [
+      questionFor(start: 0, end: 1, meaning: '更新后的具体释义'),
+    ]);
+
+    await repository.activateStagedQuizBankSnapshot(702);
+
+    final active = await repository.listQuizBankQuestions();
+    expect(active, hasLength(1));
+    expect(active.single.start, 0);
+    expect(active.single.meaning, '更新后的具体释义');
+    expect((await repository.getQuizSummary()).totalAnswered, 1);
+    expect(
+      database
+          .select('SELECT question_id FROM quiz_result')
+          .single['question_id'],
+      isNull,
+    );
+  });
+
+  test('staging never changes the active bank', () async {
+    await repository.saveQuizQuestions([questionFor()]);
+
+    await repository.stageQuizBankSnapshot(702, [
+      questionFor(start: 0, end: 1, meaning: '待切换的新释义'),
+    ]);
+
+    final active = await repository.listQuizBankQuestions();
+    expect(active, hasLength(1));
+    expect(active.single.start, 2);
+  });
 
   test('practice selects one random pending question for one verse', () async {
     await repository.importQuizBankQuestions([

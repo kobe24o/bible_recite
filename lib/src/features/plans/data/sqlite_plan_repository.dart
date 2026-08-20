@@ -16,7 +16,7 @@ import '../domain/plan_models.dart';
 final class SqlitePlanRepository {
   /// Bump this when stricter question validation makes cached unanswered
   /// questions unsuitable. Answered history remains intact for statistics.
-  static const quizQuestionQualityVersion = 2;
+  static const quizQuestionQualityVersion = 3;
   static const maxQuizQuestionsPerVerse = 5;
   static const _perPlanEbbinghausConsentMigrationKey =
       'per_plan_ebbinghaus_consent_v1';
@@ -173,8 +173,6 @@ final class SqlitePlanRepository {
         answered_at TEXT NOT NULL
       )
     ''');
-    _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
-      ON quiz_result(translation_id, book_id, chapter, verse)''');
     if (quizQuestionColumns.contains('verse_text')) {
       _removeStoredQuizVerseText();
     }
@@ -202,6 +200,26 @@ final class SqlitePlanRepository {
       '''CREATE UNIQUE INDEX IF NOT EXISTS idx_quiz_question_position
       ON quiz_question(translation_id, book_id, chapter, verse, start_offset, end_offset)''',
     );
+    _migrateQuizResultsToHistorySchema();
+    _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_result_scope
+      ON quiz_result(translation_id, book_id, chapter, verse)''');
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS quiz_bank_snapshot_staging (
+        revision INTEGER NOT NULL,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter INTEGER NOT NULL,
+        verse INTEGER NOT NULL,
+        start_offset INTEGER NOT NULL,
+        end_offset INTEGER NOT NULL,
+        word TEXT NOT NULL,
+        part_of_speech TEXT NOT NULL,
+        meaning TEXT NOT NULL,
+        reference TEXT NOT NULL,
+        staged_at TEXT NOT NULL,
+        UNIQUE(revision, translation_id, book_id, chapter, verse, start_offset, end_offset)
+      )
+    ''');
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
         plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
@@ -1064,6 +1082,104 @@ final class SqlitePlanRepository {
     );
   }
 
+  /// Adds a verified shard to an inactive replacement snapshot. This never
+  /// changes questions currently available for practice.
+  Future<void> stageQuizBankSnapshot(
+    int revision,
+    List<ValidatedQuizQuestion> questions,
+  ) async {
+    if (revision < 1) throw ArgumentError.value(revision, 'revision');
+    if (questions.isEmpty) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      for (final question in questions) {
+        _database.execute(
+          '''
+          INSERT INTO quiz_bank_snapshot_staging
+          (revision, translation_id, book_id, chapter, verse, start_offset,
+           end_offset, word, part_of_speech, meaning, reference, staged_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(revision, translation_id, book_id, chapter, verse,
+                      start_offset, end_offset)
+          DO UPDATE SET word = excluded.word,
+                        part_of_speech = excluded.part_of_speech,
+                        meaning = excluded.meaning,
+                        reference = excluded.reference,
+                        staged_at = excluded.staged_at
+        ''',
+          [
+            revision,
+            question.translationId,
+            question.bookId,
+            question.chapter,
+            question.verse,
+            question.start,
+            question.end,
+            question.word,
+            question.partOfSpeech,
+            compactQuizMeaning(question.word, question.meaning),
+            question.reference,
+            now,
+          ],
+        );
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// Activates one completely staged quality-v3 snapshot. Historical results
+  /// retain their own scope and correctness fields after their obsolete local
+  /// question ids are detached.
+  Future<void> activateStagedQuizBankSnapshot(int revision) async {
+    if (revision < 1) throw ArgumentError.value(revision, 'revision');
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      final count =
+          _database.select(
+                'SELECT COUNT(*) AS count FROM quiz_bank_snapshot_staging WHERE revision = ?',
+                [revision],
+              ).single['count']
+              as int;
+      if (count == 0) throw StateError('没有可激活的题库快照');
+      _database.execute(
+        'UPDATE quiz_result SET question_id = NULL WHERE question_id IS NOT NULL',
+      );
+      _database.execute('DELETE FROM quiz_question');
+      _database.execute(
+        '''
+        INSERT INTO quiz_question
+        (translation_id, book_id, chapter, verse, start_offset, end_offset,
+         word, part_of_speech, meaning, reference, quality_version, answered,
+         created_at)
+        SELECT translation_id, book_id, chapter, verse, start_offset, end_offset,
+          word, part_of_speech, meaning, reference, ?, 0, staged_at
+        FROM quiz_bank_snapshot_staging WHERE revision = ?
+        ORDER BY translation_id, book_id, chapter, verse, start_offset, end_offset
+      ''',
+        [quizQuestionQualityVersion, revision],
+      );
+      _database.execute(
+        'DELETE FROM quiz_bank_snapshot_staging WHERE revision = ?',
+        [revision],
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  Future<void> discardStagedQuizBankSnapshot(int revision) async {
+    _database.execute(
+      'DELETE FROM quiz_bank_snapshot_staging WHERE revision = ?',
+      [revision],
+    );
+  }
+
   /// Completes one pending question and records exactly one quiz_result in a
   /// transaction, updating the current and maximum correct-streak settings.
   Future<QuizCompletion> completeQuizQuestion({
@@ -1308,6 +1424,47 @@ final class SqlitePlanRepository {
     meaning: row['meaning'] as String,
     reference: row['reference'] as String,
   );
+
+  /// quiz_result used to cascade-delete history with quiz_question. A replace
+  /// snapshot intentionally removes every active question, so history must be
+  /// independent while retaining its verse-level fields for all statistics.
+  void _migrateQuizResultsToHistorySchema() {
+    final columns = _database.select('PRAGMA table_info(quiz_result)');
+    final questionId = columns.singleWhere(
+      (row) => row['name'] == 'question_id',
+    );
+    final hasForeignKey = _database
+        .select('PRAGMA foreign_key_list(quiz_result)')
+        .isNotEmpty;
+    if (questionId['notnull'] == 0 && !hasForeignKey) return;
+    _database.execute('PRAGMA foreign_keys = OFF');
+    try {
+      _database.execute('''
+        CREATE TABLE quiz_result_history_migration (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          question_id INTEGER,
+          translation_id TEXT NOT NULL,
+          book_id TEXT NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          correct INTEGER NOT NULL CHECK(correct IN (0, 1)),
+          answered_at TEXT NOT NULL
+        )
+      ''');
+      _database.execute('''
+        INSERT INTO quiz_result_history_migration
+        (id, question_id, translation_id, book_id, chapter, verse, correct, answered_at)
+        SELECT id, question_id, translation_id, book_id, chapter, verse, correct, answered_at
+        FROM quiz_result
+      ''');
+      _database.execute('DROP TABLE quiz_result');
+      _database.execute(
+        'ALTER TABLE quiz_result_history_migration RENAME TO quiz_result',
+      );
+    } finally {
+      _database.execute('PRAGMA foreign_keys = ON');
+    }
+  }
 
   /// Older releases duplicated the full verse in every question. Rebuild the
   /// table instead of merely clearing the column so existing devices reclaim
