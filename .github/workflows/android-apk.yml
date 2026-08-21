@@ -67,15 +67,15 @@ jobs:
         run: |
           mkdir -p assets/quiz_bank
           index_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.index.json --jq .download_url)"
-          bank_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.json --jq .download_url)"
-          curl --fail --location "$index_url" --output assets/quiz_bank/quiz-bank.index.json
-          curl --fail --location "$bank_url" --output assets/quiz_bank/quiz-bank.json
-          shard_path="$(jq -r '.shards[0].path' assets/quiz_bank/quiz-bank.index.json)"
-          expected_sha="$(jq -r '.shards[0].sha256' assets/quiz_bank/quiz-bank.index.json)"
-          expected_bytes="$(jq -r '.shards[0].bytes' assets/quiz_bank/quiz-bank.index.json)"
-          test "$shard_path" = quiz-bank.json
-          test "$(sha256sum assets/quiz_bank/quiz-bank.json | awk '{print $1}')" = "$expected_sha"
-          test "$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')" = "$expected_bytes"
+          curl --fail --location "$index_url" --output "$RUNNER_TEMP/quiz-bank.index.json"
+          shard_path="$(jq -r '.shards[0].path' "$RUNNER_TEMP/quiz-bank.index.json")"
+          shard_url="$(gh api "repos/kobe24o/bible-recite-plans/contents/$shard_path" --jq .download_url)"
+          curl --fail --location "$shard_url" --output assets/quiz_bank/quiz-bank.json
+          actual_sha="$(openssl dgst -sha256 -r assets/quiz_bank/quiz-bank.json | awk '{print $1}')"
+          actual_bytes="$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')"
+          jq --arg sha "$actual_sha" --argjson bytes "$actual_bytes" \
+            '.shards = [{path: "quiz-bank.json", sha256: $sha, bytes: $bytes}] | del(.snapshotMode, .qualityVersion)' \
+            "$RUNNER_TEMP/quiz-bank.index.json" > assets/quiz_bank/quiz-bank.index.json
 
       - name: Install dependencies
         run: flutter pub get
@@ -186,15 +186,15 @@ jobs:
         run: |
           mkdir -p assets/quiz_bank
           index_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.index.json --jq .download_url)"
-          bank_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.json --jq .download_url)"
-          curl --fail --location "$index_url" --output assets/quiz_bank/quiz-bank.index.json
-          curl --fail --location "$bank_url" --output assets/quiz_bank/quiz-bank.json
-          shard_path="$(jq -r '.shards[0].path' assets/quiz_bank/quiz-bank.index.json)"
-          expected_sha="$(jq -r '.shards[0].sha256' assets/quiz_bank/quiz-bank.index.json)"
-          expected_bytes="$(jq -r '.shards[0].bytes' assets/quiz_bank/quiz-bank.index.json)"
-          test "$shard_path" = quiz-bank.json
-          test "$(shasum -a 256 assets/quiz_bank/quiz-bank.json | awk '{print $1}')" = "$expected_sha"
-          test "$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')" = "$expected_bytes"
+          curl --fail --location "$index_url" --output "$RUNNER_TEMP/quiz-bank.index.json"
+          shard_path="$(jq -r '.shards[0].path' "$RUNNER_TEMP/quiz-bank.index.json")"
+          shard_url="$(gh api "repos/kobe24o/bible-recite-plans/contents/$shard_path" --jq .download_url)"
+          curl --fail --location "$shard_url" --output assets/quiz_bank/quiz-bank.json
+          actual_sha="$(openssl dgst -sha256 -r assets/quiz_bank/quiz-bank.json | awk '{print $1}')"
+          actual_bytes="$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')"
+          jq --arg sha "$actual_sha" --argjson bytes "$actual_bytes" \
+            '.shards = [{path: "quiz-bank.json", sha256: $sha, bytes: $bytes}] | del(.snapshotMode, .qualityVersion)' \
+            "$RUNNER_TEMP/quiz-bank.index.json" > assets/quiz_bank/quiz-bank.index.json
 
       - name: Install dependencies
         run: flutter pub get
