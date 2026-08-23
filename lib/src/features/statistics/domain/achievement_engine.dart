@@ -1,5 +1,34 @@
 import 'achievement.dart';
 
+final class RepeatedAchievementProgress {
+  const RepeatedAchievementProgress({
+    required this.awardCount,
+    required this.progress,
+  });
+
+  final int awardCount;
+  final double progress;
+}
+
+RepeatedAchievementProgress calculateRepeatedAchievementProgress(
+  Iterable<int> verseCounts,
+) {
+  final counts = verseCounts.toList(growable: false);
+  if (counts.isEmpty) {
+    return const RepeatedAchievementProgress(awardCount: 0, progress: 0);
+  }
+  final awardCount = counts.reduce(
+    (left, right) => left < right ? left : right,
+  );
+  final nextRoundVerseCount = counts
+      .where((count) => count >= awardCount + 1)
+      .length;
+  return RepeatedAchievementProgress(
+    awardCount: awardCount,
+    progress: awardCount + nextRoundVerseCount / counts.length,
+  );
+}
+
 final class AchievementEngine {
   const AchievementEngine();
 

@@ -18,6 +18,7 @@ final class AchievementDefinition {
     required this.metric,
     required this.target,
     this.hiddenUntilUnlocked = false,
+    this.repeatable = false,
   });
 
   final String id;
@@ -26,6 +27,7 @@ final class AchievementDefinition {
   final AchievementMetric metric;
   final double target;
   final bool hiddenUntilUnlocked;
+  final bool repeatable;
 }
 
 const achievementDefinitions = <AchievementDefinition>[
@@ -208,17 +210,21 @@ final class AchievementProgress {
     required this.current,
     required this.satisfied,
     this.unlockedAt,
+    this.awardCount = 0,
   });
 
   final AchievementDefinition definition;
   final double current;
   final bool satisfied;
   final DateTime? unlockedAt;
+  final int awardCount;
 
   /// Achievement unlocks are permanent. Metrics such as current streak or
   /// completed plans may later decrease, but an earned badge must not regress
   /// to "已获得 · 0%".
-  double get fraction => unlockedAt != null
+  double get fraction => definition.repeatable
+      ? (current / definition.target).clamp(0, double.infinity).toDouble()
+      : unlockedAt != null
       ? 1
       : (current / definition.target).clamp(0, 1).toDouble();
 }
@@ -228,11 +234,13 @@ final class AchievementUnlock {
     required this.definition,
     required this.unlockedAt,
     required this.source,
+    this.awardCount = 1,
   });
 
   final AchievementDefinition definition;
   final DateTime unlockedAt;
   final String source;
+  final int awardCount;
 }
 
 final class ExternalAchievementSyncResult {

@@ -68,6 +68,88 @@ void main() {
     },
   );
 
+  test(
+    'stores repeatable external badge rounds and preserves their progress',
+    () async {
+      final database = sqlite3.openInMemory();
+      final repository = SqlitePlanRepository(database);
+      addTearDown(repository.close);
+      const definition = AchievementDefinition(
+        id: 'book_complete_JHN',
+        title: '约翰福音勋章',
+        description: '完成约翰福音全部经文',
+        metric: AchievementMetric.sessions,
+        target: 1,
+        repeatable: true,
+      );
+
+      await repository.syncExternalAchievements(
+        const [definition],
+        {'book_complete_JHN'},
+        {'book_complete_JHN': 1.1},
+      );
+      final first = await repository.syncExternalAchievements(
+        const [definition],
+        {'book_complete_JHN'},
+        {'book_complete_JHN': 1.1},
+      );
+      expect(first.single.fraction, closeTo(1.1, 0.0001));
+      expect(first.single.awardCount, 1);
+
+      final second = await repository.syncExternalAchievements(
+        const [definition],
+        {'book_complete_JHN'},
+        {'book_complete_JHN': 2.0},
+      );
+      expect(second.single.awardCount, 2);
+      expect(
+        database.select(
+          'SELECT award_count FROM achievement_unlock WHERE achievement_id = ?',
+          ['book_complete_JHN'],
+        ).single['award_count'],
+        2,
+      );
+    },
+  );
+
+  test('counts each completed preset plan cycle once', () async {
+    final database = sqlite3.openInMemory();
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+    final planId = await repository.createPlan(
+      _plan().copyWith(
+        sourceKind: PlanSourceKind.preset,
+        externalId: 'repeatable-plan',
+      ),
+    );
+    final task = (await repository.listTasks(planId)).single;
+
+    final first = await repository.setTaskCompleted(task.id, true);
+    expect(
+      first.map((item) => item.definition.id),
+      contains('preset_plan_repeatable-plan'),
+    );
+    final duplicate = await repository.setTaskCompleted(task.id, true);
+    expect(
+      duplicate.map((item) => item.definition.id),
+      isNot(contains('preset_plan_repeatable-plan')),
+    );
+
+    await repository.restartPlan(planId, startDate: DateTime(2026, 8, 26));
+    final second = await repository.setTaskCompleted(task.id, true);
+    final repeated = second.singleWhere(
+      (item) => item.definition.id == 'preset_plan_repeatable-plan',
+    );
+    expect(repeated.awardCount, 2);
+    expect(
+      database.select(
+        'SELECT award_count FROM achievement_unlock WHERE achievement_id = ?',
+        ['preset_plan_repeatable-plan'],
+      ).single['award_count'],
+      2,
+    );
+  });
+
   test('stores cloud plan source setting with a default fallback', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);

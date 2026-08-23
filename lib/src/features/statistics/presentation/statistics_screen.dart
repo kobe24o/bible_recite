@@ -35,6 +35,7 @@ import '../../scripture/data/sqlite_scripture_repository.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
+import '../domain/achievement_engine.dart';
 import '../domain/recitation_result.dart';
 import 'achievement_unlock_dialog.dart';
 
@@ -99,6 +100,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 widget.view == StatisticsScreenView.learningData;
             final achievements =
                 widget.view == StatisticsScreenView.achievements;
+            final earnedBadgeCount = data.achievements.fold<int>(
+              0,
+              (sum, item) =>
+                  sum + (item.unlockedAt == null ? 0 : item.awardCount),
+            );
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -180,6 +186,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                     const SizedBox(height: 12),
                     Card(
+                      key: const Key('companionship-card'),
                       color: Theme.of(context).colorScheme.secondaryContainer,
                       child: Padding(
                         padding: const EdgeInsets.all(14),
@@ -196,6 +203,32 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('learning-data-open'),
+                        leading: const Icon(Icons.insights_outlined),
+                        title: Text(chinese ? '学习数据' : 'Learning data'),
+                        subtitle: Text(
+                          chinese
+                              ? '背诵、答题与学习轨迹'
+                              : 'Practice, quizzes, and learning history',
+                        ),
+                        onTap: () => context.push('/statistics/data'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('achievement-open'),
+                        leading: const Icon(Icons.emoji_events_outlined),
+                        title: Text(chinese ? '成就' : 'Achievements'),
+                        subtitle: Text(
+                          chinese ? '查看已获得的勋章' : 'View your earned badges',
+                        ),
+                        onTap: () => context.push('/statistics/achievements'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -340,34 +373,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (overview) ...[
-                    Card(
-                      child: ListTile(
-                        key: const Key('learning-data-open'),
-                        leading: const Icon(Icons.insights_outlined),
-                        title: Text(chinese ? '学习数据' : 'Learning data'),
-                        subtitle: Text(
-                          chinese
-                              ? '背诵、答题与学习轨迹'
-                              : 'Practice, quizzes, and learning history',
-                        ),
-                        onTap: () => context.push('/statistics/data'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: ListTile(
-                        key: const Key('achievement-open'),
-                        leading: const Icon(Icons.emoji_events_outlined),
-                        title: Text(chinese ? '成就' : 'Achievements'),
-                        subtitle: Text(
-                          chinese ? '查看已获得的勋章' : 'View your earned badges',
-                        ),
-                        onTap: () => context.push('/statistics/achievements'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   if (learningData) ...[
                     Card(
                       child: ListTile(
@@ -430,6 +435,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       onAction: () => context.go('/bible'),
                     ),
                   if (achievements) ...[
+                    Text(
+                      key: const Key('achievement-earned-count'),
+                      chinese
+                          ? '您已获得 $earnedBadgeCount 枚勋章'
+                          : 'You have earned $earnedBadgeCount badges',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
                     Text(
                       chinese ? '成就勋章' : 'Achievement badges',
                       style: Theme.of(context).textTheme.titleLarge,
@@ -557,6 +570,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           description: '完成预置计划《${template.title}》',
           metric: AchievementMetric.sessions,
           target: 1,
+          repeatable: true,
         ),
       );
       if (saved != null &&
@@ -582,6 +596,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           description: '完成预置计划《${plan.title}》',
           metric: AchievementMetric.sessions,
           target: 1,
+          repeatable: true,
         ),
       );
       if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
@@ -612,16 +627,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   chapter,
                 )).length,
           };
-    final covered = <String, Set<int>>{};
+    final verseCounts = <String, int>{};
     for (final item in metrics) {
-      covered
-          .putIfAbsent('${item.bookId}:${item.chapter}', () => <int>{})
-          .add(item.verse);
+      if (item.translationId == 'cmn-cu89s') {
+        verseCounts['${item.bookId}:${item.chapter}:${item.verse}'] =
+            item.sessions;
+      }
     }
-    var oldCovered = 0;
-    var oldTotal = 0;
-    var newCovered = 0;
-    var newTotal = 0;
+    final oldVerseCounts = <int>[];
+    final newVerseCounts = <int>[];
     for (final book in books) {
       final id = 'book_complete_${book.osisId}';
       definitions.add(
@@ -632,33 +646,38 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               '完成${names.nameFor(book.osisId, const Locale('zh', 'CN'))}全部经文',
           metric: AchievementMetric.sessions,
           target: 1,
+          repeatable: true,
         ),
       );
-      var bookCovered = 0;
-      var bookTotal = 0;
+      final bookVerseCounts = <int>[];
       for (var chapter = 1; chapter <= book.chapterCount; chapter++) {
         final key = '${book.osisId}:$chapter';
         final total = chapterTotals[key] ?? 0;
-        bookTotal += total;
-        bookCovered += (covered[key]?.length ?? 0).clamp(0, total).toInt();
+        for (var verse = 1; verse <= total; verse++) {
+          bookVerseCounts.add(verseCounts['$key:$verse'] ?? 0);
+        }
       }
-      final fraction = bookTotal == 0 ? 0.0 : bookCovered / bookTotal;
-      currentValues[id] = fraction;
-      if (fraction >= 1) satisfied.add(id);
+      final bookProgress = calculateRepeatedAchievementProgress(
+        bookVerseCounts,
+      );
+      currentValues[id] = bookProgress.progress;
+      if (bookProgress.awardCount > 0) satisfied.add(id);
       if (book.ordinal <= 39) {
-        oldCovered += bookCovered;
-        oldTotal += bookTotal;
+        oldVerseCounts.addAll(bookVerseCounts);
       } else {
-        newCovered += bookCovered;
-        newTotal += bookTotal;
+        newVerseCounts.addAll(bookVerseCounts);
       }
     }
-    final scopeProgress = <String, double>{
-      'old_testament_complete': oldTotal == 0 ? 0 : oldCovered / oldTotal,
-      'new_testament_complete': newTotal == 0 ? 0 : newCovered / newTotal,
-      'bible_complete': oldTotal + newTotal == 0
-          ? 0
-          : (oldCovered + newCovered) / (oldTotal + newTotal),
+    final oldProgress = calculateRepeatedAchievementProgress(oldVerseCounts);
+    final newProgress = calculateRepeatedAchievementProgress(newVerseCounts);
+    final bibleProgress = calculateRepeatedAchievementProgress([
+      ...oldVerseCounts,
+      ...newVerseCounts,
+    ]);
+    final scopeProgress = <String, RepeatedAchievementProgress>{
+      'old_testament_complete': oldProgress,
+      'new_testament_complete': newProgress,
+      'bible_complete': bibleProgress,
     };
     for (final entry in <({String id, String title, String description})>[
       (id: 'old_testament_complete', title: '旧约勋章', description: '完成旧约全部经文'),
@@ -672,10 +691,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           description: entry.description,
           metric: AchievementMetric.sessions,
           target: 1,
+          repeatable: true,
         ),
       );
-      currentValues[entry.id] = scopeProgress[entry.id]!;
-      if (scopeProgress[entry.id]! >= 1) satisfied.add(entry.id);
+      final progress = scopeProgress[entry.id]!;
+      currentValues[entry.id] = progress.progress;
+      if (progress.awardCount > 0) satisfied.add(entry.id);
     }
     return repository.syncExternalAchievementsWithUnlocks(
       definitions,
@@ -1483,6 +1504,11 @@ class _AchievementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final unlocked = progress.unlockedAt != null;
     final colors = Theme.of(context).colorScheme;
+    final progressLabel = unlocked && progress.definition.repeatable
+        ? '已获得 X ${progress.awardCount} · ${(progress.fraction * 100).round()}%'
+        : unlocked
+        ? '已获得 · ${(progress.fraction * 100).round()}%'
+        : '${(progress.fraction * 100).round()}%';
     return Card(
       key: Key(
         'achievement-${progress.definition.id}-${unlocked ? 'unlocked' : 'locked'}',
@@ -1510,9 +1536,7 @@ class _AchievementCard extends StatelessWidget {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          unlocked
-                              ? '已获得 · ${(progress.fraction * 100).round()}%'
-                              : '${(progress.fraction * 100).round()}%',
+                          progressLabel,
                           style: Theme.of(context).textTheme.labelMedium,
                         ),
                       ),
@@ -1539,7 +1563,7 @@ class _AchievementCard extends StatelessWidget {
               ),
               const Spacer(),
               LinearProgressIndicator(
-                value: progress.fraction,
+                value: progress.fraction.clamp(0, 1).toDouble(),
                 color: unlocked ? const Color(0xFFB88A22) : colors.primary,
               ),
             ],

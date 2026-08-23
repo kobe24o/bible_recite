@@ -306,6 +306,60 @@ void main() {
     );
   });
 
+  testWidgets(
+    'places learning and achievement entries below the companionship card',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await _pumpScreen(tester, repository);
+
+      final companionship = tester.getTopLeft(
+        find.byKey(const Key('companionship-card')),
+      );
+      final learning = tester.getTopLeft(
+        find.byKey(const Key('learning-data-open')),
+      );
+      final achievements = tester.getTopLeft(
+        find.byKey(const Key('achievement-open')),
+      );
+      expect(learning.dy, greaterThan(companionship.dy));
+      expect(achievements.dy, greaterThan(learning.dy));
+    },
+  );
+
+  testWidgets('shows the total number of earned badges at the top', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.saveRecitationResult(
+      NewRecitationResult(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        mode: 'continuous',
+        durationSeconds: 30,
+        correctCount: 10,
+        incorrectCount: 0,
+        omittedCount: 0,
+        reorderedCount: 0,
+        accuracy: 1,
+        completedAt: DateTime(2026, 8, 26),
+      ),
+    );
+
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.achievements,
+    );
+
+    expect(find.byKey(const Key('achievement-earned-count')), findsOneWidget);
+    expect(find.text('您已获得 5 枚勋章'), findsOneWidget);
+  });
+
   testWidgets('unlocks a title badge after completing a preset plan', (
     tester,
   ) async {
@@ -377,6 +431,7 @@ void main() {
       find.byKey(const Key('achievement-preset_plan_grace-path-unlocked')),
       findsOneWidget,
     );
+    expect(find.textContaining('X 1'), findsOneWidget);
     expect(find.text('获得新成就'), findsNothing);
     final titleBadge = find.byKey(
       const Key('achievement-preset_plan_grace-path-unlocked'),

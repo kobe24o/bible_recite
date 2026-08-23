@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:sqlite3/sqlite3.dart';
 
@@ -97,9 +97,19 @@ final class SqlitePlanRepository {
       CREATE TABLE IF NOT EXISTS achievement_unlock (
         achievement_id TEXT PRIMARY KEY,
         unlocked_at TEXT NOT NULL,
-        source TEXT NOT NULL
+        source TEXT NOT NULL,
+        award_count INTEGER NOT NULL DEFAULT 1
       )
     ''');
+    final achievementColumns = _database
+        .select('PRAGMA table_info(achievement_unlock)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!achievementColumns.contains('award_count')) {
+      _database.execute(
+        'ALTER TABLE achievement_unlock ADD COLUMN award_count INTEGER NOT NULL DEFAULT 1',
+      );
+    }
     _database.execute('''
       CREATE TABLE IF NOT EXISTS recitation_verse_metric (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -745,7 +755,7 @@ final class SqlitePlanRepository {
           .putIfAbsent((question.chapter, question.verse), () => [])
           .add(question);
     }
-    final random = Random();
+    final random = math.Random();
     final selected = <PendingQuizQuestion>[
       for (final questions in byVerse.values)
         questions[random.nextInt(questions.length)],
@@ -1884,13 +1894,20 @@ final class SqlitePlanRepository {
     int taskId,
     bool completed,
   ) async {
+    final previousRows = _database.select(
+      'SELECT completed FROM plan_task WHERE id = ?',
+      [taskId],
+    );
+    final wasCompleted =
+        previousRows.isNotEmpty &&
+        (previousRows.single['completed'] as int) == 1;
     _database.execute(
       '''UPDATE plan_task SET completed = ?, due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END
       WHERE id = ?''',
       [completed ? 1 : 0, completed ? 1 : 0, _date(DateTime.now()), taskId],
     );
     final unlocked = <AchievementUnlock>[];
-    if (completed) {
+    if (completed && !wasCompleted) {
       unlocked.addAll(await _unlockCompletedPresetPlan(taskId));
     }
     unlocked.addAll(await evaluateAndUnlockAchievements(source: 'plan'));
@@ -1915,6 +1932,13 @@ final class SqlitePlanRepository {
       return const [];
     }
     final id = 'preset_plan_${plan.externalId ?? plan.id}';
+    final existingRows = _database.select(
+      'SELECT award_count FROM achievement_unlock WHERE achievement_id = ?',
+      [id],
+    );
+    final nextAwardCount =
+        (existingRows.isEmpty ? 0 : existingRows.single['award_count'] as int) +
+        1;
     return (await syncExternalAchievementsWithUnlocks(
       [
         AchievementDefinition(
@@ -1923,10 +1947,11 @@ final class SqlitePlanRepository {
           description: '完成预置计划《${plan.title}》',
           metric: AchievementMetric.sessions,
           target: 1,
+          repeatable: true,
         ),
       ],
       {id},
-      {id: 1},
+      {id: nextAwardCount.toDouble()},
     )).unlocked;
   }
 
@@ -2651,16 +2676,22 @@ final class SqlitePlanRepository {
   }) async {
     final progress = const AchievementEngine().evaluate(_achievementSnapshot());
     final existing = _database
-        .select('SELECT achievement_id FROM achievement_unlock')
-        .map((row) => row['achievement_id'] as String)
-        .toSet();
+        .select('SELECT achievement_id, award_count FROM achievement_unlock')
+        .map(
+          (row) => (
+            id: row['achievement_id'] as String,
+            count: row['award_count'] as int,
+          ),
+        )
+        .toList(growable: false);
+    final existingIds = existing.map((row) => row.id).toSet();
     final now = DateTime.now();
     final unlocked = <AchievementUnlock>[];
     for (final item in progress) {
-      if (!item.satisfied || existing.contains(item.definition.id)) continue;
+      if (!item.satisfied || existingIds.contains(item.definition.id)) continue;
       _database.execute(
         '''INSERT OR IGNORE INTO achievement_unlock
-        (achievement_id, unlocked_at, source) VALUES (?, ?, ?)''',
+        (achievement_id, unlocked_at, source, award_count) VALUES (?, ?, ?, 1)''',
         [item.definition.id, now.toUtc().toIso8601String(), source],
       );
       unlocked.add(
@@ -2668,6 +2699,7 @@ final class SqlitePlanRepository {
           definition: item.definition,
           unlockedAt: now,
           source: source,
+          awardCount: 1,
         ),
       );
     }
@@ -2679,11 +2711,12 @@ final class SqlitePlanRepository {
       _achievementSnapshot(),
     );
     final unlockRows = _database.select('SELECT * FROM achievement_unlock');
-    final unlocks = <String, DateTime>{
+    final unlocks = <String, ({DateTime unlockedAt, int awardCount})>{
       for (final row in unlockRows)
-        row['achievement_id'] as String: DateTime.parse(
-          row['unlocked_at'] as String,
-        ).toLocal(),
+        row['achievement_id'] as String: (
+          unlockedAt: DateTime.parse(row['unlocked_at'] as String).toLocal(),
+          awardCount: row['award_count'] as int,
+        ),
     };
     return [
       for (final item in evaluated)
@@ -2693,7 +2726,8 @@ final class SqlitePlanRepository {
             definition: item.definition,
             current: item.current,
             satisfied: item.satisfied,
-            unlockedAt: unlocks[item.definition.id],
+            unlockedAt: unlocks[item.definition.id]?.unlockedAt,
+            awardCount: unlocks[item.definition.id]?.awardCount ?? 0,
           ),
     ];
   }
@@ -2714,49 +2748,85 @@ final class SqlitePlanRepository {
     Map<String, double> currentValues,
   ) async {
     final now = DateTime.now().toUtc().toIso8601String();
-    final existing = _database
-        .select('SELECT achievement_id FROM achievement_unlock')
-        .map((row) => row['achievement_id'] as String)
-        .toSet();
+    final unlockRows = _database.select(
+      'SELECT achievement_id, unlocked_at, award_count FROM achievement_unlock',
+    );
+    final existing = {
+      for (final row in unlockRows)
+        row['achievement_id'] as String: (
+          unlockedAt: DateTime.parse(row['unlocked_at'] as String).toLocal(),
+          awardCount: row['award_count'] as int,
+        ),
+    };
     final definitionsById = {
       for (final definition in definitions) definition.id: definition,
     };
     final unlocked = <AchievementUnlock>[];
-    for (final id in satisfiedIds.where((id) => !existing.contains(id))) {
-      _database.execute(
-        '''INSERT OR IGNORE INTO achievement_unlock
-        (achievement_id, unlocked_at, source) VALUES (?, ?, 'coverage')''',
-        [id, now],
-      );
-      final definition = definitionsById[id];
-      if (definition != null) {
+    for (final definition in definitions) {
+      final id = definition.id;
+      final current = currentValues[id] ?? (satisfiedIds.contains(id) ? 1 : 0);
+      final previous = existing[id];
+      final desiredCount = definition.repeatable
+          ? math.max(0, (current / definition.target).floor())
+          : (satisfiedIds.contains(id) ? 1 : 0);
+      final nextCount = definition.repeatable
+          ? math.max(previous?.awardCount ?? 0, desiredCount)
+          : (previous?.awardCount ?? desiredCount);
+      if (nextCount <= 0 ||
+          (previous != null && nextCount == previous.awardCount)) {
+        continue;
+      }
+      if (previous == null) {
+        _database.execute(
+          '''INSERT OR IGNORE INTO achievement_unlock
+          (achievement_id, unlocked_at, source, award_count) VALUES (?, ?, 'coverage', ?)''',
+          [id, now, nextCount],
+        );
+      } else {
+        _database.execute(
+          'UPDATE achievement_unlock SET award_count = ? WHERE achievement_id = ?',
+          [nextCount, id],
+        );
+      }
+      final definitionForUnlock = definitionsById[id];
+      if (definitionForUnlock != null) {
         unlocked.add(
           AchievementUnlock(
-            definition: definition,
+            definition: definitionForUnlock,
             unlockedAt: DateTime.parse(now).toLocal(),
             source: 'coverage',
+            awardCount: nextCount,
           ),
         );
       }
     }
-    final unlocks = <String, DateTime>{
+    final unlocks = <String, ({DateTime unlockedAt, int awardCount})>{
       for (final row in _database.select(
-        'SELECT achievement_id, unlocked_at FROM achievement_unlock',
+        'SELECT achievement_id, unlocked_at, award_count FROM achievement_unlock',
       ))
-        row['achievement_id'] as String: DateTime.parse(
-          row['unlocked_at'] as String,
-        ).toLocal(),
+        row['achievement_id'] as String: (
+          unlockedAt: DateTime.parse(row['unlocked_at'] as String).toLocal(),
+          awardCount: row['award_count'] as int,
+        ),
     };
     final progress = [
       for (final definition in definitions)
-        AchievementProgress(
-          definition: definition,
-          current:
+        () {
+          final stored = unlocks[definition.id];
+          final rawCurrent =
               currentValues[definition.id] ??
-              (satisfiedIds.contains(definition.id) ? 1 : 0),
-          satisfied: satisfiedIds.contains(definition.id),
-          unlockedAt: unlocks[definition.id],
-        ),
+              (satisfiedIds.contains(definition.id) ? 1 : 0);
+          final current = definition.repeatable && stored != null
+              ? math.max(rawCurrent, stored.awardCount * definition.target)
+              : rawCurrent;
+          return AchievementProgress(
+            definition: definition,
+            current: current,
+            satisfied: satisfiedIds.contains(definition.id) || stored != null,
+            unlockedAt: stored?.unlockedAt,
+            awardCount: stored?.awardCount ?? 0,
+          );
+        }(),
     ];
     return ExternalAchievementSyncResult(
       progress: progress,
@@ -2966,8 +3036,8 @@ final class SqlitePlanRepository {
         int.tryParse(await getSetting('max_day_streak', '0')) ?? 0;
     final storedMaxVerses =
         int.tryParse(await getSetting('max_verse_streak', '0')) ?? 0;
-    final maxDays = max(calculated.maxDayStreak, storedMaxDays);
-    final maxVerses = max(calculated.maxVerseStreak, storedMaxVerses);
+    final maxDays = math.max(calculated.maxDayStreak, storedMaxDays);
+    final maxVerses = math.max(calculated.maxVerseStreak, storedMaxVerses);
     if (maxDays != storedMaxDays) {
       await setSetting('max_day_streak', '$maxDays');
     }
@@ -3017,8 +3087,8 @@ final class SqlitePlanRepository {
         currentDays = 1;
         currentVerses = versesByDate[date]!;
       }
-      maxDays = max(maxDays, currentDays);
-      maxVerses = max(maxVerses, currentVerses);
+      maxDays = math.max(maxDays, currentDays);
+      maxVerses = math.max(maxVerses, currentVerses);
       previous = date;
     }
 

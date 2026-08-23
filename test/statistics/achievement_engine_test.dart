@@ -122,4 +122,42 @@ void main() {
       isTrue,
     );
   });
+
+  test('keeps repeatable achievement progress above one completed round', () {
+    const definition = AchievementDefinition(
+      id: 'book_complete_JHN',
+      title: '约翰福音勋章',
+      description: '完成约翰福音全部经文',
+      metric: AchievementMetric.sessions,
+      target: 1,
+      repeatable: true,
+    );
+    final progress = AchievementProgress(
+      definition: definition,
+      current: 1.1,
+      satisfied: true,
+      unlockedAt: DateTime(2026, 8, 26),
+      awardCount: 1,
+    );
+
+    expect(progress.fraction, closeTo(1.1, 0.0001));
+    expect(progress.awardCount, 1);
+  });
+
+  test(
+    'uses the minimum round and counts verses at or above the next round',
+    () {
+      final result = calculateRepeatedAchievementProgress([
+        ...List<int>.filled(9, 1),
+        2,
+      ]);
+
+      expect(result.awardCount, 1);
+      expect(result.progress, closeTo(1.1, 0.0001));
+
+      final laterRounds = calculateRepeatedAchievementProgress([2, 3, 4]);
+      expect(laterRounds.awardCount, 2);
+      expect(laterRounds.progress, closeTo(2 + 2 / 3, 0.0001));
+    },
+  );
 }

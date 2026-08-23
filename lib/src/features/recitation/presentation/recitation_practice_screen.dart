@@ -363,9 +363,10 @@ class _RecitationPracticeScreenState
           context,
           AchievementProgress(
             definition: achievement.definition,
-            current: achievement.definition.target,
+            current: achievement.definition.target * achievement.awardCount,
             satisfied: true,
             unlockedAt: achievement.unlockedAt,
+            awardCount: achievement.awardCount,
           ),
           newlyUnlocked: true,
         );

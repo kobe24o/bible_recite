@@ -178,6 +178,11 @@ class _AchievementUnlockDialogState extends State<AchievementUnlockDialog>
               ),
               const SizedBox(height: 14),
               Text('当前进度：${(progress.fraction * 100).round()}%'),
+              if (progress.definition.repeatable &&
+                  progress.awardCount > 0) ...[
+                const SizedBox(height: 4),
+                Text('获得次数：X ${progress.awardCount}'),
+              ],
               if (unlocked) ...[
                 const SizedBox(height: 4),
                 Text('已获得', style: TextStyle(color: Colors.green.shade700)),
