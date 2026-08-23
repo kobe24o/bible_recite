@@ -1,5 +1,49 @@
 enum PlanSourceKind { local, preset, cloud }
 
+final class PlanTaskBlock {
+  const PlanTaskBlock({
+    required this.id,
+    required this.taskId,
+    required this.sortOrder,
+    required this.bookId,
+    required this.startChapter,
+    required this.startVerse,
+    required this.endChapter,
+    required this.endVerse,
+  });
+
+  final int id;
+  final int taskId;
+  final int sortOrder;
+  final String bookId;
+  final int startChapter;
+  final int startVerse;
+  final int endChapter;
+  final int endVerse;
+
+  String get rangeLabel => startChapter == endChapter
+      ? startVerse == endVerse
+            ? '$startChapter:$startVerse'
+            : '$startChapter:$startVerse–$endVerse'
+      : '$startChapter:$startVerse–$endChapter:$endVerse';
+}
+
+final class NewPlanTaskBlock {
+  const NewPlanTaskBlock({
+    required this.bookId,
+    required this.startChapter,
+    required this.startVerse,
+    required this.endChapter,
+    required this.endVerse,
+  });
+
+  final String? bookId;
+  final int startChapter;
+  final int startVerse;
+  final int endChapter;
+  final int endVerse;
+}
+
 final class NewPlanTask {
   const NewPlanTask({
     required this.dayIndex,
@@ -8,6 +52,7 @@ final class NewPlanTask {
     required this.endChapter,
     required this.endVerse,
     this.bookId,
+    this.blocks = const [],
   });
 
   final int dayIndex;
@@ -16,6 +61,20 @@ final class NewPlanTask {
   final int startVerse;
   final int endChapter;
   final int endVerse;
+  final List<NewPlanTaskBlock> blocks;
+
+  List<NewPlanTaskBlock> effectiveBlocks(String fallbackBookId) =>
+      blocks.isNotEmpty
+      ? blocks
+      : [
+          NewPlanTaskBlock(
+            bookId: bookId ?? fallbackBookId,
+            startChapter: startChapter,
+            startVerse: startVerse,
+            endChapter: endChapter,
+            endVerse: endVerse,
+          ),
+        ];
 }
 
 final class NewMemorizationPlan {
@@ -146,6 +205,7 @@ final class PlanTask {
     required this.endChapter,
     required this.endVerse,
     required this.completed,
+    this.blocks = const [],
   });
 
   final int id;
@@ -158,4 +218,20 @@ final class PlanTask {
   final int endChapter;
   final int endVerse;
   final bool completed;
+  final List<PlanTaskBlock> blocks;
+
+  List<PlanTaskBlock> get effectiveBlocks => blocks.isNotEmpty
+      ? blocks
+      : [
+          PlanTaskBlock(
+            id: 0,
+            taskId: id,
+            sortOrder: 0,
+            bookId: bookId,
+            startChapter: startChapter,
+            startVerse: startVerse,
+            endChapter: endChapter,
+            endVerse: endVerse,
+          ),
+        ];
 }

@@ -120,6 +120,140 @@ void main() {
     ]);
   });
 
+  test('migrates every stored task into one exact recitation block', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(
+      _plan().copyWith(
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 1,
+            startVerse: 3,
+            endChapter: 2,
+            endVerse: 4,
+          ),
+        ],
+      ),
+    );
+
+    final task = (await repository.listTasks(id)).single;
+
+    expect(task.blocks, hasLength(1));
+    expect(task.blocks.single.rangeLabel, '1:3–2:4');
+  });
+
+  test(
+    'moves one block into another recitation entry without duplicating it',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final id = await repository.createPlan(
+        _plan().copyWith(
+          tasks: const [
+            NewPlanTask(
+              dayIndex: 0,
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+              blocks: [
+                NewPlanTaskBlock(
+                  bookId: 'JHN',
+                  startChapter: 1,
+                  startVerse: 1,
+                  endChapter: 1,
+                  endVerse: 1,
+                ),
+                NewPlanTaskBlock(
+                  bookId: 'JHN',
+                  startChapter: 1,
+                  startVerse: 3,
+                  endChapter: 1,
+                  endVerse: 3,
+                ),
+              ],
+            ),
+            NewPlanTask(
+              dayIndex: 1,
+              startChapter: 1,
+              startVerse: 5,
+              endChapter: 1,
+              endVerse: 5,
+            ),
+          ],
+        ),
+      );
+      final before = await repository.listTasks(id);
+
+      await repository.moveTaskBlock(
+        before.first.blocks.first.id,
+        targetTaskId: before.last.id,
+      );
+
+      final entries = await repository.listTasks(id);
+      expect(entries, hasLength(2));
+      expect(entries.first.blocks.map((block) => block.rangeLabel), ['1:3']);
+      expect(entries.last.blocks.map((block) => block.rangeLabel), [
+        '1:1',
+        '1:5',
+      ]);
+    },
+  );
+
+  test(
+    'removes an empty source entry and collapses its now-empty day',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final id = await repository.createPlan(
+        _plan().copyWith(
+          endDate: DateTime(2026, 7, 16),
+          tasks: const [
+            NewPlanTask(
+              dayIndex: 0,
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+            ),
+            NewPlanTask(
+              dayIndex: 1,
+              startChapter: 1,
+              startVerse: 2,
+              endChapter: 1,
+              endVerse: 2,
+            ),
+            NewPlanTask(
+              dayIndex: 2,
+              startChapter: 1,
+              startVerse: 3,
+              endChapter: 1,
+              endVerse: 3,
+            ),
+          ],
+        ),
+      );
+      final entries = await repository.listTasks(id);
+
+      await repository.moveTaskBlock(
+        entries[1].blocks.single.id,
+        targetTaskId: entries.first.id,
+      );
+
+      final plan = (await repository.listPlans()).single;
+      final remaining = await repository.listTasks(id);
+      expect(remaining, hasLength(2));
+      expect(remaining.map((task) => task.dayIndex), [0, 1]);
+      expect(remaining.first.blocks.map((block) => block.rangeLabel), [
+        '1:1',
+        '1:2',
+      ]);
+      expect(plan.days, 2);
+      expect(plan.endDate, DateTime(2026, 7, 15));
+    },
+  );
+
   test(
     'moving the only unfinished task from a day collapses the schedule',
     () async {
@@ -307,7 +441,7 @@ void main() {
     expect(await repository.listTasks(id), hasLength(2));
   });
 
-  test('appends selected passages as future days across books', () async {
+  test('appends selected passages as one future entry across books', () async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     final id = await repository.createPlan(_plan());
@@ -321,24 +455,33 @@ void main() {
         startVerse: 28,
         endChapter: 8,
         endVerse: 28,
-      ),
-      NewPlanTask(
-        dayIndex: 1,
-        bookId: 'PHP',
-        startChapter: 4,
-        startVerse: 13,
-        endChapter: 4,
-        endVerse: 13,
+        blocks: [
+          NewPlanTaskBlock(
+            bookId: 'ROM',
+            startChapter: 8,
+            startVerse: 28,
+            endChapter: 8,
+            endVerse: 28,
+          ),
+          NewPlanTaskBlock(
+            bookId: 'PHP',
+            startChapter: 4,
+            startVerse: 13,
+            endChapter: 4,
+            endVerse: 13,
+          ),
+        ],
       ),
     ]);
 
     final plan = (await repository.listPlans()).single;
     final tasks = await repository.listTasks(id);
-    expect(plan.days, 5);
-    expect(plan.endDate, DateTime(2026, 7, 18));
-    expect(tasks.map((task) => task.bookId), ['JHN', 'ROM', 'PHP']);
-    expect(tasks.map((task) => task.dayIndex), [0, 3, 4]);
-    expect(tasks.last.dueDate, DateTime(2026, 7, 18));
+    expect(plan.days, 4);
+    expect(plan.endDate, DateTime(2026, 7, 17));
+    expect(tasks.map((task) => task.bookId), ['JHN', 'ROM']);
+    expect(tasks.map((task) => task.dayIndex), [0, 3]);
+    expect(tasks.last.blocks.map((block) => block.bookId), ['ROM', 'PHP']);
+    expect(tasks.last.dueDate, DateTime(2026, 7, 17));
   });
 
   test('persists cloud identity and locked content metadata', () async {

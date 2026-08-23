@@ -788,7 +788,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
               leading: CircleAvatar(child: Text('${first.dayIndex + 1}')),
               title: Text('第 ${first.dayIndex + 1} 天'),
               subtitle: Text(
-                '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} · ${dayTasks.length} 段经文',
+                '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} · ${dayTasks.length} 条背诵',
               ),
             ),
             for (final task in dayTasks)
@@ -817,34 +817,48 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       ),
                       leading: const Icon(Icons.menu_book_outlined),
                       title: Text(
-                        '${catalog.nameFor(task.bookId, locale)} ${task.startChapter}:${task.startVerse}'
-                        '${task.endChapter == task.startChapter && task.endVerse == task.startVerse ? '' : '–${task.endChapter}:${task.endVerse}'}',
+                        task.effectiveBlocks
+                            .map(
+                              (block) =>
+                                  '${catalog.nameFor(block.bookId, locale)} ${block.rangeLabel}',
+                            )
+                            .join('、'),
                       ),
+                      subtitle: task.effectiveBlocks.length > 1
+                          ? Text('${task.effectiveBlocks.length} 个子块，背诵时连续完成')
+                          : null,
                       trailing: Wrap(
                         spacing: 2,
                         children: [
                           if (!task.completed &&
                               !plan.contentLocked &&
                               plan.sourceKind == PlanSourceKind.local &&
-                              _tasksByDay(
-                                tasks,
-                              ).keys.any((day) => day != task.dayIndex))
-                            PopupMenuButton<int>(
+                              tasks.any(
+                                (target) =>
+                                    target.id != task.id && !target.completed,
+                              ))
+                            PopupMenuButton<String>(
                               key: Key('move-task-${task.id}'),
-                              tooltip: '挪到其他天',
+                              tooltip: '移入其他背诵条目',
                               icon: const Icon(Icons.drive_file_move_outline),
-                              onSelected: (targetDayIndex) => _moveTaskToDay(
-                                plan: plan,
-                                task: task,
-                                targetDayIndex: targetDayIndex,
-                              ),
+                              onSelected: (value) {
+                                final ids = value.split(':');
+                                _moveTaskBlockToEntry(
+                                  blockId: int.parse(ids[0]),
+                                  targetTaskId: int.parse(ids[1]),
+                                );
+                              },
                               itemBuilder: (context) => [
-                                for (final day in _tasksByDay(tasks).keys)
-                                  if (day != task.dayIndex)
-                                    PopupMenuItem(
-                                      value: day,
-                                      child: Text('挪到第 ${day + 1} 天'),
-                                    ),
+                                for (final block in task.effectiveBlocks)
+                                  for (final target in tasks)
+                                    if (target.id != task.id &&
+                                        !target.completed)
+                                      PopupMenuItem(
+                                        value: '${block.id}:${target.id}',
+                                        child: Text(
+                                          '将 ${block.rangeLabel} 移入第 ${target.dayIndex + 1} 天',
+                                        ),
+                                      ),
                               ],
                             ),
                           TextButton(
@@ -924,26 +938,24 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     return true;
   }
 
-  Future<void> _moveTaskToDay({
-    required MemorizationPlan plan,
-    required PlanTask task,
-    required int targetDayIndex,
+  Future<void> _moveTaskBlockToEntry({
+    required int blockId,
+    required int targetTaskId,
   }) async {
+    final repository = await ref.read(planRepositoryProvider.future);
     try {
-      final repository = await ref.read(planRepositoryProvider.future);
-      await repository.moveTask(task.id, targetDayIndex: targetDayIndex);
+      await repository.moveTaskBlock(blockId, targetTaskId: targetTaskId);
       await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
       if (!mounted) return;
-      Navigator.of(context).pop();
       setState(() => _revision++);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('已挪到第 ${targetDayIndex + 1} 天')));
-    } on StateError catch (error) {
+      ).showSnackBar(const SnackBar(content: Text('已移入背诵条目')));
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ).showSnackBar(SnackBar(content: Text('调整失败：$error')));
     }
   }
 

@@ -11,50 +11,41 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   required PlanTask selected,
   bool todayQuizEntry = false,
 }) async {
-  final pending =
-      tasks
-          .where(
-            (task) =>
-                task.dayIndex >= selected.dayIndex &&
-                (!task.completed || task.id == selected.id),
-          )
-          .toList()
-        ..sort((left, right) => left.dayIndex.compareTo(right.dayIndex));
-  if (pending.isEmpty) return null;
-  // A Today task must only prepare questions for the passage the user opened
-  // today. Passing every range in a long plan here turns one task into a
-  // several-hundred-question run once the shared bank has accumulated data.
-  // Non-Today plan flows retain their plan-wide, disjoint-range behavior.
-  final quizScopes = todayQuizEntry
-      ? [_quizScopeForTask(plan, selected)]
-      : _quizScopesForPlan(plan, tasks);
+  final blocks = selected.effectiveBlocks;
+  if (blocks.isEmpty) return null;
+  // A recitation entry owns its own ordered blocks.  Do not make an entry
+  // launch later scheduled entries: that turns a user's single Today row back
+  // into several unrelated tasks.
+  final quizScopes = [
+    for (final block in blocks) _quizScopeForBlock(plan, block),
+  ];
 
   RecitationRequest? next;
-  for (final task in pending.reversed) {
+  for (final block in blocks.reversed) {
     final passage = await scripture.getPassage(
       plan.translationId,
       PassageRange(
         start: (
           canonId: CanonId.protestant66,
-          osisBookId: task.bookId,
-          chapter: task.startChapter,
-          verse: task.startVerse,
+          osisBookId: block.bookId,
+          chapter: block.startChapter,
+          verse: block.startVerse,
         ),
         end: (
           canonId: CanonId.protestant66,
-          osisBookId: task.bookId,
-          chapter: task.endChapter,
-          verse: task.endVerse,
+          osisBookId: block.bookId,
+          chapter: block.endChapter,
+          verse: block.endVerse,
         ),
       ),
     );
     next = RecitationRequest(
       translationId: plan.translationId,
-      bookId: task.bookId,
-      chapter: task.startChapter,
+      bookId: block.bookId,
+      chapter: block.startChapter,
       mode: RecitationMode.continuous,
       units: passage.units,
-      planTaskId: task.id,
+      planTaskId: next == null ? selected.id : null,
       planId: plan.id,
       next: next,
       // Every screen in the chain needs the exact task scopes so the final
@@ -68,26 +59,12 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   return next;
 }
 
-List<QuizScope> _quizScopesForPlan(
-  MemorizationPlan plan,
-  List<PlanTask> tasks,
-) => {
-  for (final task in tasks)
+QuizScope _quizScopeForBlock(MemorizationPlan plan, PlanTaskBlock block) =>
     QuizScope(
       translationId: plan.translationId,
-      bookId: task.bookId,
-      startChapter: task.startChapter,
-      startVerse: task.startVerse,
-      endChapter: task.endChapter,
-      endVerse: task.endVerse,
-    ),
-}.toList(growable: false);
-
-QuizScope _quizScopeForTask(MemorizationPlan plan, PlanTask task) => QuizScope(
-  translationId: plan.translationId,
-  bookId: task.bookId,
-  startChapter: task.startChapter,
-  startVerse: task.startVerse,
-  endChapter: task.endChapter,
-  endVerse: task.endVerse,
-);
+      bookId: block.bookId,
+      startChapter: block.startChapter,
+      startVerse: block.startVerse,
+      endChapter: block.endChapter,
+      endVerse: block.endVerse,
+    );

@@ -1,4 +1,5 @@
 import 'package:bible_recite/src/features/plans/domain/plan_draft_builder.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_entry_splitter.dart';
 import 'package:bible_recite/src/features/plans/presentation/plan_editor_dialog.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
@@ -114,7 +115,84 @@ void main() {
     expect(plan.tasks.single.endVerse, 16);
   });
 
-  test('keeps every added passage in a book-specific scheduled task', () async {
+  test(
+    'creates one default entry with every selected passage as blocks',
+    () async {
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: '多选一条',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          endChapter: 3,
+          startDate: DateTime(2026, 8, 23),
+          endDate: DateTime(2026, 8, 23),
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 16,
+            ),
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 18,
+              endChapter: 3,
+              endVerse: 18,
+            ),
+          ],
+        ),
+        now: DateTime(2026, 8, 23),
+      );
+
+      expect(plan.tasks, hasLength(1));
+      expect(plan.tasks.single.dayIndex, 0);
+      expect(
+        plan.tasks.single
+            .effectiveBlocks('JHN')
+            .map((block) => block.startVerse),
+        [16, 18],
+      );
+    },
+  );
+
+  test(
+    'creates one entry per verse on consecutive days when requested',
+    () async {
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: '按节背诵',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          endChapter: 3,
+          startDate: DateTime(2026, 8, 23),
+          endDate: DateTime(2026, 8, 23),
+          splitStrategy: const PlanEntrySplitStrategy.byVerse(),
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 17,
+            ),
+          ],
+        ),
+        now: DateTime(2026, 8, 23),
+      );
+
+      expect(plan.days, 2);
+      expect(plan.tasks.map((task) => task.dayIndex), [0, 1]);
+      expect(plan.tasks.map((task) => task.startVerse), [16, 17]);
+    },
+  );
+
+  test('keeps every added passage in a book-specific default entry', () async {
     final plan = await buildPlanFromDraft(
       _ScriptureFixture(),
       PlanEditorDraft(
@@ -145,24 +223,25 @@ void main() {
       now: DateTime(2026, 7, 25),
     );
 
-    expect(plan.tasks, hasLength(4));
-    expect(plan.tasks.map((task) => task.bookId).toSet(), {'GEN', 'JHN'});
+    expect(plan.tasks, hasLength(1));
+    final blocks = plan.tasks.single.effectiveBlocks('GEN');
+    expect(blocks.map((block) => block.bookId).toSet(), {'GEN', 'JHN'});
     expect(
-      plan.tasks.any((task) => task.bookId == 'JHN' && task.startVerse == 16),
+      blocks.any((block) => block.bookId == 'JHN' && block.startVerse == 16),
       isTrue,
     );
     expect(
-      plan.tasks.any((task) => task.bookId == 'JHN' && task.endVerse == 17),
+      blocks.any((block) => block.bookId == 'JHN' && block.endVerse == 17),
       isTrue,
     );
     expect(
-      plan.tasks.where((task) => task.bookId == 'JHN' && task.startVerse == 16),
+      blocks.where((block) => block.bookId == 'JHN' && block.startVerse == 16),
       hasLength(1),
     );
   });
 
   test(
-    'combines passages on shortened days without splitting verses',
+    'keeps passages together in the default entry despite a short schedule',
     () async {
       final plan = await buildPlanFromDraft(
         _ScriptureFixture(),
@@ -201,19 +280,14 @@ void main() {
         now: DateTime(2026, 7, 25),
       );
 
-      expect(plan.tasks, hasLength(3));
-      expect(plan.tasks.map((task) => task.dayIndex).toSet(), hasLength(2));
-      final taskCountsByDay = <int, int>{};
-      for (final task in plan.tasks) {
-        taskCountsByDay.update(
-          task.dayIndex,
-          (count) => count + 1,
-          ifAbsent: () => 1,
-        );
-      }
-      expect(taskCountsByDay.values, contains(greaterThan(1)));
+      expect(plan.tasks, hasLength(1));
+      expect(plan.tasks.single.dayIndex, 0);
       expect(
-        plan.tasks.where((task) => task.startVerse == 16).single.endVerse,
+        plan.tasks.single
+            .effectiveBlocks('GEN')
+            .where((block) => block.startVerse == 16)
+            .single
+            .endVerse,
         16,
       );
     },
@@ -247,10 +321,9 @@ void main() {
         now: start,
       );
 
-      expect(plan.days, end.difference(start).inDays + 1);
-      expect(plan.tasks, hasLength(2));
+      expect(plan.days, 1);
+      expect(plan.tasks, hasLength(1));
       expect(plan.tasks.first.dayIndex, 0);
-      expect(plan.tasks.last.dayIndex, plan.days - 1);
     },
   );
 }

@@ -59,6 +59,18 @@ final class SqlitePlanRepository {
       )
     ''');
     _database.execute('''
+      CREATE TABLE IF NOT EXISTS plan_task_block (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_task_id INTEGER NOT NULL REFERENCES plan_task(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL CHECK(sort_order >= 0),
+        book_id TEXT NOT NULL,
+        start_chapter INTEGER NOT NULL CHECK(start_chapter > 0),
+        start_verse INTEGER NOT NULL CHECK(start_verse > 0),
+        end_chapter INTEGER NOT NULL CHECK(end_chapter >= start_chapter),
+        end_verse INTEGER NOT NULL CHECK(end_verse > 0)
+      )
+    ''');
+    _database.execute('''
       CREATE TABLE IF NOT EXISTS recitation_result (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         translation_id TEXT NOT NULL,
@@ -334,8 +346,13 @@ final class SqlitePlanRepository {
       SET book_id = (SELECT book_id FROM memorization_plan
         WHERE memorization_plan.id = plan_task.plan_id)
       WHERE book_id IS NULL''');
+    _migratePlanTaskBlocks();
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_plan_task_plan_day
       ON plan_task(plan_id, day_index)''');
+    _database.execute(
+      '''CREATE INDEX IF NOT EXISTS idx_plan_task_block_task_sort
+      ON plan_task_block(plan_task_id, sort_order)''',
+    );
     _database.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
       idx_plan_cloud_identity ON memorization_plan(source_url, external_id)
       WHERE source_url IS NOT NULL AND external_id IS NOT NULL''');
@@ -504,6 +521,41 @@ final class SqlitePlanRepository {
     }
   }
 
+  void _migratePlanTaskBlocks() {
+    _database.execute('''
+      INSERT INTO plan_task_block
+        (plan_task_id, sort_order, book_id, start_chapter, start_verse,
+         end_chapter, end_verse)
+      SELECT t.id, 0, t.book_id, t.start_chapter, t.start_verse,
+             t.end_chapter, t.end_verse
+      FROM plan_task t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM plan_task_block b WHERE b.plan_task_id = t.id
+      )
+    ''');
+  }
+
+  void _insertTaskBlocks(int taskId, NewPlanTask task, String fallbackBookId) {
+    final blocks = task.effectiveBlocks(fallbackBookId);
+    for (var index = 0; index < blocks.length; index++) {
+      final block = blocks[index];
+      _database.execute(
+        '''INSERT INTO plan_task_block
+        (plan_task_id, sort_order, book_id, start_chapter, start_verse,
+         end_chapter, end_verse) VALUES (?, ?, ?, ?, ?, ?, ?)''',
+        [
+          taskId,
+          index,
+          block.bookId ?? fallbackBookId,
+          block.startChapter,
+          block.startVerse,
+          block.endChapter,
+          block.endVerse,
+        ],
+      );
+    }
+  }
+
   Future<int> createPlan(NewMemorizationPlan plan) async {
     _database.execute('BEGIN IMMEDIATE');
     try {
@@ -550,6 +602,7 @@ final class SqlitePlanRepository {
             task.endVerse,
           ],
         );
+        _insertTaskBlocks(_database.lastInsertRowId, task, plan.bookId);
       }
       _database.execute('COMMIT');
       return id;
@@ -1552,13 +1605,12 @@ final class SqlitePlanRepository {
   }
 
   Future<List<PlanTask>> listTasks(int planId) async {
-    return _database
-        .select(
-          'SELECT * FROM plan_task WHERE plan_id = ? ORDER BY day_index',
-          [planId],
-        )
-        .map(_taskFromRow)
-        .toList(growable: false);
+    return _tasksFromRows(
+      _database.select(
+        'SELECT * FROM plan_task WHERE plan_id = ? ORDER BY day_index, id',
+        [planId],
+      ),
+    );
   }
 
   /// Appends passages as new daily tasks.  Keeping their original book on each
@@ -1593,6 +1645,7 @@ final class SqlitePlanRepository {
             task.endVerse,
           ],
         );
+        _insertTaskBlocks(_database.lastInsertRowId, task, plan.bookId);
       }
       final days = plan.days + passages.length;
       _database.execute(
@@ -1617,22 +1670,21 @@ final class SqlitePlanRepository {
     bool includeCompleted = false,
   }) async {
     final value = _date(date);
-    return _database
-        .select(
-          includeCompleted
-              ? '''SELECT t.* FROM plan_task t
+    return _tasksFromRows(
+      _database.select(
+        includeCompleted
+            ? '''SELECT t.* FROM plan_task t
                 JOIN memorization_plan p ON p.id = t.plan_id
                 WHERE p.status = 'active' AND ((t.completed = 0 AND t.due_date <= ?)
                    OR (t.completed = 1 AND t.due_date = ?))
                 ORDER BY completed, due_date, id'''
-              : '''SELECT t.* FROM plan_task t
+            : '''SELECT t.* FROM plan_task t
                 JOIN memorization_plan p ON p.id = t.plan_id
                 WHERE p.status = 'active' AND t.completed = 0 AND t.due_date <= ?
                 ORDER BY due_date, id''',
-          includeCompleted ? [value, value] : [value],
-        )
-        .map(_taskFromRow)
-        .toList(growable: false);
+        includeCompleted ? [value, value] : [value],
+      ),
+    );
   }
 
   Future<void> updatePlan(int planId, NewMemorizationPlan plan) async {
@@ -1696,6 +1748,7 @@ final class SqlitePlanRepository {
             completedDays.contains(task.dayIndex) ? 1 : 0,
           ],
         );
+        _insertTaskBlocks(_database.lastInsertRowId, task, plan.bookId);
       }
       _database.execute('COMMIT');
       await evaluateAndUnlockAchievements(source: 'plan');
@@ -1872,6 +1925,113 @@ final class SqlitePlanRepository {
   Future<void> deleteTask(int taskId) async {
     _database.execute('DELETE FROM plan_task WHERE id = ?', [taskId]);
     await evaluateAndUnlockAchievements(source: 'plan');
+  }
+
+  Future<void> moveTaskBlock(int blockId, {required int targetTaskId}) async {
+    final rows = _database.select(
+      '''SELECT b.plan_task_id, t.plan_id, t.day_index, t.completed,
+          p.source_kind, p.content_locked, p.start_date,
+          COALESCE(s.days, p.days) AS days
+        FROM plan_task_block b
+        JOIN plan_task t ON t.id = b.plan_task_id
+        JOIN memorization_plan p ON p.id = t.plan_id
+        LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
+        WHERE b.id = ?''',
+      [blockId],
+    );
+    final targets = _database.select(
+      '''SELECT t.plan_id, t.completed, p.source_kind, p.content_locked
+        FROM plan_task t JOIN memorization_plan p ON p.id = t.plan_id
+        WHERE t.id = ?''',
+      [targetTaskId],
+    );
+    if (rows.isEmpty || targets.isEmpty) throw StateError('背诵条目不存在');
+    final source = rows.single;
+    final target = targets.single;
+    if (source['plan_task_id'] == targetTaskId) {
+      throw StateError('请选择其他背诵条目');
+    }
+    if (source['plan_id'] != target['plan_id'] ||
+        source['completed'] == 1 ||
+        target['completed'] == 1 ||
+        source['content_locked'] == 1 ||
+        target['content_locked'] == 1 ||
+        source['source_kind'] != 'local' ||
+        target['source_kind'] != 'local') {
+      throw StateError('只有未完成的自定义背诵条目可以调整');
+    }
+    final sourceTaskId = source['plan_task_id'] as int;
+    final sourceDayIndex = source['day_index'] as int;
+    final sourceBlockCount =
+        _database.select(
+              'SELECT COUNT(*) AS count FROM plan_task_block WHERE plan_task_id = ?',
+              [sourceTaskId],
+            ).single['count']
+            as int;
+    final sourceDayEntryCount =
+        _database.select(
+              'SELECT COUNT(*) AS count FROM plan_task WHERE plan_id = ? AND day_index = ?',
+              [source['plan_id'], sourceDayIndex],
+            ).single['count']
+            as int;
+    if (sourceBlockCount == 1 && sourceDayEntryCount == 1) {
+      final completedLater = _database.select(
+        '''SELECT 1 FROM plan_task
+        WHERE plan_id = ? AND completed = 1 AND day_index > ? LIMIT 1''',
+        [source['plan_id'], sourceDayIndex],
+      );
+      if (completedLater.isNotEmpty) {
+        throw StateError('后续已有完成记录，不能缩减这个背诵日');
+      }
+    }
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute(
+        'UPDATE plan_task_block SET plan_task_id = ? WHERE id = ?',
+        [targetTaskId, blockId],
+      );
+      _reorderTaskBlocks(targetTaskId);
+      if (sourceBlockCount == 1) {
+        _database.execute('DELETE FROM plan_task WHERE id = ?', [sourceTaskId]);
+        if (sourceDayEntryCount == 1) {
+          _database.execute(
+            '''UPDATE plan_task SET day_index = day_index - 1,
+              due_date = date(due_date, '-1 day')
+            WHERE plan_id = ? AND day_index > ?''',
+            [source['plan_id'], sourceDayIndex],
+          );
+          final days = (source['days'] as int) - 1;
+          final startDate = DateTime.parse(source['start_date'] as String);
+          _database.execute(
+            'UPDATE memorization_plan SET days = ?, end_date = ? WHERE id = ?',
+            [
+              _storedDays(days),
+              _date(_storedEndDate(startDate, days)),
+              source['plan_id'],
+            ],
+          );
+          _saveScheduleSpan(source['plan_id'] as int, startDate, days);
+        }
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  void _reorderTaskBlocks(int taskId) {
+    final blocks = _database.select(
+      '''SELECT id FROM plan_task_block WHERE plan_task_id = ?
+      ORDER BY book_id, start_chapter, start_verse, end_chapter, end_verse, id''',
+      [taskId],
+    );
+    for (var index = 0; index < blocks.length; index++) {
+      _database.execute(
+        'UPDATE plan_task_block SET sort_order = ? WHERE id = ?',
+        [index, blocks[index]['id']],
+      );
+    }
   }
 
   /// Moves one unfinished passage onto another scheduled day.  When it was
@@ -2755,7 +2915,39 @@ final class SqlitePlanRepository {
     totalRecitationSeconds: (row['total_recitation_seconds'] as int?) ?? 0,
   );
 
-  PlanTask _taskFromRow(Row row) => PlanTask(
+  List<PlanTask> _tasksFromRows(List<Row> rows) {
+    if (rows.isEmpty) return const [];
+    final taskIds = rows.map((row) => row['id'] as int).toList();
+    final placeholders = List.filled(taskIds.length, '?').join(', ');
+    final blocksByTaskId = <int, List<PlanTaskBlock>>{};
+    for (final row in _database.select('''SELECT * FROM plan_task_block
+      WHERE plan_task_id IN ($placeholders)
+      ORDER BY plan_task_id, sort_order, id''', taskIds)) {
+      final taskId = row['plan_task_id'] as int;
+      blocksByTaskId
+          .putIfAbsent(taskId, () => [])
+          .add(
+            PlanTaskBlock(
+              id: row['id'] as int,
+              taskId: taskId,
+              sortOrder: row['sort_order'] as int,
+              bookId: row['book_id'] as String,
+              startChapter: row['start_chapter'] as int,
+              startVerse: row['start_verse'] as int,
+              endChapter: row['end_chapter'] as int,
+              endVerse: row['end_verse'] as int,
+            ),
+          );
+    }
+    return rows
+        .map(
+          (row) =>
+              _taskFromRow(row, blocksByTaskId[row['id'] as int] ?? const []),
+        )
+        .toList(growable: false);
+  }
+
+  PlanTask _taskFromRow(Row row, List<PlanTaskBlock> blocks) => PlanTask(
     id: row['id'] as int,
     planId: row['plan_id'] as int,
     dayIndex: row['day_index'] as int,
@@ -2766,6 +2958,7 @@ final class SqlitePlanRepository {
     endChapter: row['end_chapter'] as int,
     endVerse: row['end_verse'] as int,
     completed: (row['completed'] as int) == 1,
+    blocks: List.unmodifiable(blocks),
   );
 
   RecitationResult _resultFromRow(Row row) => RecitationResult(

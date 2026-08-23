@@ -327,10 +327,11 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final range = task.startChapter == task.endChapter
-        ? '${task.startChapter}:${task.startVerse}–${task.endVerse}'
-        : '${task.startChapter}:${task.startVerse}–'
-              '${task.endChapter}:${task.endVerse}';
+    final blocks = task.effectiveBlocks;
+    final range = blocks.map((block) => block.rangeLabel).join('、');
+    final summary = blocks.length == 1
+        ? '$bookName $range'
+        : '$bookName $range · ${blocks.length} 个子块';
     return Card(
       child: ListTile(
         onTap: plan == null ? null : onStart,
@@ -340,7 +341,7 @@ class _TaskCard extends StatelessWidget {
           ),
         ),
         title: Text(plan?.title ?? '今日任务'),
-        subtitle: Text('$bookName $range'),
+        subtitle: Text(summary),
         trailing: IconButton(
           key: Key('${completed ? 'undo' : 'complete'}-task-${task.id}'),
           tooltip: completed ? '撤销完成' : '完成',

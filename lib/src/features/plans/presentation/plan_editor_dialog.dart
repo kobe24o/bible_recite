@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../domain/plan_entry_splitter.dart';
 import '../../scripture/domain/scripture_models.dart';
 
 final class PlanEditorDraft {
@@ -12,6 +13,7 @@ final class PlanEditorDraft {
     required this.startDate,
     required this.endDate,
     this.passages = const [],
+    this.splitStrategy = const PlanEntrySplitStrategy.none(),
     this.ebbinghausEnabled = false,
   });
 
@@ -23,6 +25,7 @@ final class PlanEditorDraft {
   final DateTime startDate;
   final DateTime endDate;
   final List<PlanPassageSelection> passages;
+  final PlanEntrySplitStrategy splitStrategy;
   final bool ebbinghausEnabled;
 
   int get days => endDate.difference(startDate).inDays + 1;
@@ -81,6 +84,8 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   late bool _ebbinghausEnabled;
+  late PlanEntrySplitKind _splitKind;
+  late final TextEditingController _everyVerseCount;
   late final ScrollController _passageListController;
   var _showPassageJumpToTop = false;
   var _showPassageJumpToBottom = false;
@@ -95,6 +100,10 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
     _ebbinghausEnabled = widget.initial.ebbinghausEnabled;
+    _splitKind = widget.initial.splitStrategy.kind;
+    _everyVerseCount = TextEditingController(
+      text: '${widget.initial.splitStrategy.verseCount ?? 5}',
+    );
     _passageListController = ScrollController()
       ..addListener(_updatePassageJumpActions);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -183,6 +192,56 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                   icon: const Icon(Icons.add_rounded),
                   label: Text(chinese ? '添加经文' : 'Add passage'),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<PlanEntrySplitKind>(
+                  key: const Key('plan-entry-split-strategy'),
+                  initialValue: _splitKind,
+                  decoration: InputDecoration(
+                    labelText: chinese ? '拆分为背诵条目' : 'Split into entries',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: PlanEntrySplitKind.none,
+                      child: Text(chinese ? '不拆分（默认）' : 'Do not split'),
+                    ),
+                    DropdownMenuItem(
+                      value: PlanEntrySplitKind.book,
+                      child: Text(chinese ? '按卷，每卷一个条目' : 'One entry per book'),
+                    ),
+                    DropdownMenuItem(
+                      value: PlanEntrySplitKind.chapter,
+                      child: Text(
+                        chinese ? '按章，每章一个条目' : 'One entry per chapter',
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: PlanEntrySplitKind.verse,
+                      child: Text(
+                        chinese ? '按节，每节一个条目' : 'One entry per verse',
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: PlanEntrySplitKind.everyVerses,
+                      child: Text(chinese ? '按数量，每 N 节一个条目' : 'Every N verses'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _splitKind = value);
+                  },
+                ),
+                if (_splitKind == PlanEntrySplitKind.everyVerses) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('plan-entry-every-verse-count'),
+                    controller: _everyVerseCount,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: chinese ? '每多少节一个条目' : 'Verses per entry',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 8),
               ListTile(
@@ -281,6 +340,11 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       setState(() => _error = '请检查名称和日期（至少 ${widget.minimumDays} 天）');
       return;
     }
+    final splitStrategy = _selectedSplitStrategy();
+    if (splitStrategy == null) {
+      setState(() => _error = '每个背诵条目的节数必须大于 0');
+      return;
+    }
     final headerPassages = _passages
         .where((passage) => passage.bookId == _passages.first.bookId)
         .toList(growable: false);
@@ -308,6 +372,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           startDate: _startDate,
           endDate: _endDate,
           passages: _passages,
+          splitStrategy: splitStrategy,
           ebbinghausEnabled: _ebbinghausEnabled,
         ),
       ),
@@ -318,12 +383,31 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       '${value.year}-${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 
+  PlanEntrySplitStrategy? _selectedSplitStrategy() {
+    switch (_splitKind) {
+      case PlanEntrySplitKind.none:
+        return const PlanEntrySplitStrategy.none();
+      case PlanEntrySplitKind.book:
+        return const PlanEntrySplitStrategy.byBook();
+      case PlanEntrySplitKind.chapter:
+        return const PlanEntrySplitStrategy.byChapter();
+      case PlanEntrySplitKind.verse:
+        return const PlanEntrySplitStrategy.byVerse();
+      case PlanEntrySplitKind.everyVerses:
+        final count = int.tryParse(_everyVerseCount.text.trim());
+        return count != null && count > 0
+            ? PlanEntrySplitStrategy.everyVerses(count)
+            : null;
+    }
+  }
+
   @override
   void dispose() {
     _passageListController
       ..removeListener(_updatePassageJumpActions)
       ..dispose();
     _title.dispose();
+    _everyVerseCount.dispose();
     super.dispose();
   }
 

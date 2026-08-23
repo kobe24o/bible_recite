@@ -342,7 +342,7 @@ class _ScriptureBrowserScreenState
         startChapter: first.start.chapter,
         endChapter: first.end.chapter,
         startDate: start,
-        endDate: start.add(Duration(days: units.length - 1)),
+        endDate: start,
         tasks: _searchTasks(units),
       ),
     );
@@ -386,17 +386,30 @@ class _ScriptureBrowserScreenState
     }
   }
 
-  List<NewPlanTask> _searchTasks(List<VerseUnit> units) => [
-    for (var index = 0; index < units.length; index++)
+  List<NewPlanTask> _searchTasks(List<VerseUnit> units) {
+    if (units.isEmpty) return const [];
+    final first = units.first;
+    return [
       NewPlanTask(
-        dayIndex: index,
-        bookId: units[index].start.osisBookId,
-        startChapter: units[index].start.chapter,
-        startVerse: units[index].start.verse,
-        endChapter: units[index].end.chapter,
-        endVerse: units[index].end.verse,
+        dayIndex: 0,
+        bookId: first.start.osisBookId,
+        startChapter: first.start.chapter,
+        startVerse: first.start.verse,
+        endChapter: first.end.chapter,
+        endVerse: first.end.verse,
+        blocks: [
+          for (final unit in units)
+            NewPlanTaskBlock(
+              bookId: unit.start.osisBookId,
+              startChapter: unit.start.chapter,
+              startVerse: unit.start.verse,
+              endChapter: unit.end.chapter,
+              endVerse: unit.end.verse,
+            ),
+        ],
       ),
-  ];
+    ];
+  }
 }
 
 class _SearchResultsSheet extends StatefulWidget {

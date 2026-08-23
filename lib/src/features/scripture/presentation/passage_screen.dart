@@ -539,17 +539,30 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     }
   }
 
-  List<NewPlanTask> _tasksFor(List<VerseUnit> units) => [
-    for (var index = 0; index < units.length; index++)
+  List<NewPlanTask> _tasksFor(List<VerseUnit> units) {
+    if (units.isEmpty) return const [];
+    final first = units.first;
+    return [
       NewPlanTask(
-        dayIndex: index,
-        bookId: units[index].start.osisBookId,
-        startChapter: units[index].start.chapter,
-        startVerse: units[index].start.verse,
-        endChapter: units[index].end.chapter,
-        endVerse: units[index].end.verse,
+        dayIndex: 0,
+        bookId: first.start.osisBookId,
+        startChapter: first.start.chapter,
+        startVerse: first.start.verse,
+        endChapter: first.end.chapter,
+        endVerse: first.end.verse,
+        blocks: [
+          for (final unit in units)
+            NewPlanTaskBlock(
+              bookId: unit.start.osisBookId,
+              startChapter: unit.start.chapter,
+              startVerse: unit.start.verse,
+              endChapter: unit.end.chapter,
+              endVerse: unit.end.verse,
+            ),
+        ],
       ),
-  ];
+    ];
+  }
 
   Future<bool> _openNewPlanEditor({
     List<PlanPassageSelection> initialPassages = const [],
@@ -591,11 +604,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
             startChapter: widget.chapter,
             endChapter: widget.chapter,
             startDate: start,
-            endDate: start.add(
-              Duration(
-                days: initialPassages.isEmpty ? 6 : initialPassages.length - 1,
-              ),
-            ),
+            endDate: start.add(Duration(days: initialPassages.isEmpty ? 6 : 0)),
             passages: initialPassages,
           ),
         ),

@@ -254,13 +254,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('第 1 天'), findsOneWidget);
-    expect(find.text('2026-07-25 · 2 段经文'), findsOneWidget);
+    expect(find.text('2026-07-25 · 2 条背诵'), findsOneWidget);
     expect(find.text('第 2 天'), findsOneWidget);
 
     final pendingTask = (await repository.listTasks(1)).first;
     await tester.tap(find.byKey(Key('move-task-${pendingTask.id}')));
     await tester.pumpAndSettle();
-    expect(find.text('挪到第 2 天'), findsOneWidget);
+    expect(find.text('将 3:16 移入第 2 天'), findsOneWidget);
   });
 
   testWidgets('summarizes custom multi-book plans with Chinese book names', (

@@ -1,6 +1,7 @@
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../presentation/plan_editor_dialog.dart';
+import 'plan_entry_splitter.dart';
 import 'plan_generator.dart';
 import 'plan_models.dart';
 
@@ -36,6 +37,7 @@ PlanEditorDraft normalizeDraftForPendingWork(
     startDate: draft.startDate,
     endDate: end,
     passages: draft.passages,
+    splitStrategy: draft.splitStrategy,
     ebbinghausEnabled: draft.ebbinghausEnabled,
   );
 }
@@ -84,6 +86,60 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   }
   if (passageUnits.every((units) => units.isEmpty)) {
     throw StateError('所选章节没有可用经文');
+  }
+  // A multi-select is one recitation entry by default.  Its individual
+  // selections remain exact blocks so a gap is never silently included.
+  if (draft.passages.isNotEmpty && completedTasks.isEmpty) {
+    final selectedBlocks = <PlanTaskBlock>[];
+    for (final units in passageUnits) {
+      for (final unit in units) {
+        selectedBlocks.add(
+          PlanTaskBlock(
+            id: 0,
+            taskId: 0,
+            sortOrder: selectedBlocks.length,
+            bookId: unit.start.osisBookId,
+            startChapter: unit.start.chapter,
+            startVerse: unit.start.verse,
+            endChapter: unit.end.chapter,
+            endVerse: unit.end.verse,
+          ),
+        );
+      }
+    }
+    final groups = splitPlanEntryBlocks(selectedBlocks, draft.splitStrategy);
+    final endDate = draft.startDate.add(Duration(days: groups.length - 1));
+    return NewMemorizationPlan(
+      title: draft.title,
+      translationId: draft.translationId,
+      bookId: draft.bookId,
+      startChapter: draft.startChapter,
+      endChapter: draft.endChapter,
+      startDate: draft.startDate,
+      endDate: endDate,
+      tasks: [
+        for (var index = 0; index < groups.length; index++)
+          NewPlanTask(
+            dayIndex: index,
+            bookId: groups[index].first.bookId,
+            startChapter: groups[index].first.startChapter,
+            startVerse: groups[index].first.startVerse,
+            endChapter: groups[index].first.endChapter,
+            endVerse: groups[index].first.endVerse,
+            blocks: [
+              for (final block in groups[index])
+                NewPlanTaskBlock(
+                  bookId: block.bookId,
+                  startChapter: block.startChapter,
+                  startVerse: block.startVerse,
+                  endChapter: block.endChapter,
+                  endVerse: block.endVerse,
+                ),
+            ],
+          ),
+      ],
+      ebbinghausEnabled: draft.ebbinghausEnabled,
+    );
   }
   final completedDays = completedTasks.map((task) => task.dayIndex).toSet();
   final current = now ?? DateTime.now();
