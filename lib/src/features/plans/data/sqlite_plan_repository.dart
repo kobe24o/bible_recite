@@ -1928,6 +1928,28 @@ final class SqlitePlanRepository {
   }
 
   Future<void> moveTaskBlock(int blockId, {required int targetTaskId}) async {
+    final source = _database.select(
+      'SELECT plan_task_id FROM plan_task_block WHERE id = ?',
+      [blockId],
+    );
+    if (source.isEmpty) throw StateError('背诵条目不存在');
+    await moveTaskBlockRange(
+      sourceTaskId: source.single['plan_task_id'] as int,
+      startBlockId: blockId,
+      endBlockId: blockId,
+      targetTaskId: targetTaskId,
+    );
+  }
+
+  /// Moves every persisted block from [startBlockId] through [endBlockId], in
+  /// the source entry's reading order.  Moving the final blocks keeps the
+  /// historical one-day compression behaviour of [moveTaskBlock].
+  Future<void> moveTaskBlockRange({
+    required int sourceTaskId,
+    required int startBlockId,
+    required int endBlockId,
+    required int targetTaskId,
+  }) async {
     final rows = _database.select(
       '''SELECT b.plan_task_id, t.plan_id, t.day_index, t.completed,
           p.source_kind, p.content_locked, p.start_date,
@@ -1936,8 +1958,8 @@ final class SqlitePlanRepository {
         JOIN plan_task t ON t.id = b.plan_task_id
         JOIN memorization_plan p ON p.id = t.plan_id
         LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
-        WHERE b.id = ?''',
-      [blockId],
+        WHERE b.id = ? AND t.id = ?''',
+      [startBlockId, sourceTaskId],
     );
     final targets = _database.select(
       '''SELECT t.plan_id, t.completed, p.source_kind, p.content_locked
@@ -1960,21 +1982,30 @@ final class SqlitePlanRepository {
         target['source_kind'] != 'local') {
       throw StateError('只有未完成的自定义背诵条目可以调整');
     }
-    final sourceTaskId = source['plan_task_id'] as int;
     final sourceDayIndex = source['day_index'] as int;
-    final sourceBlockCount =
-        _database.select(
-              'SELECT COUNT(*) AS count FROM plan_task_block WHERE plan_task_id = ?',
-              [sourceTaskId],
-            ).single['count']
-            as int;
+    final sourceBlocks = _database.select(
+      '''SELECT id FROM plan_task_block WHERE plan_task_id = ?
+      ORDER BY sort_order, id''',
+      [sourceTaskId],
+    );
+    final sourceBlockIds = [
+      for (final block in sourceBlocks) block['id'] as int,
+    ];
+    final startIndex = sourceBlockIds.indexOf(startBlockId);
+    final endIndex = sourceBlockIds.indexOf(endBlockId);
+    if (startIndex < 0 || endIndex < 0 || endIndex < startIndex) {
+      throw StateError('请选择同一条目内从前到后的经文范围');
+    }
+    final movingBlockIds = sourceBlockIds.sublist(startIndex, endIndex + 1);
+    final sourceBlockCount = sourceBlockIds.length;
     final sourceDayEntryCount =
         _database.select(
               'SELECT COUNT(*) AS count FROM plan_task WHERE plan_id = ? AND day_index = ?',
               [source['plan_id'], sourceDayIndex],
             ).single['count']
             as int;
-    if (sourceBlockCount == 1 && sourceDayEntryCount == 1) {
+    final movesAllSourceBlocks = movingBlockIds.length == sourceBlockCount;
+    if (movesAllSourceBlocks && sourceDayEntryCount == 1) {
       final completedLater = _database.select(
         '''SELECT 1 FROM plan_task
         WHERE plan_id = ? AND completed = 1 AND day_index > ? LIMIT 1''',
@@ -1986,12 +2017,13 @@ final class SqlitePlanRepository {
     }
     _database.execute('BEGIN IMMEDIATE');
     try {
+      final placeholders = List.filled(movingBlockIds.length, '?').join(', ');
       _database.execute(
-        'UPDATE plan_task_block SET plan_task_id = ? WHERE id = ?',
-        [targetTaskId, blockId],
+        'UPDATE plan_task_block SET plan_task_id = ? WHERE id IN ($placeholders)',
+        [targetTaskId, ...movingBlockIds],
       );
       _reorderTaskBlocks(targetTaskId);
-      if (sourceBlockCount == 1) {
+      if (movesAllSourceBlocks) {
         _database.execute('DELETE FROM plan_task WHERE id = ?', [sourceTaskId]);
         if (sourceDayEntryCount == 1) {
           _database.execute(
@@ -2012,6 +2044,8 @@ final class SqlitePlanRepository {
           );
           _saveScheduleSpan(source['plan_id'] as int, startDate, days);
         }
+      } else {
+        _reorderTaskBlocks(sourceTaskId);
       }
       _database.execute('COMMIT');
     } catch (_) {

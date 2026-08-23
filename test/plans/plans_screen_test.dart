@@ -260,7 +260,10 @@ void main() {
     final pendingTask = (await repository.listTasks(1)).first;
     await tester.tap(find.byKey(Key('move-task-${pendingTask.id}')));
     await tester.pumpAndSettle();
-    expect(find.text('将 3:16 移入第 2 天'), findsOneWidget);
+    expect(find.text('移动经文范围'), findsOneWidget);
+    expect(find.byKey(const Key('move-range-start')), findsOneWidget);
+    expect(find.byKey(const Key('move-range-end')), findsOneWidget);
+    expect(find.byKey(const Key('move-range-target-day')), findsOneWidget);
   });
 
   testWidgets('summarizes custom multi-book plans with Chinese book names', (

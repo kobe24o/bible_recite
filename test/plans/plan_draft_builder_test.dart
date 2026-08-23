@@ -159,6 +159,37 @@ void main() {
     },
   );
 
+  test('keeps a long selected passage as one default block', () async {
+    final plan = await buildPlanFromDraft(
+      _ScriptureFixture(),
+      PlanEditorDraft(
+        title: '长经文一条',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 8, 23),
+        endDate: DateTime(2026, 8, 23),
+        passages: const [
+          PlanPassageSelection(
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 18,
+          ),
+        ],
+      ),
+      now: DateTime(2026, 8, 23),
+    );
+
+    expect(plan.tasks, hasLength(1));
+    final blocks = plan.tasks.single.effectiveBlocks('JHN');
+    expect(blocks, hasLength(1));
+    expect(blocks.single.startVerse, 16);
+    expect(blocks.single.endVerse, 18);
+  });
+
   test(
     'creates one entry per verse on consecutive days when requested',
     () async {

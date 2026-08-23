@@ -87,26 +87,44 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   if (passageUnits.every((units) => units.isEmpty)) {
     throw StateError('所选章节没有可用经文');
   }
-  // A multi-select is one recitation entry by default.  Its individual
-  // selections remain exact blocks so a gap is never silently included.
+  // Keep each original selection as an exact block for the default and
+  // per-book modes. Expanding a whole book into one row per verse makes both
+  // editing and task summaries unmanageable.
+  final preservesSelectionRanges =
+      draft.splitStrategy.kind == PlanEntrySplitKind.none ||
+      draft.splitStrategy.kind == PlanEntrySplitKind.book;
   if (draft.passages.isNotEmpty && completedTasks.isEmpty) {
-    final selectedBlocks = <PlanTaskBlock>[];
-    for (final units in passageUnits) {
-      for (final unit in units) {
-        selectedBlocks.add(
-          PlanTaskBlock(
-            id: 0,
-            taskId: 0,
-            sortOrder: selectedBlocks.length,
-            bookId: unit.start.osisBookId,
-            startChapter: unit.start.chapter,
-            startVerse: unit.start.verse,
-            endChapter: unit.end.chapter,
-            endVerse: unit.end.verse,
-          ),
-        );
-      }
-    }
+    final splitUnits = [
+      for (final units in passageUnits)
+        for (final unit in units) unit,
+    ];
+    final selectedBlocks = preservesSelectionRanges
+        ? [
+            for (var index = 0; index < draft.passages.length; index++)
+              PlanTaskBlock(
+                id: 0,
+                taskId: 0,
+                sortOrder: index,
+                bookId: draft.passages[index].bookId,
+                startChapter: draft.passages[index].startChapter,
+                startVerse: draft.passages[index].startVerse,
+                endChapter: draft.passages[index].endChapter,
+                endVerse: draft.passages[index].endVerse,
+              ),
+          ]
+        : [
+            for (var index = 0; index < splitUnits.length; index++)
+              PlanTaskBlock(
+                id: 0,
+                taskId: 0,
+                sortOrder: index,
+                bookId: splitUnits[index].start.osisBookId,
+                startChapter: splitUnits[index].start.chapter,
+                startVerse: splitUnits[index].start.verse,
+                endChapter: splitUnits[index].end.chapter,
+                endVerse: splitUnits[index].end.verse,
+              ),
+          ];
     final groups = splitPlanEntryBlocks(selectedBlocks, draft.splitStrategy);
     final endDate = draft.startDate.add(Duration(days: groups.length - 1));
     return NewMemorizationPlan(

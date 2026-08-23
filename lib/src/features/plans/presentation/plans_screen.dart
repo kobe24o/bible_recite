@@ -22,8 +22,11 @@ import '../application/preset_plan_sync.dart';
 import '../data/sqlite_plan_repository.dart';
 import '../domain/cloud_plan_manifest.dart';
 import '../domain/plan_draft_builder.dart';
+import '../domain/plan_editable_passage_ranges.dart';
+import '../domain/plan_entry_splitter.dart';
 import '../domain/plan_exchange.dart';
 import '../domain/plan_models.dart';
+import '../domain/plan_task_summary.dart';
 import 'plan_editor_dialog.dart';
 
 class PlansScreen extends ConsumerStatefulWidget {
@@ -817,12 +820,11 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       ),
                       leading: const Icon(Icons.menu_book_outlined),
                       title: Text(
-                        task.effectiveBlocks
-                            .map(
-                              (block) =>
-                                  '${catalog.nameFor(block.bookId, locale)} ${block.rangeLabel}',
-                            )
-                            .join('、'),
+                        compactPlanTaskSummary(
+                          task.effectiveBlocks,
+                          bookNameFor: (bookId) =>
+                              catalog.nameFor(bookId, locale),
+                        ),
                       ),
                       subtitle: task.effectiveBlocks.length > 1
                           ? Text('${task.effectiveBlocks.length} 个子块，背诵时连续完成')
@@ -833,33 +835,28 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                           if (!task.completed &&
                               !plan.contentLocked &&
                               plan.sourceKind == PlanSourceKind.local &&
+                              task.effectiveBlocks.any(
+                                (block) => block.id > 0,
+                              ) &&
                               tasks.any(
                                 (target) =>
                                     target.id != task.id && !target.completed,
                               ))
-                            PopupMenuButton<String>(
+                            IconButton(
                               key: Key('move-task-${task.id}'),
-                              tooltip: '移入其他背诵条目',
+                              tooltip: '移动经文范围',
                               icon: const Icon(Icons.drive_file_move_outline),
-                              onSelected: (value) {
-                                final ids = value.split(':');
-                                _moveTaskBlockToEntry(
-                                  blockId: int.parse(ids[0]),
-                                  targetTaskId: int.parse(ids[1]),
-                                );
-                              },
-                              itemBuilder: (context) => [
-                                for (final block in task.effectiveBlocks)
+                              onPressed: () => _showMoveTaskRangeSheet(
+                                source: task,
+                                targets: [
                                   for (final target in tasks)
                                     if (target.id != task.id &&
                                         !target.completed)
-                                      PopupMenuItem(
-                                        value: '${block.id}:${target.id}',
-                                        child: Text(
-                                          '将 ${block.rangeLabel} 移入第 ${target.dayIndex + 1} 天',
-                                        ),
-                                      ),
-                              ],
+                                      target,
+                                ],
+                                bookNameFor: (bookId) =>
+                                    catalog.nameFor(bookId, locale),
+                              ),
                             ),
                           TextButton(
                             key: Key('read-task-${task.id}'),
@@ -938,13 +935,44 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     return true;
   }
 
-  Future<void> _moveTaskBlockToEntry({
-    required int blockId,
+  Future<void> _showMoveTaskRangeSheet({
+    required PlanTask source,
+    required List<PlanTask> targets,
+    required String Function(String bookId) bookNameFor,
+  }) async {
+    final selection = await showModalBottomSheet<_MoveTaskRangeSelection>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _MoveTaskRangeSheet(
+        source: source,
+        targets: targets,
+        bookNameFor: bookNameFor,
+      ),
+    );
+    if (selection == null || !mounted) return;
+    await _moveTaskBlockRangeToEntry(
+      sourceTaskId: source.id,
+      startBlockId: selection.startBlockId,
+      endBlockId: selection.endBlockId,
+      targetTaskId: selection.targetTaskId,
+    );
+  }
+
+  Future<void> _moveTaskBlockRangeToEntry({
+    required int sourceTaskId,
+    required int startBlockId,
+    required int endBlockId,
     required int targetTaskId,
   }) async {
     final repository = await ref.read(planRepositoryProvider.future);
     try {
-      await repository.moveTaskBlock(blockId, targetTaskId: targetTaskId);
+      await repository.moveTaskBlockRange(
+        sourceTaskId: sourceTaskId,
+        startBlockId: startBlockId,
+        endBlockId: endBlockId,
+        targetTaskId: targetTaskId,
+      );
       await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
       if (!mounted) return;
       setState(() => _revision++);
@@ -1080,6 +1108,30 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final existingTasks = await (await ref.read(
       planRepositoryProvider.future,
     )).listTasks(plan.id);
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final editablePassages = <PlanEditablePassage>[];
+    for (final task in existingTasks) {
+      editablePassages.addAll(
+        await collapsePlanTaskBlocksForEditing(
+          task.effectiveBlocks,
+          chapterVerseCount: (bookId, chapter) async {
+            final units = await scripture.getChapter(
+              plan.translationId,
+              bookId,
+              chapter,
+            );
+            return units.isEmpty
+                ? 0
+                : units
+                      .map((unit) => unit.end.verse)
+                      .reduce(
+                        (maximum, verse) => maximum > verse ? maximum : verse,
+                      );
+          },
+        ),
+      );
+    }
+    if (!mounted) return;
     final result = await showDialog<PlanEditorResult>(
       context: context,
       builder: (_) => PlanEditorDialog(
@@ -1096,14 +1148,15 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
           endChapter: plan.endChapter,
           startDate: plan.startDate,
           endDate: plan.endDate,
+          splitStrategy: inferPlanEntrySplitStrategyForEditing(existingTasks),
           passages: [
-            for (final task in existingTasks)
+            for (final passage in editablePassages)
               PlanPassageSelection(
-                bookId: task.bookId,
-                startChapter: task.startChapter,
-                startVerse: task.startVerse,
-                endChapter: task.endChapter,
-                endVerse: task.endVerse,
+                bookId: passage.bookId,
+                startChapter: passage.startChapter,
+                startVerse: passage.startVerse,
+                endChapter: passage.endChapter,
+                endVerse: passage.endVerse,
               ),
           ],
           ebbinghausEnabled: plan.ebbinghausEnabled,
@@ -1430,6 +1483,142 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final now = DateTime.now();
     return DateTime(now.year, now.month, now.day);
   }
+}
+
+final class _MoveTaskRangeSelection {
+  const _MoveTaskRangeSelection({
+    required this.startBlockId,
+    required this.endBlockId,
+    required this.targetTaskId,
+  });
+
+  final int startBlockId;
+  final int endBlockId;
+  final int targetTaskId;
+}
+
+class _MoveTaskRangeSheet extends StatefulWidget {
+  const _MoveTaskRangeSheet({
+    required this.source,
+    required this.targets,
+    required this.bookNameFor,
+  });
+
+  final PlanTask source;
+  final List<PlanTask> targets;
+  final String Function(String bookId) bookNameFor;
+
+  @override
+  State<_MoveTaskRangeSheet> createState() => _MoveTaskRangeSheetState();
+}
+
+class _MoveTaskRangeSheetState extends State<_MoveTaskRangeSheet> {
+  late final List<PlanTaskBlock> _blocks = widget.source.effectiveBlocks
+      .where((block) => block.id > 0)
+      .toList(growable: false);
+  var _startIndex = 0;
+  var _endIndex = 0;
+  int? _targetTaskId;
+  final _endFieldKey = GlobalKey<FormFieldState<int>>();
+
+  String _blockLabel(PlanTaskBlock block) =>
+      '${widget.bookNameFor(block.bookId)} ${block.rangeLabel}';
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('移动经文范围', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text('选择连续的开始、结束经文，并指定要合并到哪一天的背诵条目。'),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              key: const Key('move-range-start'),
+              initialValue: _startIndex,
+              decoration: const InputDecoration(labelText: '开始经文'),
+              items: [
+                for (var index = 0; index < _blocks.length; index++)
+                  DropdownMenuItem(
+                    value: index,
+                    child: Text(_blockLabel(_blocks[index])),
+                  ),
+              ],
+              onChanged: (index) {
+                if (index == null) return;
+                setState(() {
+                  _startIndex = index;
+                  if (_endIndex < index) _endIndex = index;
+                });
+                _endFieldKey.currentState?.didChange(_endIndex);
+              },
+            ),
+            const SizedBox(height: 12),
+            KeyedSubtree(
+              key: const Key('move-range-end'),
+              child: DropdownButtonFormField<int>(
+                key: _endFieldKey,
+                initialValue: _endIndex,
+                decoration: const InputDecoration(labelText: '结束经文'),
+                items: [
+                  for (var index = _startIndex; index < _blocks.length; index++)
+                    DropdownMenuItem(
+                      value: index,
+                      child: Text(_blockLabel(_blocks[index])),
+                    ),
+                ],
+                onChanged: (index) {
+                  if (index != null) setState(() => _endIndex = index);
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              key: const Key('move-range-target-day'),
+              initialValue: _targetTaskId,
+              decoration: const InputDecoration(labelText: '移入的天'),
+              items: [
+                for (final target in widget.targets)
+                  DropdownMenuItem(
+                    value: target.id,
+                    child: Text(
+                      '第 ${target.dayIndex + 1} 天 · ${compactPlanTaskSummary(target.effectiveBlocks, bookNameFor: widget.bookNameFor)}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (id) => setState(() => _targetTaskId = id),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              key: const Key('confirm-move-range'),
+              onPressed: _targetTaskId == null
+                  ? null
+                  : () => Navigator.pop(
+                      context,
+                      _MoveTaskRangeSelection(
+                        startBlockId: _blocks[_startIndex].id,
+                        endBlockId: _blocks[_endIndex].id,
+                        targetTaskId: _targetTaskId!,
+                      ),
+                    ),
+              icon: const Icon(Icons.drive_file_move_outline),
+              label: const Text('移入背诵条目'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 final class _EditorData {

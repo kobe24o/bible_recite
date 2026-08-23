@@ -118,4 +118,27 @@ void main() {
       ['1:1', '1:2', '2:1', '1:1', '1:2'],
     );
   });
+
+  test('keeps one entry per book when reopening a book-split plan', () {
+    PlanTask task(int id, String bookId, int dayIndex) => PlanTask(
+      id: id,
+      planId: 1,
+      dayIndex: dayIndex,
+      dueDate: DateTime(2026, 8, 23 + dayIndex),
+      bookId: bookId,
+      startChapter: 1,
+      startVerse: 1,
+      endChapter: 1,
+      endVerse: 2,
+      completed: false,
+    );
+
+    expect(
+      inferPlanEntrySplitStrategyForEditing([
+        task(1, 'GEN', 0),
+        task(2, 'EXO', 1),
+      ]).kind,
+      PlanEntrySplitKind.book,
+    );
+  });
 }

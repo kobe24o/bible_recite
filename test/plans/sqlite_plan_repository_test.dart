@@ -202,6 +202,74 @@ void main() {
   );
 
   test(
+    'moves an inclusive block range into another recitation entry',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final id = await repository.createPlan(
+        _plan().copyWith(
+          tasks: const [
+            NewPlanTask(
+              dayIndex: 0,
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+              blocks: [
+                NewPlanTaskBlock(
+                  bookId: 'JHN',
+                  startChapter: 1,
+                  startVerse: 1,
+                  endChapter: 1,
+                  endVerse: 1,
+                ),
+                NewPlanTaskBlock(
+                  bookId: 'JHN',
+                  startChapter: 1,
+                  startVerse: 2,
+                  endChapter: 1,
+                  endVerse: 2,
+                ),
+                NewPlanTaskBlock(
+                  bookId: 'JHN',
+                  startChapter: 1,
+                  startVerse: 3,
+                  endChapter: 1,
+                  endVerse: 3,
+                ),
+              ],
+            ),
+            NewPlanTask(
+              dayIndex: 1,
+              startChapter: 1,
+              startVerse: 5,
+              endChapter: 1,
+              endVerse: 5,
+            ),
+          ],
+        ),
+      );
+      final before = await repository.listTasks(id);
+
+      await repository.moveTaskBlockRange(
+        sourceTaskId: before.first.id,
+        startBlockId: before.first.blocks[1].id,
+        endBlockId: before.first.blocks[2].id,
+        targetTaskId: before.last.id,
+      );
+
+      final entries = await repository.listTasks(id);
+      expect(entries, hasLength(2));
+      expect(entries.first.blocks.map((block) => block.rangeLabel), ['1:1']);
+      expect(entries.last.blocks.map((block) => block.rangeLabel), [
+        '1:2',
+        '1:3',
+        '1:5',
+      ]);
+    },
+  );
+
+  test(
     'removes an empty source entry and collapses its now-empty day',
     () async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());

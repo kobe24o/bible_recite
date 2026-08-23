@@ -79,6 +79,29 @@ List<List<PlanTaskBlock>> splitPlanEntryBlocks(
   };
 }
 
+/// Restores the book grouping for plans that were originally created with
+/// "one entry per book".  Other layouts deliberately fall back to one entry:
+/// their task boundaries may have been manually adjusted and must not be
+/// rewritten merely by opening the editor.
+PlanEntrySplitStrategy inferPlanEntrySplitStrategyForEditing(
+  List<PlanTask> tasks,
+) {
+  if (tasks.length < 2) return const PlanEntrySplitStrategy.none();
+
+  final bookIds = <String>[];
+  for (final task in tasks) {
+    final blocks = task.effectiveBlocks;
+    if (blocks.isEmpty ||
+        blocks.any((block) => block.bookId != blocks.first.bookId)) {
+      return const PlanEntrySplitStrategy.none();
+    }
+    bookIds.add(blocks.first.bookId);
+  }
+  return bookIds.toSet().length == bookIds.length
+      ? const PlanEntrySplitStrategy.byBook()
+      : const PlanEntrySplitStrategy.none();
+}
+
 List<List<PlanTaskBlock>> _groupEveryVerses(
   List<PlanTaskBlock> blocks,
   int count,

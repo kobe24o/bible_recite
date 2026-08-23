@@ -8,6 +8,7 @@ import '../../plans/data/sqlite_plan_repository.dart';
 import '../../statistics/domain/achievement.dart';
 import '../../statistics/presentation/achievement_unlock_dialog.dart';
 import '../../plans/domain/plan_models.dart';
+import '../../plans/domain/plan_task_summary.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
@@ -89,8 +90,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         _TaskCard(
                           task: task,
                           plan: data.plans[task.planId],
-                          bookName: bookNames.nameFor(
-                            task.bookId,
+                          bookNameFor: (bookId) => bookNames.nameFor(
+                            bookId,
                             Localizations.localeOf(context),
                           ),
                           completed: false,
@@ -129,8 +130,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         _TaskCard(
                           task: task,
                           plan: data.plans[task.planId],
-                          bookName: bookNames.nameFor(
-                            task.bookId,
+                          bookNameFor: (bookId) => bookNames.nameFor(
+                            bookId,
                             Localizations.localeOf(context),
                           ),
                           completed: true,
@@ -308,7 +309,7 @@ class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.task,
     required this.plan,
-    required this.bookName,
+    required this.bookNameFor,
     required this.completed,
     required this.onChanged,
     required this.repository,
@@ -318,7 +319,7 @@ class _TaskCard extends StatelessWidget {
 
   final PlanTask task;
   final MemorizationPlan? plan;
-  final String bookName;
+  final String Function(String bookId) bookNameFor;
   final bool completed;
   final VoidCallback onChanged;
   final SqlitePlanRepository repository;
@@ -328,10 +329,10 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final blocks = task.effectiveBlocks;
-    final range = blocks.map((block) => block.rangeLabel).join('、');
-    final summary = blocks.length == 1
-        ? '$bookName $range'
-        : '$bookName $range · ${blocks.length} 个子块';
+    final summary = compactPlanTaskSummary(
+      blocks,
+      bookNameFor: bookNameFor,
+    );
     return Card(
       child: ListTile(
         onTap: plan == null ? null : onStart,
