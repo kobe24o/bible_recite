@@ -38,8 +38,15 @@ import '../domain/achievement.dart';
 import '../domain/recitation_result.dart';
 import 'achievement_unlock_dialog.dart';
 
+enum StatisticsScreenView { overview, learningData, achievements }
+
 class StatisticsScreen extends ConsumerStatefulWidget {
-  const StatisticsScreen({super.key});
+  const StatisticsScreen({
+    super.key,
+    this.view = StatisticsScreenView.overview,
+  });
+
+  final StatisticsScreenView view;
 
   @override
   ConsumerState<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -63,10 +70,17 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final repository = ref.watch(planRepositoryProvider);
     final locale = Localizations.localeOf(context);
     final chinese = locale.languageCode == 'zh';
+    final title = switch (widget.view) {
+      StatisticsScreenView.overview =>
+        name.isEmpty ? localizations.statisticsTitle : name,
+      StatisticsScreenView.learningData => chinese ? '学习数据' : 'Learning data',
+      StatisticsScreenView.achievements =>
+        chinese
+            ? (name.isEmpty ? '我的成就' : '$name的成就')
+            : (name.isEmpty ? 'My achievements' : "$name's achievements"),
+    };
     return Scaffold(
-      appBar: AppBar(
-        title: Text(name.isEmpty ? localizations.statisticsTitle : name),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: repository.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => _empty(context, localizations),
@@ -80,106 +94,113 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             final hasStatistics =
                 data.results.isNotEmpty || data.achievements.isNotEmpty;
             final summary = data.summary;
+            final overview = widget.view == StatisticsScreenView.overview;
+            final learningData =
+                widget.view == StatisticsScreenView.learningData;
+            final achievements =
+                widget.view == StatisticsScreenView.achievements;
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Card(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '把神的话，藏在心里',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '一款帮助弟兄姐妹持续背诵、默想、应用神话语的圣经背诵 App',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          RichText(
-                            text: TextSpan(
-                              style: Theme.of(context).textTheme.bodyMedium
+                  if (overview) ...[
+                    Card(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '把神的话，藏在心里',
+                              style: Theme.of(context).textTheme.titleLarge
                                   ?.copyWith(
                                     color: Theme.of(
                                       context,
                                     ).colorScheme.onPrimaryContainer,
-                                    fontStyle: FontStyle.italic,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                              children: [
-                                const TextSpan(text: '“'),
-                                TextSpan(
-                                  text: name.isEmpty ? '我' : name,
-                                  style: name.isEmpty
-                                      ? null
-                                      : const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                ),
-                                const TextSpan(text: '将你的话藏在心里，免得'),
-                                TextSpan(
-                                  text: name.isEmpty ? '我' : name,
-                                  style: name.isEmpty
-                                      ? null
-                                      : const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                ),
-                                const TextSpan(text: '得罪你。”\n（诗篇119:11）'),
-                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            Text(
+                              '一款帮助弟兄姐妹持续背诵、默想、应用神话语的圣经背诵 App',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            RichText(
+                              text: TextSpan(
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimaryContainer,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                children: [
+                                  const TextSpan(text: '“'),
+                                  TextSpan(
+                                    text: name.isEmpty ? '我' : name,
+                                    style: name.isEmpty
+                                        ? null
+                                        : const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                  ),
+                                  const TextSpan(text: '将你的话藏在心里，免得'),
+                                  TextSpan(
+                                    text: name.isEmpty ? '我' : name,
+                                    style: name.isEmpty
+                                        ? null
+                                        : const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                  ),
+                                  const TextSpan(text: '得罪你。”\n（诗篇119:11）'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.person_outline_rounded),
-                      title: const Text('我的名字'),
-                      subtitle: Text(name.isEmpty ? '未填写' : name),
-                      trailing: const Icon(Icons.edit_outlined),
-                      onTap: () => _editProfileName(name),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    color: Theme.of(context).colorScheme.secondaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.auto_stories_rounded),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              chinese
-                                  ? '我们一起朗读背诵${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}了'
-                                  : 'Reading together for ${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}',
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.person_outline_rounded),
+                        title: const Text('我的名字'),
+                        subtitle: Text(name.isEmpty ? '未填写' : name),
+                        trailing: const Icon(Icons.edit_outlined),
+                        onTap: () => _editProfileName(name),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (hasStatistics) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_stories_rounded),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                chinese
+                                    ? '我们一起朗读背诵${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}了'
+                                    : 'Reading together for ${_formatDuration(DateTime.now().difference(data.firstOpenedAt), includeSeconds: false)}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (learningData && hasStatistics) ...[
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -224,157 +245,193 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _SummaryCard(
-                        icon: Icons.quiz_outlined,
-                        text: chinese
-                            ? '答题 ${data.quiz.totalAnswered} 道'
-                            : '${data.quiz.totalAnswered} quizzes',
-                      ),
-                      _SummaryCard(
-                        icon: Icons.check_circle_outline_rounded,
-                        text: chinese
-                            ? '答对 ${data.quiz.totalCorrect} 道'
-                            : '${data.quiz.totalCorrect} correct',
-                      ),
-                      _SummaryCard(
-                        icon: Icons.track_changes_rounded,
-                        text: chinese
-                            ? '答题正确率 ${(data.quiz.accuracy * 100).round()}%'
-                            : 'Quiz ${(data.quiz.accuracy * 100).round()}%',
-                      ),
-                      _SummaryCard(
-                        icon: Icons.local_fire_department_outlined,
-                        text: chinese
-                            ? '最大连续答对 ${data.quiz.maxCorrectStreak} 道'
-                            : 'Best ${data.quiz.maxCorrectStreak} correct',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _EbbinghausSettingsCard(
-                    repository: repository,
-                    initial: data.settings,
-                  ),
-                  const SizedBox(height: 12),
-                  QuizModelSettingsCard(repository: repository),
-                  const SizedBox(height: 12),
-                  _QuizBankCard(
-                    key: ValueKey(quizBankRevision),
-                    repository: repository,
-                  ),
-                  const SizedBox(height: 12),
-                  _DailyReminderCard(repository: repository),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: SwitchListTile(
-                      key: const Key('show-recitation-scripture-toggle'),
-                      secondary: const Icon(Icons.visibility_outlined),
-                      title: Text(
-                        chinese
-                            ? '开始背诵后显示原文'
-                            : 'Show scripture after recording starts',
-                      ),
-                      subtitle: Text(
-                        chinese
-                            ? '进入页面时始终显示；开始录音后按此设置，仍可随时切换'
-                            : 'Always shown on entry; applied when recording starts and can still be toggled',
-                      ),
-                      value: data.showRecitationScripture,
-                      onChanged: (value) async {
-                        await repository.setSetting(
-                          'show_recitation_scripture',
-                          value ? 'true' : 'false',
-                        );
-                        if (mounted) setState(() {});
-                      },
+                  if (learningData) ...[
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _SummaryCard(
+                          icon: Icons.quiz_outlined,
+                          text: chinese
+                              ? '答题 ${data.quiz.totalAnswered} 道'
+                              : '${data.quiz.totalAnswered} quizzes',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.check_circle_outline_rounded,
+                          text: chinese
+                              ? '答对 ${data.quiz.totalCorrect} 道'
+                              : '${data.quiz.totalCorrect} correct',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.track_changes_rounded,
+                          text: chinese
+                              ? '答题正确率 ${(data.quiz.accuracy * 100).round()}%'
+                              : 'Quiz ${(data.quiz.accuracy * 100).round()}%',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.local_fire_department_outlined,
+                          text: chinese
+                              ? '最大连续答对 ${data.quiz.maxCorrectStreak} 道'
+                              : 'Best ${data.quiz.maxCorrectStreak} correct',
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: SwitchListTile(
-                      key: const Key('ignore-final-nasal-toggle'),
-                      secondary: const Icon(Icons.record_voice_over_outlined),
-                      title: Text(chinese ? '忽略后鼻音' : 'Ignore final nasal'),
-                      subtitle: Text(
-                        chinese
-                            ? '拼音纠正时将 yin / ying 等视为相同'
-                            : 'Treat yin and ying as equal in phonetic scoring',
+                    const SizedBox(height: 12),
+                  ],
+                  if (overview) ...[
+                    _EbbinghausSettingsCard(
+                      repository: repository,
+                      initial: data.settings,
+                    ),
+                    const SizedBox(height: 12),
+                    QuizModelSettingsCard(repository: repository),
+                    const SizedBox(height: 12),
+                    _QuizBankCard(
+                      key: ValueKey(quizBankRevision),
+                      repository: repository,
+                    ),
+                    const SizedBox(height: 12),
+                    _DailyReminderCard(repository: repository),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: SwitchListTile(
+                        key: const Key('show-recitation-scripture-toggle'),
+                        secondary: const Icon(Icons.visibility_outlined),
+                        title: Text(
+                          chinese
+                              ? '开始背诵后显示原文'
+                              : 'Show scripture after recording starts',
+                        ),
+                        subtitle: Text(
+                          chinese
+                              ? '进入页面时始终显示；开始录音后按此设置，仍可随时切换'
+                              : 'Always shown on entry; applied when recording starts and can still be toggled',
+                        ),
+                        value: data.showRecitationScripture,
+                        onChanged: (value) async {
+                          await repository.setSetting(
+                            'show_recitation_scripture',
+                            value ? 'true' : 'false',
+                          );
+                          if (mounted) setState(() {});
+                        },
                       ),
-                      value: data.ignoreFinalNasal,
-                      onChanged: (value) async {
-                        await repository.setSetting(
-                          'ignore_final_nasal',
-                          value ? 'true' : 'false',
-                        );
-                        if (mounted) setState(() {});
-                      },
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      key: const Key('recitation-timeline-open'),
-                      leading: const Icon(Icons.timeline_rounded),
-                      title: Text(chinese ? '学习轨迹' : 'Learning timeline'),
-                      subtitle: Text(
-                        chinese ? '按周、月、季、年回顾背诵' : 'Review practice over time',
+                    const SizedBox(height: 12),
+                    Card(
+                      child: SwitchListTile(
+                        key: const Key('ignore-final-nasal-toggle'),
+                        secondary: const Icon(Icons.record_voice_over_outlined),
+                        title: Text(chinese ? '忽略后鼻音' : 'Ignore final nasal'),
+                        subtitle: Text(
+                          chinese
+                              ? '拼音纠正时将 yin / ying 等视为相同'
+                              : 'Treat yin and ying as equal in phonetic scoring',
+                        ),
+                        value: data.ignoreFinalNasal,
+                        onChanged: (value) async {
+                          await repository.setSetting(
+                            'ignore_final_nasal',
+                            value ? 'true' : 'false',
+                          );
+                          if (mounted) setState(() {});
+                        },
                       ),
-                      onTap: () => context.push('/statistics/timeline'),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      key: const Key('recitation-map-open'),
-                      leading: const Icon(Icons.map_outlined),
-                      title: Text(chinese ? '背诵地图' : 'Recitation map'),
-                      subtitle: Text(
-                        chinese
-                            ? '按卷、章、节查看进度和质量'
-                            : 'Explore progress by book, chapter and verse',
+                    const SizedBox(height: 12),
+                  ],
+                  if (overview) ...[
+                    Card(
+                      child: ListTile(
+                        key: const Key('learning-data-open'),
+                        leading: const Icon(Icons.insights_outlined),
+                        title: Text(chinese ? '学习数据' : 'Learning data'),
+                        subtitle: Text(
+                          chinese
+                              ? '背诵、答题与学习轨迹'
+                              : 'Practice, quizzes, and learning history',
+                        ),
+                        onTap: () => context.push('/statistics/data'),
                       ),
-                      onTap: () => context.push('/statistics/map'),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      key: const Key('share-app-button'),
-                      leading: const Icon(Icons.share_outlined),
-                      title: Text(chinese ? '分享应用' : 'Share app'),
-                      subtitle: Text(
-                        chinese ? '生成下载二维码' : 'Generate a download QR code',
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('achievement-open'),
+                        leading: const Icon(Icons.emoji_events_outlined),
+                        title: Text(chinese ? '成就' : 'Achievements'),
+                        subtitle: Text(
+                          chinese ? '查看已获得的勋章' : 'View your earned badges',
+                        ),
+                        onTap: () => context.push('/statistics/achievements'),
                       ),
-                      onTap: _showSharePlatforms,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      key: const Key('about-open'),
-                      leading: const Icon(Icons.info_outline_rounded),
-                      title: Text(localizations.aboutTitle),
-                      onTap: () => context.go('/about'),
+                    const SizedBox(height: 12),
+                  ],
+                  if (learningData) ...[
+                    Card(
+                      child: ListTile(
+                        key: const Key('recitation-timeline-open'),
+                        leading: const Icon(Icons.timeline_rounded),
+                        title: Text(chinese ? '学习轨迹' : 'Learning timeline'),
+                        subtitle: Text(
+                          chinese
+                              ? '按周、月、季、年回顾背诵'
+                              : 'Review practice over time',
+                        ),
+                        onTap: () => context.push('/statistics/timeline'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  if (!hasStatistics)
+                    const SizedBox(height: 12),
+                  ],
+                  if (learningData) ...[
+                    Card(
+                      child: ListTile(
+                        key: const Key('recitation-map-open'),
+                        leading: const Icon(Icons.map_outlined),
+                        title: Text(chinese ? '背诵地图' : 'Recitation map'),
+                        subtitle: Text(
+                          chinese
+                              ? '按卷、章、节查看进度和质量'
+                              : 'Explore progress by book, chapter and verse',
+                        ),
+                        onTap: () => context.push('/statistics/map'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (overview) ...[
+                    Card(
+                      child: ListTile(
+                        key: const Key('share-app-button'),
+                        leading: const Icon(Icons.share_outlined),
+                        title: Text(chinese ? '分享应用' : 'Share app'),
+                        subtitle: Text(
+                          chinese ? '生成下载二维码' : 'Generate a download QR code',
+                        ),
+                        onTap: _showSharePlatforms,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('about-open'),
+                        leading: const Icon(Icons.info_outline_rounded),
+                        title: Text(localizations.aboutTitle),
+                        onTap: () => context.go('/about'),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  if (learningData && !hasStatistics)
                     _StatisticsEmptySection(
                       message: localizations.statisticsEmpty,
                       actionLabel: localizations.browseBible,
                       onAction: () => context.go('/bible'),
                     ),
-                  if (hasStatistics) ...[
+                  if (achievements) ...[
                     Text(
-                      chinese
-                          ? (name.isEmpty ? '我的成就' : '$name的成就')
-                          : (name.isEmpty
-                                ? 'My achievements'
-                                : "$name's achievements"),
+                      chinese ? '成就勋章' : 'Achievement badges',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 10),

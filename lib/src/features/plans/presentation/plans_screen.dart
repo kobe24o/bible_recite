@@ -823,6 +823,30 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       trailing: Wrap(
                         spacing: 2,
                         children: [
+                          if (!task.completed &&
+                              !plan.contentLocked &&
+                              plan.sourceKind == PlanSourceKind.local &&
+                              _tasksByDay(
+                                tasks,
+                              ).keys.any((day) => day != task.dayIndex))
+                            PopupMenuButton<int>(
+                              key: Key('move-task-${task.id}'),
+                              tooltip: '挪到其他天',
+                              icon: const Icon(Icons.drive_file_move_outline),
+                              onSelected: (targetDayIndex) => _moveTaskToDay(
+                                plan: plan,
+                                task: task,
+                                targetDayIndex: targetDayIndex,
+                              ),
+                              itemBuilder: (context) => [
+                                for (final day in _tasksByDay(tasks).keys)
+                                  if (day != task.dayIndex)
+                                    PopupMenuItem(
+                                      value: day,
+                                      child: Text('挪到第 ${day + 1} 天'),
+                                    ),
+                              ],
+                            ),
                           TextButton(
                             key: Key('read-task-${task.id}'),
                             onPressed: () {
@@ -898,6 +922,29 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final repository = await ref.read(planRepositoryProvider.future);
     await repository.deleteTask(task.id);
     return true;
+  }
+
+  Future<void> _moveTaskToDay({
+    required MemorizationPlan plan,
+    required PlanTask task,
+    required int targetDayIndex,
+  }) async {
+    try {
+      final repository = await ref.read(planRepositoryProvider.future);
+      await repository.moveTask(task.id, targetDayIndex: targetDayIndex);
+      await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      setState(() => _revision++);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已挪到第 ${targetDayIndex + 1} 天')));
+    } on StateError catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    }
   }
 
   Future<void> _configureTemplate(CloudPlanTemplate template) async {

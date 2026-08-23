@@ -58,11 +58,6 @@ void main() {
 
     expect(find.widgetWithText(AppBar, '我的'), findsOneWidget);
     expect(find.text('艾宾浩斯背诵法'), findsOneWidget);
-    expect(find.text('圣经经典篇章勋章'), findsOneWidget);
-    expect(
-      find.byKey(const Key('achievement-preset_plan_classic-passages-locked')),
-      findsOneWidget,
-    );
     expect(find.text('通过阈值 80%'), findsOneWidget);
     expect(find.text('复习间隔：1、2、4、7、15、30 天'), findsOneWidget);
 
@@ -119,17 +114,22 @@ void main() {
         completedAt: DateTime.now(),
       ),
     );
-    await _pumpScreen(tester, repository);
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.learningData,
+    );
 
     expect(find.text('背诵 1 次'), findsOneWidget);
     expect(find.text('背诵正确率 80%'), findsOneWidget);
     expect(find.text('目前连续背诵 1 天 · 最高连续背诵 1 天'), findsOneWidget);
     expect(find.text('目前连续背诵 2 节 · 最高连续背诵 2 节'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('背诵 1 次')).dy,
-      lessThan(tester.getTopLeft(find.text('艾宾浩斯背诵法')).dy),
-    );
     expect(find.text('最近背诵'), findsNothing);
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.achievements,
+    );
     expect(find.text('我的成就'), findsOneWidget);
     expect(find.text('初次开口'), findsOneWidget);
     expect(
@@ -211,7 +211,11 @@ void main() {
       answeredAt: DateTime.now(),
     );
 
-    await _pumpScreen(tester, repository);
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.learningData,
+    );
 
     expect(find.text('答题 1 道'), findsOneWidget);
     expect(find.text('答对 1 道'), findsOneWidget);
@@ -243,10 +247,63 @@ void main() {
       ),
     );
 
-    await _pumpScreen(tester, repository);
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.achievements,
+    );
 
     expect(find.text('路得的成就'), findsOneWidget);
     expect(find.text('我的成就'), findsNothing);
+  });
+
+  testWidgets('keeps learning data and achievements off the My overview', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.saveRecitationResult(
+      NewRecitationResult(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        mode: 'continuous',
+        durationSeconds: 30,
+        correctCount: 10,
+        incorrectCount: 0,
+        omittedCount: 0,
+        reorderedCount: 0,
+        accuracy: 1,
+        completedAt: DateTime.now(),
+      ),
+    );
+
+    await _pumpScreen(tester, repository);
+    expect(find.byKey(const Key('learning-data-open')), findsOneWidget);
+    expect(find.byKey(const Key('achievement-open')), findsOneWidget);
+    expect(find.text('背诵 1 次'), findsNothing);
+    expect(find.text('我的成就'), findsNothing);
+
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.learningData,
+    );
+    expect(find.widgetWithText(AppBar, '学习数据'), findsOneWidget);
+    expect(find.text('背诵 1 次'), findsOneWidget);
+
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.achievements,
+    );
+    expect(find.widgetWithText(AppBar, '我的成就'), findsOneWidget);
+    expect(
+      find.byKey(const Key('achievement-first_recitation-unlocked')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('unlocks a title badge after completing a preset plan', (
@@ -312,6 +369,7 @@ void main() {
       tester,
       repository,
       scripture: FakeRepositoryForPassage(),
+      view: StatisticsScreenView.achievements,
     );
 
     expect(find.text('恩典之路勋章'), findsWidgets);
@@ -372,6 +430,7 @@ Future<void> _pumpScreen(
   WidgetTester tester,
   SqlitePlanRepository repository, {
   FakeRepositoryForPassage? scripture,
+  StatisticsScreenView view = StatisticsScreenView.overview,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -383,7 +442,7 @@ Future<void> _pumpScreen(
         if (scripture != null)
           scriptureRepositoryProvider.overrideWith((ref) async => scripture),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         locale: Locale('zh'),
         localizationsDelegates: [
           AppLocalizations.delegate,
@@ -392,7 +451,7 @@ Future<void> _pumpScreen(
           GlobalWidgetsLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: StatisticsScreen(),
+        home: StatisticsScreen(view: view),
       ),
     ),
   );

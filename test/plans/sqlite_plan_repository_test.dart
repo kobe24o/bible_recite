@@ -120,6 +120,142 @@ void main() {
     ]);
   });
 
+  test(
+    'moving the only unfinished task from a day collapses the schedule',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final id = await repository.createPlan(
+        NewMemorizationPlan(
+          title: '五天计划',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          endChapter: 3,
+          startDate: DateTime(2026, 8, 1),
+          endDate: DateTime(2026, 8, 5),
+          tasks: const [
+            NewPlanTask(
+              dayIndex: 0,
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 16,
+            ),
+            NewPlanTask(
+              dayIndex: 1,
+              startChapter: 3,
+              startVerse: 17,
+              endChapter: 3,
+              endVerse: 17,
+            ),
+            NewPlanTask(
+              dayIndex: 2,
+              startChapter: 3,
+              startVerse: 18,
+              endChapter: 3,
+              endVerse: 18,
+            ),
+          ],
+        ),
+      );
+      final taskToMove = (await repository.listTasks(id))[1];
+
+      await repository.moveTask(taskToMove.id, targetDayIndex: 0);
+
+      final plan = (await repository.listPlans()).single;
+      final tasks = await repository.listTasks(id);
+      expect(plan.days, 4);
+      expect(plan.endDate, DateTime(2026, 8, 4));
+      expect(tasks.map((task) => task.dayIndex), [0, 0, 1]);
+      expect(tasks.map((task) => task.dueDate), [
+        DateTime(2026, 8, 1),
+        DateTime(2026, 8, 1),
+        DateTime(2026, 8, 2),
+      ]);
+    },
+  );
+
+  test('moving one of several passages keeps the schedule duration', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(
+      NewMemorizationPlan(
+        title: '同日多段计划',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        endChapter: 3,
+        startDate: DateTime(2026, 8, 1),
+        endDate: DateTime(2026, 8, 3),
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            startChapter: 3,
+            startVerse: 17,
+            endChapter: 3,
+            endVerse: 17,
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            startChapter: 3,
+            startVerse: 18,
+            endChapter: 3,
+            endVerse: 18,
+          ),
+        ],
+      ),
+    );
+    final taskToMove = (await repository.listTasks(id))[1];
+
+    await repository.moveTask(taskToMove.id, targetDayIndex: 0);
+
+    final plan = (await repository.listPlans()).single;
+    final tasks = await repository.listTasks(id);
+    expect(plan.days, 3);
+    expect(plan.endDate, DateTime(2026, 8, 3));
+    expect(tasks.map((task) => task.dayIndex), [0, 0, 1]);
+  });
+
+  test('does not move completed or locked-plan passages', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(
+      _plan().copyWith(
+        contentLocked: true,
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            startChapter: 1,
+            startVerse: 2,
+            endChapter: 1,
+            endVerse: 2,
+          ),
+        ],
+      ),
+    );
+    final lockedTask = (await repository.listTasks(id)).first;
+
+    expect(
+      () => repository.moveTask(lockedTask.id, targetDayIndex: 1),
+      throwsStateError,
+    );
+  });
+
   test('migrates legacy plans to allow multiple passages on one day', () async {
     final database = sqlite3.openInMemory();
     database.execute('''

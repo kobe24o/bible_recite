@@ -68,6 +68,18 @@ final appRouter = GoRouter(
           const ResponsiveShell(child: StatisticsScreen()),
     ),
     GoRoute(
+      path: '/statistics/data',
+      builder: (context, state) => const ResponsiveShell(
+        child: StatisticsScreen(view: StatisticsScreenView.learningData),
+      ),
+    ),
+    GoRoute(
+      path: '/statistics/achievements',
+      builder: (context, state) => const ResponsiveShell(
+        child: StatisticsScreen(view: StatisticsScreenView.achievements),
+      ),
+    ),
+    GoRoute(
       path: '/statistics/map',
       builder: (context, state) => ResponsiveShell(
         child: RecitationMapScreen(

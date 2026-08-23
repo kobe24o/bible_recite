@@ -1874,6 +1874,93 @@ final class SqlitePlanRepository {
     await evaluateAndUnlockAchievements(source: 'plan');
   }
 
+  /// Moves one unfinished passage onto another scheduled day.  When it was
+  /// the last passage on its former day, later days close the gap.
+  Future<void> moveTask(int taskId, {required int targetDayIndex}) {
+    final rows = _database.select(
+      '''SELECT t.plan_id, t.day_index, t.due_date, t.completed, p.source_kind,
+          p.content_locked, p.start_date, COALESCE(s.days, p.days) AS days
+        FROM plan_task t
+        JOIN memorization_plan p ON p.id = t.plan_id
+        LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
+        WHERE t.id = ?''',
+      [taskId],
+    );
+    if (rows.isEmpty) throw StateError('背诵条目不存在');
+    final task = rows.single;
+    final planId = task['plan_id'] as int;
+    final sourceDayIndex = task['day_index'] as int;
+    final sourceDueDate = DateTime.parse(task['due_date'] as String);
+    if (task['completed'] == 1) throw StateError('已完成的经文不能调整');
+    if (task['content_locked'] == 1 || task['source_kind'] != 'local') {
+      throw StateError('只有自定义计划可以调整经文');
+    }
+    if (targetDayIndex == sourceDayIndex) {
+      throw StateError('请选择其他背诵日');
+    }
+    final targets = _database.select(
+      'SELECT 1 FROM plan_task WHERE plan_id = ? AND day_index = ? LIMIT 1',
+      [planId, targetDayIndex],
+    );
+    if (targets.isEmpty) throw StateError('目标背诵日不存在');
+
+    final sourceTaskCount =
+        _database.select(
+              'SELECT COUNT(*) AS count FROM plan_task WHERE plan_id = ? AND day_index = ?',
+              [planId, sourceDayIndex],
+            ).single['count']
+            as int;
+    if (sourceTaskCount == 1) {
+      final completedLater = _database.select(
+        '''SELECT 1 FROM plan_task
+          WHERE plan_id = ? AND completed = 1 AND day_index > ? LIMIT 1''',
+        [planId, sourceDayIndex],
+      );
+      if (completedLater.isNotEmpty) {
+        throw StateError('后续已有完成记录，不能缩减这个背诵日');
+      }
+    }
+
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute(
+        'UPDATE plan_task SET day_index = ?, due_date = ? WHERE id = ?',
+        [
+          targetDayIndex,
+          _date(
+            sourceDueDate.add(Duration(days: targetDayIndex - sourceDayIndex)),
+          ),
+          taskId,
+        ],
+      );
+      if (sourceTaskCount == 1) {
+        _database.execute(
+          '''UPDATE plan_task SET day_index = day_index - 1,
+              due_date = date(due_date, '-1 day')
+            WHERE plan_id = ? AND day_index > ?''',
+          [planId, sourceDayIndex],
+        );
+        final days = task['days'] as int;
+        final startDate = DateTime.parse(task['start_date'] as String);
+        final shortenedDays = days - 1;
+        _database.execute(
+          'UPDATE memorization_plan SET days = ?, end_date = ? WHERE id = ?',
+          [
+            _storedDays(shortenedDays),
+            _date(_storedEndDate(startDate, shortenedDays)),
+            planId,
+          ],
+        );
+        _saveScheduleSpan(planId, startDate, shortenedDays);
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+    return Future<void>.value();
+  }
+
   Future<int> saveRecitationResult(NewRecitationResult result) async {
     _database.execute(
       '''INSERT INTO recitation_result
