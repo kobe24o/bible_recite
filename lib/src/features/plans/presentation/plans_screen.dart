@@ -12,6 +12,7 @@ import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../../scripture/domain/book_name_catalog.dart';
+import '../../scripture/presentation/passage_screen.dart';
 import '../../recitation/application/plan_recitation_builder.dart';
 import '../../recitation/presentation/recitation_practice_screen.dart';
 import '../../quiz/domain/quiz_scope.dart';
@@ -27,6 +28,7 @@ import '../domain/plan_entry_splitter.dart';
 import '../domain/plan_exchange.dart';
 import '../domain/plan_models.dart';
 import '../domain/plan_task_summary.dart';
+import '../domain/plan_task_chapter_groups.dart';
 import '../domain/plan_task_verse_slices.dart';
 import 'plan_editor_dialog.dart';
 
@@ -821,11 +823,17 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       ),
                       leading: const Icon(Icons.menu_book_outlined),
                       title: Text(
-                        compactPlanTaskSummary(
-                          task.effectiveBlocks,
-                          bookNameFor: (bookId) =>
-                              catalog.nameFor(bookId, locale),
-                        ),
+                        task.effectiveBlocks.length > 1
+                            ? compactPlanTaskChapterSummary(
+                                task.effectiveBlocks,
+                                bookNameFor: (bookId) =>
+                                    catalog.nameFor(bookId, locale),
+                              )
+                            : compactPlanTaskSummary(
+                                task.effectiveBlocks,
+                                bookNameFor: (bookId) =>
+                                    catalog.nameFor(bookId, locale),
+                              ),
                       ),
                       subtitle: task.effectiveBlocks.length > 1
                           ? Text('${task.effectiveBlocks.length} 个子块，背诵时连续完成')
@@ -862,9 +870,20 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                             ),
                           TextButton(
                             key: Key('read-task-${task.id}'),
-                            onPressed: () {
-                              context.push(
-                                '/bible/${plan.translationId}/${task.bookId}/${task.startChapter}?verse=${task.startVerse}&endChapter=${task.endChapter}&endVerse=${task.endVerse}',
+                            onPressed: () async {
+                              final groups = groupPlanTaskBlocksByChapter(
+                                task.effectiveBlocks,
+                              );
+                              if (groups.isEmpty) return;
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => PassageScreen(
+                                    translationId: plan.translationId,
+                                    bookId: groups.first.bookId,
+                                    chapter: groups.first.chapter,
+                                    planTaskGroups: groups,
+                                  ),
+                                ),
                               );
                             },
                             child: const Text('阅读'),

@@ -445,18 +445,8 @@ void main() {
       ),
     );
     final task = (await repository.listTasks(planId)).single;
-    Uri? openedReadUri;
     final router = GoRouter(
-      routes: [
-        GoRoute(path: '/', builder: (_, _) => const PlansScreen()),
-        GoRoute(
-          path: '/bible/:translation/:book/:chapter',
-          builder: (_, state) {
-            openedReadUri = state.uri;
-            return const Scaffold(body: Text('经文阅读页'));
-          },
-        ),
-      ],
+      routes: [GoRoute(path: '/', builder: (_, _) => const PlansScreen())],
     );
     addTearDown(router.dispose);
     await tester.pumpWidget(
@@ -485,11 +475,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(Key('read-task-${task.id}')));
     await tester.pumpAndSettle();
-    expect(find.text('经文阅读页'), findsOneWidget);
-    final query = openedReadUri!.queryParameters;
-    expect(query['verse'], '16');
-    expect(query['endChapter'], '4');
-    expect(query['endVerse'], '2');
+    expect(find.text('约翰福音 3章'), findsOneWidget);
+    expect(find.byKey(const Key('next-plan-passage-button')), findsOneWidget);
 
     router.pop();
     await tester.pumpAndSettle();

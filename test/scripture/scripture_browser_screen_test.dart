@@ -93,10 +93,15 @@ void main() {
 }
 
 final class FakeRepositoryForPassage implements ScriptureRepository {
-  FakeRepositoryForPassage({this.chapterUnits, this.passageUnits});
+  FakeRepositoryForPassage({
+    this.chapterUnits,
+    this.passageUnits,
+    this.chapterUnitsByReference = const {},
+  });
 
   final List<VerseUnit>? chapterUnits;
   final List<VerseUnit>? passageUnits;
+  final Map<String, List<VerseUnit>> chapterUnitsByReference;
 
   final translation = TranslationInfo(
     id: 'eng-web',
@@ -129,6 +134,7 @@ final class FakeRepositoryForPassage implements ScriptureRepository {
     String osisBookId,
     int chapter,
   ) async =>
+      chapterUnitsByReference['$osisBookId:$chapter'] ??
       chapterUnits ??
       [
         VerseUnit(

@@ -1,4 +1,6 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_task_chapter_groups.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/presentation/passage_screen.dart';
@@ -216,6 +218,105 @@ void main() {
   });
 
   testWidgets(
+    'shows a whole chapter with task blocks highlighted and moves to the next task chapter',
+    (tester) async {
+      final chapterThree = [
+        for (var verse = 1; verse <= 4; verse++)
+          _planReadingUnit(bookId: 'JHN', chapter: 3, verse: verse),
+      ];
+      final genesisOne = [
+        _planReadingUnit(bookId: 'GEN', chapter: 1, verse: 1),
+      ];
+      final groups = groupPlanTaskBlocksByChapter(const [
+        PlanTaskBlock(
+          id: 1,
+          taskId: 1,
+          sortOrder: 0,
+          bookId: 'JHN',
+          startChapter: 3,
+          startVerse: 1,
+          endChapter: 3,
+          endVerse: 1,
+        ),
+        PlanTaskBlock(
+          id: 2,
+          taskId: 1,
+          sortOrder: 1,
+          bookId: 'JHN',
+          startChapter: 3,
+          startVerse: 3,
+          endChapter: 3,
+          endVerse: 3,
+        ),
+        PlanTaskBlock(
+          id: 3,
+          taskId: 1,
+          sortOrder: 2,
+          bookId: 'GEN',
+          startChapter: 1,
+          startVerse: 1,
+          endChapter: 1,
+          endVerse: 1,
+        ),
+      ]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(
+                chapterUnitsByReference: {
+                  'JHN:3': chapterThree,
+                  'GEN:1': genesisOne,
+                },
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+              planTaskGroups: groups,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reading JHN 3:1'), findsOneWidget);
+      expect(find.text('Reading JHN 3:2'), findsOneWidget);
+      expect(find.text('Reading JHN 3:3'), findsOneWidget);
+      expect(find.text('Reading JHN 3:4'), findsOneWidget);
+      final selectedColor = Theme.of(
+        tester.element(find.text('Reading JHN 3:1')),
+      ).colorScheme.primaryContainer;
+      for (final verse in [1, 3]) {
+        final text = find.text('Reading JHN 3:$verse');
+        final material = tester.widget<Material>(
+          find.ancestor(of: text, matching: find.byType(Material)).first,
+        );
+        expect(material.color, selectedColor);
+      }
+      await tester.tap(find.byKey(const Key('next-plan-passage-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('创世记 1章'), findsOneWidget);
+      expect(find.text('Reading GEN 1:1'), findsOneWidget);
+      expect(
+        find.byKey(const Key('previous-plan-passage-button')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'opens the date editor when creating a plan from selected verses',
     (tester) async {
       await tester.pumpWidget(
@@ -420,3 +521,25 @@ VerseUnit crossChapterUnit({required int chapter, required int verse}) =>
       text: 'Cross chapter $chapter:$verse',
       status: SourceTextStatus.present,
     );
+
+VerseUnit _planReadingUnit({
+  required String bookId,
+  required int chapter,
+  required int verse,
+}) => VerseUnit(
+  translationId: 'eng-web',
+  start: (
+    canonId: CanonId.protestant66,
+    osisBookId: bookId,
+    chapter: chapter,
+    verse: verse,
+  ),
+  end: (
+    canonId: CanonId.protestant66,
+    osisBookId: bookId,
+    chapter: chapter,
+    verse: verse,
+  ),
+  text: 'Reading $bookId $chapter:$verse',
+  status: SourceTextStatus.present,
+);

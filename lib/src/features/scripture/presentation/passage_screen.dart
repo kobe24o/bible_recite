@@ -6,6 +6,7 @@ import '../../../../l10n/generated/app_localizations.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/domain/plan_draft_builder.dart';
 import '../../plans/domain/plan_models.dart';
+import '../../plans/domain/plan_task_chapter_groups.dart';
 import '../../plans/presentation/plan_editor_dialog.dart';
 import '../../quiz/application/quiz_preparation_controller.dart';
 import '../../quiz/application/quiz_providers.dart';
@@ -27,6 +28,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     this.initialEndChapter,
     this.searchQuery,
     this.reviewId,
+    this.planTaskGroups = const [],
     super.key,
   });
 
@@ -38,6 +40,7 @@ class PassageScreen extends ConsumerStatefulWidget {
   final int? initialEndChapter;
   final String? searchQuery;
   final int? reviewId;
+  final List<PlanTaskChapterGroup> planTaskGroups;
 
   @override
   ConsumerState<PassageScreen> createState() => _PassageScreenState();
@@ -48,10 +51,25 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
   final Set<int> _selectedVerseIndexes = <int>{};
   bool _selectingVerses = false;
   QuizPreparationController? _quizPreparation;
+  late int _planTaskGroupIndex;
+
+  bool get _isPlanTaskReading => widget.planTaskGroups.isNotEmpty;
+
+  PlanTaskChapterGroup? get _activePlanTaskGroup =>
+      _isPlanTaskReading ? widget.planTaskGroups[_planTaskGroupIndex] : null;
+
+  String get _activeBookId => _activePlanTaskGroup?.bookId ?? widget.bookId;
+
+  int get _activeChapter => _activePlanTaskGroup?.chapter ?? widget.chapter;
 
   @override
   void initState() {
     super.initState();
+    _planTaskGroupIndex = widget.planTaskGroups.indexWhere(
+      (group) =>
+          group.bookId == widget.bookId && group.chapter == widget.chapter,
+    );
+    if (_planTaskGroupIndex < 0) _planTaskGroupIndex = 0;
   }
 
   @override
@@ -62,7 +80,13 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
         oldWidget.translationId != widget.translationId ||
         oldWidget.initialVerse != widget.initialVerse ||
         oldWidget.initialEndVerse != widget.initialEndVerse ||
-        oldWidget.initialEndChapter != widget.initialEndChapter) {
+        oldWidget.initialEndChapter != widget.initialEndChapter ||
+        oldWidget.planTaskGroups != widget.planTaskGroups) {
+      _planTaskGroupIndex = widget.planTaskGroups.indexWhere(
+        (group) =>
+            group.bookId == widget.bookId && group.chapter == widget.chapter,
+      );
+      if (_planTaskGroupIndex < 0) _planTaskGroupIndex = 0;
       _parallelTranslationId = null;
       _selectingVerses = false;
       _selectedVerseIndexes.clear();
@@ -84,6 +108,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
   }
 
   void _armQuiz(List<VerseUnit> units) {
+    if (_isPlanTaskReading) return;
     if (_quizPreparation != null) return;
     final scope = widget.initialVerse != null
         ? QuizScope(
@@ -145,22 +170,27 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     ]);
     final translations = values[0] as List<TranslationInfo>;
     final books = values[1] as List<BibleBook>;
-    final units =
-        widget.initialVerse != null &&
-            widget.initialEndChapter != null &&
-            widget.initialEndChapter != widget.chapter
+    final units = _isPlanTaskReading
+        ? await repository.getChapter(
+            widget.translationId,
+            _activeBookId,
+            _activeChapter,
+          )
+        : widget.initialVerse != null &&
+              widget.initialEndChapter != null &&
+              widget.initialEndChapter != widget.chapter
         ? (await repository.getPassage(
             widget.translationId,
             PassageRange(
               start: (
                 canonId: CanonId.protestant66,
-                osisBookId: widget.bookId,
-                chapter: widget.chapter,
+                osisBookId: _activeBookId,
+                chapter: _activeChapter,
                 verse: widget.initialVerse!,
               ),
               end: (
                 canonId: CanonId.protestant66,
-                osisBookId: widget.bookId,
+                osisBookId: _activeBookId,
                 chapter: widget.initialEndChapter!,
                 verse: widget.initialEndVerse ?? widget.initialVerse!,
               ),
@@ -168,8 +198,8 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
           )).units
         : await repository.getChapter(
             widget.translationId,
-            widget.bookId,
-            widget.chapter,
+            _activeBookId,
+            _activeChapter,
           );
     ParallelPassage? parallel;
     if (_parallelTranslationId != null && units.isNotEmpty) {
@@ -186,16 +216,33 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       units: units,
       parallel: parallel,
       chapterCount: books
-          .firstWhere((book) => book.osisId == widget.bookId)
+          .firstWhere((book) => book.osisId == _activeBookId)
           .chapterCount,
     );
   }
 
   void _onChapterSwipe(double? velocity, int chapterCount) {
     if (_selectingVerses || velocity == null || velocity.abs() < 300) return;
+    if (_isPlanTaskReading) {
+      _movePlanTaskGroup(velocity < 0 ? 1 : -1);
+      return;
+    }
     final chapter = velocity < 0 ? widget.chapter + 1 : widget.chapter - 1;
     if (chapter < 1 || chapter > chapterCount) return;
     context.go('/bible/${widget.translationId}/${widget.bookId}/$chapter');
+  }
+
+  void _movePlanTaskGroup(int offset) {
+    final next = _planTaskGroupIndex + offset;
+    if (next < 0 || next >= widget.planTaskGroups.length) return;
+    _disposeQuizPreparation();
+    setState(() {
+      _planTaskGroupIndex = next;
+      _quizPreparation = null;
+      _parallelTranslationId = null;
+      _selectingVerses = false;
+      _selectedVerseIndexes.clear();
+    });
   }
 
   @override
@@ -203,8 +250,8 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     final repository = ref.watch(scriptureRepositoryProvider);
     final bookNames = ref.watch(bookNameCatalogProvider);
     final title = bookNames.chapterLabel(
-      widget.bookId,
-      widget.chapter,
+      _activeBookId,
+      _activeChapter,
       Localizations.localeOf(context),
     );
     return Scaffold(
@@ -283,96 +330,132 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          key: const Key('start-recitation-button'),
-                          onPressed: data.units.isEmpty
+                if (_isPlanTaskReading)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        OutlinedButton.icon(
+                          key: const Key('previous-plan-passage-button'),
+                          onPressed: _planTaskGroupIndex == 0
                               ? null
-                              : () =>
-                                    _chooseRecitationMode(context, data.units),
-                          icon: const Icon(Icons.mic_rounded),
-                          label: Text(
-                            AppLocalizations.of(context)!.startRecitation,
+                              : () => _movePlanTaskGroup(-1),
+                          icon: const Icon(Icons.navigate_before_rounded),
+                          label: const Text('上一段'),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '计划经文 ${_planTaskGroupIndex + 1} / ${widget.planTaskGroups.length}',
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          key: const Key('add-to-plan-button'),
+                        OutlinedButton.icon(
+                          key: const Key('next-plan-passage-button'),
                           onPressed:
-                              data.units.isEmpty ||
-                                  (_selectingVerses &&
-                                      _selectedVerseIndexes.isEmpty)
+                              _planTaskGroupIndex + 1 >=
+                                  widget.planTaskGroups.length
                               ? null
-                              : () => _showAddToPlan(context, data.units),
-                          icon: const Icon(Icons.playlist_add_rounded),
-                          label: Text(
-                            _selectingVerses
-                                ? '加入背诵计划（${_selectedVerseIndexes.length}）'
-                                : AppLocalizations.of(context)!.addToPlan,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      FilledButton.icon(
-                        key: const Key('start-quiz-button'),
-                        onPressed:
-                            _quizPreparation?.phase ==
-                                    QuizPreparationPhase.ready &&
-                                _quizPreparation!.questions.isNotEmpty
-                            ? _openQuiz
-                            : null,
-                        icon: const Icon(Icons.quiz_outlined),
-                        label: Text(
-                          _quizPreparation?.phase ==
-                                  QuizPreparationPhase.preparing
-                              ? '正在生成答题题目…'
-                              : _quizPreparation?.phase ==
-                                        QuizPreparationPhase.ready &&
-                                    _quizPreparation!.questions.isNotEmpty
-                              ? '开始答题'
-                              : '开始答题（题目准备中）',
-                        ),
-                      ),
-                      if (_quizPreparation?.phase ==
-                              QuizPreparationPhase.failed &&
-                          _quizPreparation?.error != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          _quizPreparation!.error!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                        TextButton(
-                          key: const Key('retry-quiz-generation-button'),
-                          onPressed:
-                              _quizPreparation == null ||
-                                  _quizPreparation?.phase ==
-                                      QuizPreparationPhase.preparing
-                              ? null
-                              : () {
-                                  _quizPreparation!.prepare();
-                                },
-                          child: const Text('重试生成'),
+                              : () => _movePlanTaskGroup(1),
+                          icon: const Icon(Icons.navigate_next_rounded),
+                          label: const Text('下一段'),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
+                if (!_isPlanTaskReading)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            key: const Key('start-recitation-button'),
+                            onPressed: data.units.isEmpty
+                                ? null
+                                : () => _chooseRecitationMode(
+                                    context,
+                                    data.units,
+                                  ),
+                            icon: const Icon(Icons.mic_rounded),
+                            label: Text(
+                              AppLocalizations.of(context)!.startRecitation,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('add-to-plan-button'),
+                            onPressed:
+                                data.units.isEmpty ||
+                                    (_selectingVerses &&
+                                        _selectedVerseIndexes.isEmpty)
+                                ? null
+                                : () => _showAddToPlan(context, data.units),
+                            icon: const Icon(Icons.playlist_add_rounded),
+                            label: Text(
+                              _selectingVerses
+                                  ? '加入背诵计划（${_selectedVerseIndexes.length}）'
+                                  : AppLocalizations.of(context)!.addToPlan,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (!_isPlanTaskReading)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FilledButton.icon(
+                          key: const Key('start-quiz-button'),
+                          onPressed:
+                              _quizPreparation?.phase ==
+                                      QuizPreparationPhase.ready &&
+                                  _quizPreparation!.questions.isNotEmpty
+                              ? _openQuiz
+                              : null,
+                          icon: const Icon(Icons.quiz_outlined),
+                          label: Text(
+                            _quizPreparation?.phase ==
+                                    QuizPreparationPhase.preparing
+                                ? '正在生成答题题目…'
+                                : _quizPreparation?.phase ==
+                                          QuizPreparationPhase.ready &&
+                                      _quizPreparation!.questions.isNotEmpty
+                                ? '开始答题'
+                                : '开始答题（题目准备中）',
+                          ),
+                        ),
+                        if (_quizPreparation?.phase ==
+                                QuizPreparationPhase.failed &&
+                            _quizPreparation?.error != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _quizPreparation!.error!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          TextButton(
+                            key: const Key('retry-quiz-generation-button'),
+                            onPressed:
+                                _quizPreparation == null ||
+                                    _quizPreparation?.phase ==
+                                        QuizPreparationPhase.preparing
+                                ? null
+                                : () {
+                                    _quizPreparation!.prepare();
+                                  },
+                            child: const Text('重试生成'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 Expanded(
                   child: GestureDetector(
                     key: const Key('passage-reader'),
@@ -384,10 +467,17 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                     child: data.parallel == null
                         ? _SinglePassage(
                             units: data.units,
-                            initialVerse: widget.initialVerse,
-                            initialEndVerse: widget.initialEndVerse,
-                            initialEndChapter: widget.initialEndChapter,
-                            initialChapter: widget.chapter,
+                            initialVerse: _isPlanTaskReading
+                                ? null
+                                : widget.initialVerse,
+                            initialEndVerse: _isPlanTaskReading
+                                ? null
+                                : widget.initialEndVerse,
+                            initialEndChapter: _isPlanTaskReading
+                                ? null
+                                : widget.initialEndChapter,
+                            initialChapter: _activeChapter,
+                            highlighted: _activePlanTaskGroup?.includesVerse,
                             searchQuery: widget.searchQuery ?? '',
                             selecting: _selectingVerses,
                             selectedIndexes: _selectedVerseIndexes,
@@ -688,6 +778,7 @@ class _SinglePassage extends StatefulWidget {
     this.initialEndVerse,
     this.initialEndChapter,
     required this.initialChapter,
+    this.highlighted,
     required this.searchQuery,
     required this.selecting,
     required this.selectedIndexes,
@@ -699,6 +790,7 @@ class _SinglePassage extends StatefulWidget {
   final int? initialEndVerse;
   final int? initialEndChapter;
   final int initialChapter;
+  final bool Function(int verse)? highlighted;
   final String searchQuery;
   final bool selecting;
   final Set<int> selectedIndexes;
@@ -806,6 +898,8 @@ class _SinglePassageState extends State<_SinglePassage> {
               unit: widget.units[index],
               selected:
                   widget.selectedIndexes.contains(index) ||
+                  widget.highlighted?.call(widget.units[index].start.verse) ==
+                      true ||
                   _isInInitialRange(widget.units[index]),
               searchQuery: widget.searchQuery,
               selectable: widget.selecting,

@@ -266,7 +266,7 @@ void main() {
   });
 
   test(
-    'recites only the selected entry blocks and completes after its last block',
+    'combines same chapter entry blocks into one page without filling the gap',
     () async {
       final selected = PlanTask(
         id: 1,
@@ -330,11 +330,9 @@ void main() {
         todayQuizEntry: true,
       );
 
-      expect(request!.units.single.start.verse, 1);
-      expect(request.planTaskId, isNull);
-      expect(request.next!.units.single.start.verse, 5);
-      expect(request.next!.planTaskId, 1);
-      expect(request.next!.next, isNull);
+      expect(request!.units.map((unit) => unit.start.verse), [1, 2, 5, 6]);
+      expect(request.planTaskId, 1);
+      expect(request.next, isNull);
       expect(request.quizScopes.map((scope) => scope.startVerse).toList(), [
         1,
         5,
@@ -379,8 +377,30 @@ class _PassageRepository implements ScriptureRepository {
         ],
       );
   @override
-  Future<List<VerseUnit>> getChapter(String a, String b, int c) =>
-      throw UnimplementedError();
+  Future<List<VerseUnit>> getChapter(
+    String translationId,
+    String bookId,
+    int chapter,
+  ) async => [
+    for (var verse = 1; verse <= 36; verse++)
+      VerseUnit(
+        translationId: translationId,
+        start: (
+          canonId: CanonId.protestant66,
+          osisBookId: bookId,
+          chapter: chapter,
+          verse: verse,
+        ),
+        end: (
+          canonId: CanonId.protestant66,
+          osisBookId: bookId,
+          chapter: chapter,
+          verse: verse,
+        ),
+        text: '经文$verse',
+        status: SourceTextStatus.present,
+      ),
+  ];
   @override
   Future<TranslationInfo> getTranslation(String a) =>
       throw UnimplementedError();

@@ -1,6 +1,6 @@
 import '../../plans/domain/plan_models.dart';
+import '../../plans/domain/plan_task_chapter_groups.dart';
 import '../../quiz/domain/quiz_scope.dart';
-import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../presentation/recitation_practice_screen.dart';
 
@@ -12,7 +12,8 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   bool todayQuizEntry = false,
 }) async {
   final blocks = selected.effectiveBlocks;
-  if (blocks.isEmpty) return null;
+  final chapterGroups = groupPlanTaskBlocksByChapter(blocks);
+  if (chapterGroups.isEmpty) return null;
   // A recitation entry owns its own ordered blocks.  Do not make an entry
   // launch later scheduled entries: that turns a user's single Today row back
   // into several unrelated tasks.
@@ -21,30 +22,23 @@ Future<RecitationRequest?> buildPlanRecitationRequest({
   ];
 
   RecitationRequest? next;
-  for (final block in blocks.reversed) {
-    final passage = await scripture.getPassage(
+  for (final group in chapterGroups.reversed) {
+    final units = await scripture.getChapter(
       plan.translationId,
-      PassageRange(
-        start: (
-          canonId: CanonId.protestant66,
-          osisBookId: block.bookId,
-          chapter: block.startChapter,
-          verse: block.startVerse,
-        ),
-        end: (
-          canonId: CanonId.protestant66,
-          osisBookId: block.bookId,
-          chapter: block.endChapter,
-          verse: block.endVerse,
-        ),
-      ),
+      group.bookId,
+      group.chapter,
     );
+    final scheduledUnits = [
+      for (final unit in units)
+        if (group.includesVerse(unit.start.verse)) unit,
+    ];
+    if (scheduledUnits.isEmpty) continue;
     next = RecitationRequest(
       translationId: plan.translationId,
-      bookId: block.bookId,
-      chapter: block.startChapter,
+      bookId: group.bookId,
+      chapter: group.chapter,
       mode: RecitationMode.continuous,
-      units: passage.units,
+      units: scheduledUnits,
       planTaskId: next == null ? selected.id : null,
       planId: plan.id,
       next: next,
