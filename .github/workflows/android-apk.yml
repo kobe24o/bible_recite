@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-            --notes "支持按开始节、结束节移动背诵经文：范围内未安排的节会自动跳过，长经文或合并子块可从中间切出；源条目保留剩余经文，目标日仍作为一条连续背诵任务。"
+            --notes "计划阅读现按书卷、章节分段并高亮计划经文，可跨章跨卷切换上一段、下一段；同章多个子块合并为一页背诵且不会混入未安排经文；计划详情多子块摘要改为卷章显示。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "支持按开始节、结束节移动背诵经文：范围内未安排的节会自动跳过，长经文或合并子块可从中间切出；源条目保留剩余经文，目标日仍作为一条连续背诵任务。" \
+              --release-notes "计划阅读现按书卷、章节分段并高亮计划经文，可跨章跨卷切换上一段、下一段；同章多个子块合并为一页背诵且不会混入未安排经文；计划详情多子块摘要改为卷章显示。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
