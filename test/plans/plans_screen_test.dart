@@ -5,6 +5,7 @@ import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart
 import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -206,7 +207,16 @@ void main() {
             startChapter: 3,
             startVerse: 16,
             endChapter: 3,
-            endVerse: 16,
+            endVerse: 18,
+            blocks: [
+              NewPlanTaskBlock(
+                bookId: 'JHN',
+                startChapter: 3,
+                startVerse: 16,
+                endChapter: 3,
+                endVerse: 18,
+              ),
+            ],
           ),
           NewPlanTask(
             dayIndex: 0,
@@ -232,7 +242,28 @@ void main() {
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
           scriptureRepositoryProvider.overrideWith(
-            (ref) async => FakeRepositoryForPassage(),
+            (ref) async => FakeRepositoryForPassage(
+              chapterUnits: [
+                for (final verse in [16, 17, 18])
+                  VerseUnit(
+                    translationId: 'eng-web',
+                    start: (
+                      canonId: CanonId.protestant66,
+                      osisBookId: 'JHN',
+                      chapter: 3,
+                      verse: verse,
+                    ),
+                    end: (
+                      canonId: CanonId.protestant66,
+                      osisBookId: 'JHN',
+                      chapter: 3,
+                      verse: verse,
+                    ),
+                    text: '$verse',
+                    status: SourceTextStatus.present,
+                  ),
+              ],
+            ),
           ),
         ],
         child: const MaterialApp(
@@ -264,6 +295,9 @@ void main() {
     expect(find.byKey(const Key('move-range-start')), findsOneWidget);
     expect(find.byKey(const Key('move-range-end')), findsOneWidget);
     expect(find.byKey(const Key('move-range-target-day')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('move-range-start')));
+    await tester.pumpAndSettle();
+    expect(find.text('约翰福音 3:17'), findsNWidgets(2));
   });
 
   testWidgets('summarizes custom multi-book plans with Chinese book names', (

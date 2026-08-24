@@ -27,6 +27,7 @@ import '../domain/plan_entry_splitter.dart';
 import '../domain/plan_exchange.dart';
 import '../domain/plan_models.dart';
 import '../domain/plan_task_summary.dart';
+import '../domain/plan_task_verse_slices.dart';
 import 'plan_editor_dialog.dart';
 
 class PlansScreen extends ConsumerStatefulWidget {
@@ -856,6 +857,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                                 ],
                                 bookNameFor: (bookId) =>
                                     catalog.nameFor(bookId, locale),
+                                translationId: plan.translationId,
                               ),
                             ),
                           TextButton(
@@ -939,7 +941,19 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     required PlanTask source,
     required List<PlanTask> targets,
     required String Function(String bookId) bookNameFor,
+    required String translationId,
   }) async {
+    final verses = await _expandTaskVerses(
+      translationId: translationId,
+      task: source,
+    );
+    if (!mounted) return;
+    if (verses.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('该背诵条目没有可移动的经文')));
+      return;
+    }
     final selection = await showModalBottomSheet<_MoveTaskRangeSelection>(
       context: context,
       isScrollControlled: true,
@@ -948,29 +962,64 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         source: source,
         targets: targets,
         bookNameFor: bookNameFor,
+        verses: verses,
       ),
     );
     if (selection == null || !mounted) return;
     await _moveTaskBlockRangeToEntry(
       sourceTaskId: source.id,
-      startBlockId: selection.startBlockId,
-      endBlockId: selection.endBlockId,
+      sourceBlocks: selection.sourceBlocks,
+      movingBlocks: selection.movingBlocks,
+      movedVerseCount: selection.movedVerseCount,
       targetTaskId: selection.targetTaskId,
     );
   }
 
+  Future<List<PlanTaskVerse>> _expandTaskVerses({
+    required String translationId,
+    required PlanTask task,
+  }) async {
+    final scripture = await ref.read(scriptureRepositoryProvider.future);
+    final verses = <PlanTaskVerse>[];
+    for (final block in task.effectiveBlocks) {
+      for (
+        var chapter = block.startChapter;
+        chapter <= block.endChapter;
+        chapter++
+      ) {
+        final units = await scripture.getChapter(
+          translationId,
+          block.bookId,
+          chapter,
+        );
+        for (final unit in units) {
+          final verse = unit.start.verse;
+          if ((chapter == block.startChapter && verse < block.startVerse) ||
+              (chapter == block.endChapter && verse > block.endVerse)) {
+            continue;
+          }
+          verses.add(
+            PlanTaskVerse(bookId: block.bookId, chapter: chapter, verse: verse),
+          );
+        }
+      }
+    }
+    return verses;
+  }
+
   Future<void> _moveTaskBlockRangeToEntry({
     required int sourceTaskId,
-    required int startBlockId,
-    required int endBlockId,
+    required List<NewPlanTaskBlock> sourceBlocks,
+    required List<NewPlanTaskBlock> movingBlocks,
+    required int movedVerseCount,
     required int targetTaskId,
   }) async {
     final repository = await ref.read(planRepositoryProvider.future);
     try {
-      await repository.moveTaskBlockRange(
+      await repository.moveTaskVerseRange(
         sourceTaskId: sourceTaskId,
-        startBlockId: startBlockId,
-        endBlockId: endBlockId,
+        sourceBlocks: sourceBlocks,
+        movingBlocks: movingBlocks,
         targetTaskId: targetTaskId,
       );
       await ref.read(dailyTaskReminderSchedulerProvider).reschedule(repository);
@@ -978,7 +1027,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       setState(() => _revision++);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已移入背诵条目')));
+      ).showSnackBar(SnackBar(content: Text('已移入 $movedVerseCount 节经文')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1487,13 +1536,15 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
 
 final class _MoveTaskRangeSelection {
   const _MoveTaskRangeSelection({
-    required this.startBlockId,
-    required this.endBlockId,
+    required this.sourceBlocks,
+    required this.movingBlocks,
+    required this.movedVerseCount,
     required this.targetTaskId,
   });
 
-  final int startBlockId;
-  final int endBlockId;
+  final List<NewPlanTaskBlock> sourceBlocks;
+  final List<NewPlanTaskBlock> movingBlocks;
+  final int movedVerseCount;
   final int targetTaskId;
 }
 
@@ -1502,27 +1553,26 @@ class _MoveTaskRangeSheet extends StatefulWidget {
     required this.source,
     required this.targets,
     required this.bookNameFor,
+    required this.verses,
   });
 
   final PlanTask source;
   final List<PlanTask> targets;
   final String Function(String bookId) bookNameFor;
+  final List<PlanTaskVerse> verses;
 
   @override
   State<_MoveTaskRangeSheet> createState() => _MoveTaskRangeSheetState();
 }
 
 class _MoveTaskRangeSheetState extends State<_MoveTaskRangeSheet> {
-  late final List<PlanTaskBlock> _blocks = widget.source.effectiveBlocks
-      .where((block) => block.id > 0)
-      .toList(growable: false);
   var _startIndex = 0;
   var _endIndex = 0;
   int? _targetTaskId;
   final _endFieldKey = GlobalKey<FormFieldState<int>>();
 
-  String _blockLabel(PlanTaskBlock block) =>
-      '${widget.bookNameFor(block.bookId)} ${block.rangeLabel}';
+  String _verseLabel(PlanTaskVerse verse) =>
+      '${widget.bookNameFor(verse.bookId)} ${verse.chapter}:${verse.verse}';
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -1540,17 +1590,17 @@ class _MoveTaskRangeSheetState extends State<_MoveTaskRangeSheet> {
           children: [
             Text('移动经文范围', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            const Text('选择连续的开始、结束经文，并指定要合并到哪一天的背诵条目。'),
+            const Text('选择开始、结束节，并指定要合并到哪一天的背诵条目。范围内未安排的节会自动跳过。'),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
               key: const Key('move-range-start'),
               initialValue: _startIndex,
               decoration: const InputDecoration(labelText: '开始经文'),
               items: [
-                for (var index = 0; index < _blocks.length; index++)
+                for (var index = 0; index < widget.verses.length; index++)
                   DropdownMenuItem(
                     value: index,
-                    child: Text(_blockLabel(_blocks[index])),
+                    child: Text(_verseLabel(widget.verses[index])),
                   ),
               ],
               onChanged: (index) {
@@ -1570,10 +1620,14 @@ class _MoveTaskRangeSheetState extends State<_MoveTaskRangeSheet> {
                 initialValue: _endIndex,
                 decoration: const InputDecoration(labelText: '结束经文'),
                 items: [
-                  for (var index = _startIndex; index < _blocks.length; index++)
+                  for (
+                    var index = _startIndex;
+                    index < widget.verses.length;
+                    index++
+                  )
                     DropdownMenuItem(
                       value: index,
-                      child: Text(_blockLabel(_blocks[index])),
+                      child: Text(_verseLabel(widget.verses[index])),
                     ),
                 ],
                 onChanged: (index) {
@@ -1603,14 +1657,19 @@ class _MoveTaskRangeSheetState extends State<_MoveTaskRangeSheet> {
               key: const Key('confirm-move-range'),
               onPressed: _targetTaskId == null
                   ? null
-                  : () => Navigator.pop(
-                      context,
-                      _MoveTaskRangeSelection(
-                        startBlockId: _blocks[_startIndex].id,
-                        endBlockId: _blocks[_endIndex].id,
+                  : () => Navigator.pop(context, () {
+                      final slices = splitPlanTaskVersesAtRange(
+                        widget.verses,
+                        startIndex: _startIndex,
+                        endIndex: _endIndex,
+                      );
+                      return _MoveTaskRangeSelection(
+                        sourceBlocks: slices.sourceBlocks,
+                        movingBlocks: slices.movingBlocks,
+                        movedVerseCount: slices.movedVerseCount,
                         targetTaskId: _targetTaskId!,
-                      ),
-                    ),
+                      );
+                    }()),
               icon: const Icon(Icons.drive_file_move_outline),
               label: const Text('移入背诵条目'),
             ),

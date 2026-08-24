@@ -536,16 +536,24 @@ final class SqlitePlanRepository {
   }
 
   void _insertTaskBlocks(int taskId, NewPlanTask task, String fallbackBookId) {
-    final blocks = task.effectiveBlocks(fallbackBookId);
-    for (var index = 0; index < blocks.length; index++) {
-      final block = blocks[index];
+    _insertBlocks(taskId, task.effectiveBlocks(fallbackBookId), fallbackBookId);
+  }
+
+  void _insertBlocks(
+    int taskId,
+    Iterable<NewPlanTaskBlock> blocks,
+    String fallbackBookId, {
+    int startSortOrder = 0,
+  }) {
+    var index = startSortOrder;
+    for (final block in blocks) {
       _database.execute(
         '''INSERT INTO plan_task_block
         (plan_task_id, sort_order, book_id, start_chapter, start_verse,
          end_chapter, end_verse) VALUES (?, ?, ?, ?, ?, ?, ?)''',
         [
           taskId,
-          index,
+          index++,
           block.bookId ?? fallbackBookId,
           block.startChapter,
           block.startVerse,
@@ -2024,6 +2032,119 @@ final class SqlitePlanRepository {
       );
       _reorderTaskBlocks(targetTaskId);
       if (movesAllSourceBlocks) {
+        _database.execute('DELETE FROM plan_task WHERE id = ?', [sourceTaskId]);
+        if (sourceDayEntryCount == 1) {
+          _database.execute(
+            '''UPDATE plan_task SET day_index = day_index - 1,
+              due_date = date(due_date, '-1 day')
+            WHERE plan_id = ? AND day_index > ?''',
+            [source['plan_id'], sourceDayIndex],
+          );
+          final days = (source['days'] as int) - 1;
+          final startDate = DateTime.parse(source['start_date'] as String);
+          _database.execute(
+            'UPDATE memorization_plan SET days = ?, end_date = ? WHERE id = ?',
+            [
+              _storedDays(days),
+              _date(_storedEndDate(startDate, days)),
+              source['plan_id'],
+            ],
+          );
+          _saveScheduleSpan(source['plan_id'] as int, startDate, days);
+        }
+      } else {
+        _reorderTaskBlocks(sourceTaskId);
+      }
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// Replaces the source entry's blocks with its remaining verse slices and
+  /// appends the selected slices to another unfinished local entry.  The UI
+  /// expands scripture ranges before calling this method, so a selection can
+  /// start or end inside a persisted block while omitted verses stay omitted.
+  Future<void> moveTaskVerseRange({
+    required int sourceTaskId,
+    required List<NewPlanTaskBlock> sourceBlocks,
+    required List<NewPlanTaskBlock> movingBlocks,
+    required int targetTaskId,
+  }) async {
+    if (movingBlocks.isEmpty) throw StateError('请选择至少一节经文');
+    final rows = _database.select(
+      '''SELECT t.plan_id, t.day_index, t.completed, t.book_id,
+          p.source_kind, p.content_locked, p.start_date,
+          COALESCE(s.days, p.days) AS days
+        FROM plan_task t
+        JOIN memorization_plan p ON p.id = t.plan_id
+        LEFT JOIN plan_schedule_span s ON s.plan_id = p.id
+        WHERE t.id = ?''',
+      [sourceTaskId],
+    );
+    final targets = _database.select(
+      '''SELECT t.plan_id, t.completed, t.book_id, p.source_kind,
+          p.content_locked
+        FROM plan_task t JOIN memorization_plan p ON p.id = t.plan_id
+        WHERE t.id = ?''',
+      [targetTaskId],
+    );
+    if (rows.isEmpty || targets.isEmpty) throw StateError('背诵条目不存在');
+    final source = rows.single;
+    final target = targets.single;
+    if (sourceTaskId == targetTaskId) throw StateError('请选择其他背诵条目');
+    if (source['plan_id'] != target['plan_id'] ||
+        source['completed'] == 1 ||
+        target['completed'] == 1 ||
+        source['content_locked'] == 1 ||
+        target['content_locked'] == 1 ||
+        source['source_kind'] != 'local' ||
+        target['source_kind'] != 'local') {
+      throw StateError('只有未完成的自定义背诵条目可以调整');
+    }
+
+    final sourceDayIndex = source['day_index'] as int;
+    final sourceDayEntryCount =
+        _database.select(
+              'SELECT COUNT(*) AS count FROM plan_task WHERE plan_id = ? AND day_index = ?',
+              [source['plan_id'], sourceDayIndex],
+            ).single['count']
+            as int;
+    final removesSourceEntry = sourceBlocks.isEmpty;
+    if (removesSourceEntry && sourceDayEntryCount == 1) {
+      final completedLater = _database.select(
+        '''SELECT 1 FROM plan_task
+        WHERE plan_id = ? AND completed = 1 AND day_index > ? LIMIT 1''',
+        [source['plan_id'], sourceDayIndex],
+      );
+      if (completedLater.isNotEmpty) {
+        throw StateError('后续已有完成记录，不能缩减这个背诵日');
+      }
+    }
+
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      _database.execute('DELETE FROM plan_task_block WHERE plan_task_id = ?', [
+        sourceTaskId,
+      ]);
+      if (!removesSourceEntry) {
+        _insertBlocks(sourceTaskId, sourceBlocks, source['book_id'] as String);
+      }
+      final targetBlockCount =
+          _database.select(
+                'SELECT COUNT(*) AS count FROM plan_task_block WHERE plan_task_id = ?',
+                [targetTaskId],
+              ).single['count']
+              as int;
+      _insertBlocks(
+        targetTaskId,
+        movingBlocks,
+        target['book_id'] as String,
+        startSortOrder: targetBlockCount,
+      );
+      _reorderTaskBlocks(targetTaskId);
+      if (removesSourceEntry) {
         _database.execute('DELETE FROM plan_task WHERE id = ?', [sourceTaskId]);
         if (sourceDayEntryCount == 1) {
           _database.execute(

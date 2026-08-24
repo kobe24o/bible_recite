@@ -269,6 +269,82 @@ void main() {
     },
   );
 
+  test('moves verse slices from inside a larger recitation block', () async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final id = await repository.createPlan(
+      _plan().copyWith(
+        tasks: const [
+          NewPlanTask(
+            dayIndex: 0,
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 10,
+            blocks: [
+              NewPlanTaskBlock(
+                bookId: 'JHN',
+                startChapter: 1,
+                startVerse: 1,
+                endChapter: 1,
+                endVerse: 10,
+              ),
+            ],
+          ),
+          NewPlanTask(
+            dayIndex: 1,
+            startChapter: 1,
+            startVerse: 11,
+            endChapter: 1,
+            endVerse: 11,
+          ),
+        ],
+      ),
+    );
+    final before = await repository.listTasks(id);
+
+    await repository.moveTaskVerseRange(
+      sourceTaskId: before.first.id,
+      sourceBlocks: const [
+        NewPlanTaskBlock(
+          bookId: 'JHN',
+          startChapter: 1,
+          startVerse: 1,
+          endChapter: 1,
+          endVerse: 2,
+        ),
+        NewPlanTaskBlock(
+          bookId: 'JHN',
+          startChapter: 1,
+          startVerse: 8,
+          endChapter: 1,
+          endVerse: 10,
+        ),
+      ],
+      movingBlocks: const [
+        NewPlanTaskBlock(
+          bookId: 'JHN',
+          startChapter: 1,
+          startVerse: 3,
+          endChapter: 1,
+          endVerse: 7,
+        ),
+      ],
+      targetTaskId: before.last.id,
+    );
+
+    final entries = await repository.listTasks(id);
+    expect(entries, hasLength(2));
+    expect(entries.first.blocks.map((block) => block.rangeLabel), [
+      '1:1–2',
+      '1:8–10',
+    ]);
+    expect(entries.last.blocks.map((block) => block.rangeLabel), [
+      '1:3–7',
+      '1:11',
+    ]);
+  });
+
   test(
     'removes an empty source entry and collapses its now-empty day',
     () async {
