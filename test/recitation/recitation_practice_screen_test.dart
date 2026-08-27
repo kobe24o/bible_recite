@@ -83,6 +83,79 @@ void main() {
     expect(find.text('当前背诵：约翰福音 3:17'), findsOneWidget);
   });
 
+  testWidgets('completing a book shows its coverage achievement animation', (
+    tester,
+  ) async {
+    final recognizer = FakeRecognizer();
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => _SingleVerseCoverageScripture(),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: const [Locale('zh')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: RecitationPracticeScreen(
+            request: RecitationRequest(
+              translationId: 'cmn-cu89s',
+              bookId: 'GEN',
+              chapter: 1,
+              mode: RecitationMode.continuous,
+              units: [_coverageUnit()],
+            ),
+            recognizer: recognizer,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+    recognizer.emit(const RecognitionFinal('起初神创造天地'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('获得新成就'), findsOneWidget);
+    await tester.tap(find.text('太棒了'));
+    await tester.pumpAndSettle();
+    expect(find.text('创世记勋章'), findsOneWidget);
+    expect(
+      find.byKey(const Key('achievement-unlock-animation')),
+      findsOneWidget,
+    );
+
+    while (find.text('太棒了').evaluate().isNotEmpty) {
+      await tester.tap(find.text('太棒了'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+    recognizer.emit(const RecognitionFinal('起初神创造天地'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('record-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('获得新成就'), findsOneWidget);
+    expect(find.text('获得次数：X 2'), findsOneWidget);
+    expect(
+      find.byKey(const Key('achievement-unlock-animation')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('continuous mode presents the whole passage as one session', (
     tester,
   ) async {
@@ -753,6 +826,60 @@ VerseUnit _unit(int verse, String text) => VerseUnit(
   text: text,
   status: SourceTextStatus.present,
 );
+
+VerseUnit _coverageUnit() => VerseUnit(
+  translationId: 'cmn-cu89s',
+  start: (
+    canonId: CanonId.protestant66,
+    osisBookId: 'GEN',
+    chapter: 1,
+    verse: 1,
+  ),
+  end: (canonId: CanonId.protestant66, osisBookId: 'GEN', chapter: 1, verse: 1),
+  text: '起初神创造天地',
+  status: SourceTextStatus.present,
+);
+
+final class _SingleVerseCoverageScripture implements ScriptureRepository {
+  @override
+  Future<List<BibleBook>> listBooks(
+    String translationId,
+    CanonId canonId,
+  ) async => [
+    BibleBook(osisId: 'GEN', ordinal: 1, name: 'GEN', chapterCount: 1),
+  ];
+
+  @override
+  Future<List<VerseUnit>> getChapter(
+    String translationId,
+    String osisBookId,
+    int chapter,
+  ) async => [_coverageUnit()];
+
+  @override
+  Future<List<TranslationInfo>> listTranslations() =>
+      throw UnimplementedError();
+
+  @override
+  Future<TranslationInfo> getTranslation(String id) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Passage> getPassage(String translationId, PassageRange range) =>
+      throw UnimplementedError();
+
+  @override
+  Future<SelectedPassage> getSelection(
+    String translationId,
+    PassageSelection selection,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<ParallelPassage> resolveParallelPassage(
+    LocatedPassageRange sourceRange,
+    String targetTranslationId,
+  ) => throw UnimplementedError();
+}
 
 final class _ChineseQuizScripture implements ScriptureRepository {
   @override

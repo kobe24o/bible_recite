@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-            --notes "新增可重复获得的预置计划勋章和圣经范围勋章；按经文达到目标次数计算勋章进度，并在成就页统计重复获得的勋章数量。"
+            --notes "修复完成整卷经文后不弹出勋章动画的问题；重复获得书卷和圣经范围勋章时也会再次显示获得动画。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "新增可重复获得的预置计划勋章和圣经范围勋章；按经文达到目标次数计算勋章进度，并在成就页统计重复获得的勋章数量。" \
+              --release-notes "修复完成整卷经文后不弹出勋章动画的问题；重复获得书卷和圣经范围勋章时也会再次显示获得动画。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

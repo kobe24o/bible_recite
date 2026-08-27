@@ -18,6 +18,7 @@ import '../../scripture/domain/book_name_catalog.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../statistics/domain/recitation_result.dart';
 import '../../statistics/domain/achievement.dart';
+import '../../statistics/application/achievement_coverage.dart';
 import '../../statistics/presentation/achievement_unlock_dialog.dart';
 import '../../../widgets/completion_confetti.dart';
 import '../application/recitation_scoring_provider.dart';
@@ -356,25 +357,46 @@ class _RecitationPracticeScreenState
       );
       ref.read(recitationDataRevisionProvider.notifier).refresh();
       await completionCelebration;
-      for (final achievement in unlocked) {
-        if (!mounted) break;
-        unawaited(HapticFeedback.lightImpact().catchError((_) {}));
-        await showAchievementUnlockDialog(
-          context,
-          AchievementProgress(
-            definition: achievement.definition,
-            current: achievement.definition.target * achievement.awardCount,
-            satisfied: true,
-            unlockedAt: achievement.unlockedAt,
-            awardCount: achievement.awardCount,
-          ),
-          newlyUnlocked: true,
-        );
-        break;
+      await _showAchievementUnlocks(unlocked, firstOnly: true);
+      if (widget.request.translationId == 'cmn-cu89s') {
+        try {
+          final scripture = await ref.read(scriptureRepositoryProvider.future);
+          final coverage = await syncScriptureCoverageAchievements(
+            repository: repository,
+            scripture: scripture,
+            names: ref.read(bookNameCatalogProvider),
+          );
+          await _showAchievementUnlocks(coverage.unlocked);
+        } catch (_) {
+          // A saved recitation must not be treated as failed if coverage data
+          // is temporarily unavailable.
+        }
       }
       await _openPreparedQuiz();
     } catch (error) {
       if (mounted) setState(() => _error = '保存背诵统计失败：$error');
+    }
+  }
+
+  Future<void> _showAchievementUnlocks(
+    Iterable<AchievementUnlock> achievements, {
+    bool firstOnly = false,
+  }) async {
+    for (final achievement in achievements) {
+      if (!mounted) break;
+      unawaited(HapticFeedback.lightImpact().catchError((_) {}));
+      await showAchievementUnlockDialog(
+        context,
+        AchievementProgress(
+          definition: achievement.definition,
+          current: achievement.definition.target * achievement.awardCount,
+          satisfied: true,
+          unlockedAt: achievement.unlockedAt,
+          awardCount: achievement.awardCount,
+        ),
+        newlyUnlocked: true,
+      );
+      if (firstOnly) break;
     }
   }
 
