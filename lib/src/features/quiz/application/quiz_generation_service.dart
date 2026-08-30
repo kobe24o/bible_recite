@@ -179,6 +179,9 @@ final class QuizGenerationService {
                 source: QuizQuestionSource.model,
               );
             }
+            if (valid.isEmpty) {
+              modelFailure ??= const QuizModelException('模型返回的题目为空或未通过题目校验');
+            }
             questions.addAll(valid);
           } on Object catch (error) {
             modelFailure ??= error;
@@ -223,6 +226,9 @@ final class QuizGenerationService {
         return QuizGenerationOutcome(
           generated: questions.length,
           skippedCachedVerses: fallbackCount,
+          modelError: modelFailure == null
+              ? null
+              : _modelFailureMessage(modelFailure),
         );
       }
       if (!modelAvailable && settings.modelAnsweringEnabled) {
@@ -254,6 +260,11 @@ final class QuizGenerationService {
       return QuizGenerationOutcome(error: '生成答题题目失败：$error');
     }
   }
+
+  String _modelFailureMessage(Object error) => switch (error) {
+    QuizModelException(:final message) => message,
+    _ => '生成答题题目失败：$error',
+  };
 
   Map<String, List<QuizGenerationVerse>> _groupByBook(
     List<QuizGenerationVerse> verses,

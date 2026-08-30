@@ -6,8 +6,11 @@ import 'package:bible_recite/src/features/quiz/application/quiz_preparation_cont
 import 'package:bible_recite/src/features/quiz/data/quiz_model_client.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_model_settings.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_question_source.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../scripture/scripture_browser_screen_test.dart'
@@ -60,6 +63,68 @@ void main() {
     expect(controller.phase, QuizPreparationPhase.ready);
     expect(controller.questions, hasLength(1));
   });
+
+  test(
+    'reports model failure and the fallback bank when local questions are used',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      const scope = QuizScope(
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 16,
+      );
+      await repository.saveQuizQuestions(const [
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 0,
+          end: 3,
+          word: '神爱世人',
+          partOfSpeech: '短语',
+          meaning: '测试题',
+          verseText: '神爱世人',
+        ),
+      ]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      final controller = QuizPreparationController(
+        scope: scope,
+        serviceLoader: () async => QuizGenerationService(
+          repository: repository,
+          scripture: FakeRepositoryForPassage(),
+          client: QuizModelClient(
+            httpClient: MockClient(
+              (_) async => http.Response('bad gateway', 503),
+            ),
+          ),
+          settingsLoader: () async => const QuizModelSettings(
+            baseUrl: 'https://example.test/v1',
+            model: 'test-model',
+            apiKey: 'configured-key',
+            modelAnsweringEnabled: true,
+          ),
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.prepare();
+
+      expect(controller.phase, QuizPreparationPhase.ready);
+      expect(controller.notice, contains('HTTP 503'));
+      expect(controller.notice, contains('本地题库'));
+      expect(controller.questions.single.source, QuizQuestionSource.local);
+    },
+  );
 
   testWidgets('cancelling a started preparation ignores its late result', (
     tester,

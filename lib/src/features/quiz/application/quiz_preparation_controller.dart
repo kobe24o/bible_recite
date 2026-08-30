@@ -31,6 +31,8 @@ final class QuizPreparationController extends ChangeNotifier {
   QuizPreparationPhase get phase => _phase;
   String? _error;
   String? get error => _error;
+  String? _notice;
+  String? get notice => _notice;
   List<PendingQuizQuestion> _questions = const [];
   List<PendingQuizQuestion> get questions => _questions;
 
@@ -53,6 +55,7 @@ final class QuizPreparationController extends ChangeNotifier {
     if (_disposed) return;
     _phase = QuizPreparationPhase.preparing;
     _error = null;
+    _notice = null;
     _notify();
     QuizGenerationService? service;
     try {
@@ -60,7 +63,13 @@ final class QuizPreparationController extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       final outcome = await service.prepareScopes(_effectiveScopes);
       if (_disposed || generation != _generation) return;
-      if (await _useCachedQuestions(service, generation)) return;
+      if (await _useCachedQuestions(
+        service,
+        generation,
+        modelError: outcome.modelError,
+      )) {
+        return;
+      }
       if (_disposed || generation != _generation) return;
       _questions = const [];
       _error = outcome.success ? '没有可开始的答题题目' : outcome.error;
@@ -85,8 +94,9 @@ final class QuizPreparationController extends ChangeNotifier {
 
   Future<bool> _useCachedQuestions(
     QuizGenerationService service,
-    int generation,
-  ) async {
+    int generation, {
+    String? modelError,
+  }) async {
     try {
       final preferredSource = await service.modelAnsweringAvailable
           ? QuizQuestionSource.model
@@ -118,6 +128,9 @@ final class QuizPreparationController extends ChangeNotifier {
       }
       _questions = questions;
       _error = null;
+      _notice = modelError == null
+          ? null
+          : _modelFallbackNotice(modelError, questions);
       _phase = QuizPreparationPhase.ready;
       return true;
     } catch (_) {
@@ -155,8 +168,22 @@ final class QuizPreparationController extends ChangeNotifier {
     if (_disposed) return;
     _phase = QuizPreparationPhase.idle;
     _error = null;
+    _notice = null;
     _questions = const [];
     _notify();
+  }
+
+  String _modelFallbackNotice(
+    String modelError,
+    Iterable<PendingQuizQuestion> questions,
+  ) {
+    final sources = questions
+        .where((question) => question.source != QuizQuestionSource.model)
+        .map((question) => question.source.labelZh)
+        .toSet()
+        .toList();
+    final sourceLabel = sources.isEmpty ? '已有题目' : sources.join('、');
+    return '模型出题失败：$modelError。本次使用$sourceLabel。题目页仍会显示每道题的真实来源。';
   }
 
   void _notify() {

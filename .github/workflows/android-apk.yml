@@ -277,7 +277,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-            --notes "接入严格审核后的圆形勋章图片并优化 PNG 资源体积；开启并配置大模型时优先复用或生成大模型题目，仅在调用失败时回退到本地或云端题库，并显示真实题目来源。"
+            --notes "接入严格审核后的新勋章图片并优化 PNG 资源体积；大模型出题请求统一串行并显示超时、HTTP、限流/QPS 或响应校验原因；调用失败时回退到本地或云端题库，并显示真实题目来源。"
 
       - name: Publish signed update feed
         env:
@@ -304,7 +304,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "接入严格审核后的圆形勋章图片并优化 PNG 资源体积；开启并配置大模型时优先复用或生成大模型题目，仅在调用失败时回退到本地或云端题库，并显示真实题目来源。" \
+              --release-notes "接入严格审核后的新勋章图片并优化 PNG 资源体积；大模型出题请求统一串行并显示超时、HTTP、限流/QPS 或响应校验原因；调用失败时回退到本地或云端题库，并显示真实题目来源。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

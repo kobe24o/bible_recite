@@ -159,6 +159,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
       extra: QuizPracticeRequest(
         scope: preparation.scope,
         questions: preparation.questions,
+        preparationNotice: preparation.notice,
       ),
     );
   }
@@ -451,6 +452,17 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                                     _quizPreparation!.prepare();
                                   },
                             child: const Text('重试生成'),
+                          ),
+                        ],
+                        if (_quizPreparation?.notice case final notice?) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            notice,
+                            key: const Key('quiz-preparation-notice'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                           ),
                         ],
                       ],

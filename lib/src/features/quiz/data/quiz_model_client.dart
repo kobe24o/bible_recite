@@ -70,21 +70,24 @@ final class QuizModelClient {
       })
       ..body = body;
     try {
-      final response = await _httpClient
+      final fullResponse = await _httpClient
           .send(request)
-          .timeout(timeout)
-          .then((streamed) => http.Response.fromStream(streamed))
+          .then(http.Response.fromStream)
           .timeout(timeout);
-      if (response.statusCode == 429) {
-        throw const QuizModelException('答题模型限流，请稍后重试');
+      if (fullResponse.statusCode == 429) {
+        throw QuizModelException(
+          _rateLimitMessage(fullResponse, settings.apiKey),
+        );
       }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw QuizModelException('答题模型服务返回 HTTP ${response.statusCode}');
+      if (fullResponse.statusCode < 200 || fullResponse.statusCode >= 300) {
+        throw QuizModelException(
+          _httpErrorMessage(fullResponse, settings.apiKey),
+        );
       }
-      if (response.bodyBytes.length > maxResponseBytes) {
+      if (fullResponse.bodyBytes.length > maxResponseBytes) {
         throw const QuizModelException('答题模型响应过大');
       }
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final decoded = jsonDecode(utf8.decode(fullResponse.bodyBytes));
       final choices = switch (decoded) {
         {'choices': List<Object?> choices} => choices,
         _ => throw const QuizModelException('答题模型响应缺少 choices'),
@@ -109,8 +112,12 @@ final class QuizModelClient {
       return jsonDecode(content.substring(start, end + 1));
     } on QuizModelException {
       rethrow;
+    } on TimeoutException {
+      throw QuizModelException(
+        '答题模型请求超时（${_timeoutLabel()}）：请检查网络、接口地址或服务响应速度',
+      );
     } on Object catch (error) {
-      throw QuizModelException('无法连接答题模型：$error');
+      throw QuizModelException(_connectionErrorMessage(error));
     }
   });
 
@@ -134,41 +141,113 @@ final class QuizModelClient {
   /// Sends a small fixed JSON request with no scripture to verify the
   /// configured endpoint and key work.  Throws [QuizModelException] on any
   /// failure or non-2xx response.
-  Future<void> testConnection(QuizModelSettings settings) async {
-    if (!settings.isConfigured) {
-      throw const QuizModelException('尚未配置答题模型');
+  Future<void> testConnection(QuizModelSettings settings) =>
+      _runOneGenerationAtATime(() async {
+        if (!settings.isConfigured) {
+          throw const QuizModelException('尚未配置答题模型');
+        }
+        if (settings.apiKey.isEmpty) {
+          throw const QuizModelException('尚未填写答题模型 API Key');
+        }
+        final body = jsonEncode({
+          'model': settings.model,
+          'messages': [
+            {'role': 'user', 'content': '只返回 JSON 数组：[]'},
+          ],
+          'max_tokens': 8,
+        });
+        final request = http.Request('POST', _chatUri(settings.baseUrl))
+          ..headers.addAll({
+            'content-type': 'application/json',
+            'authorization': 'Bearer ${settings.apiKey}',
+            'accept': 'application/json',
+          })
+          ..body = body;
+        try {
+          final fullResponse = await _httpClient
+              .send(request)
+              .then(http.Response.fromStream)
+              .timeout(timeout);
+          if (fullResponse.statusCode < 200 || fullResponse.statusCode >= 300) {
+            throw QuizModelException(
+              _httpErrorMessage(fullResponse, settings.apiKey),
+            );
+          }
+        } on QuizModelException {
+          rethrow;
+        } on TimeoutException {
+          throw QuizModelException(
+            '答题模型请求超时（${_timeoutLabel()}）：请检查网络、接口地址或服务响应速度',
+          );
+        } on Object catch (error) {
+          throw QuizModelException(_connectionErrorMessage(error));
+        }
+      });
+
+  String _timeoutLabel() => timeout.inSeconds > 0
+      ? '${timeout.inSeconds} 秒'
+      : '${timeout.inMilliseconds} 毫秒';
+
+  String _connectionErrorMessage(Object error) {
+    if (error is FormatException) {
+      return '答题模型地址或响应格式无效：${error.message}';
     }
-    if (settings.apiKey.isEmpty) {
-      throw const QuizModelException('尚未填写答题模型 API Key');
-    }
-    final body = jsonEncode({
-      'model': settings.model,
-      'messages': [
-        {'role': 'user', 'content': '只返回 JSON 数组：[]'},
-      ],
-      'max_tokens': 8,
-    });
-    final request = http.Request('POST', _chatUri(settings.baseUrl))
-      ..headers.addAll({
-        'content-type': 'application/json',
-        'authorization': 'Bearer ${settings.apiKey}',
-        'accept': 'application/json',
-      })
-      ..body = body;
+    return '无法连接答题模型：$error';
+  }
+
+  String _httpErrorMessage(http.Response response, String apiKey) {
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
+    if (body.isEmpty) return '答题模型服务返回 HTTP ${response.statusCode}';
+    Object? decoded;
     try {
-      final response = await _httpClient
-          .send(request)
-          .timeout(timeout)
-          .then((streamed) => http.Response.fromStream(streamed))
-          .timeout(timeout);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw QuizModelException('答题模型服务返回 HTTP ${response.statusCode}');
-      }
-    } on QuizModelException {
-      rethrow;
-    } on Object catch (error) {
-      throw QuizModelException('无法连接答题模型：$error');
+      decoded = jsonDecode(body);
+    } on Object {
+      // Plain-text provider responses are still useful diagnostics.
     }
+    final detail = switch (decoded) {
+      {'error': {'message': String message}} => message,
+      {'error': String message} => message,
+      {'message': String message} => message,
+      _ => body,
+    };
+    final redacted = detail
+        .replaceAll(apiKey, '***')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final shortened = redacted.length <= 240
+        ? redacted
+        : '${redacted.substring(0, 240)}…';
+    return '答题模型服务返回 HTTP ${response.statusCode}：$shortened';
+  }
+
+  String _rateLimitMessage(http.Response response, String apiKey) {
+    final detail = _responseDetail(response, apiKey);
+    return detail == null
+        ? '答题模型限流（HTTP 429），可能是 QPS 或额度限制，请稍后重试'
+        : '答题模型限流（HTTP 429）：$detail';
+  }
+
+  String? _responseDetail(http.Response response, String apiKey) {
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
+    if (body.isEmpty) return null;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on Object {
+      // Plain-text provider responses are still useful diagnostics.
+    }
+    final detail = switch (decoded) {
+      {'error': {'message': String message}} => message,
+      {'error': String message} => message,
+      {'message': String message} => message,
+      _ => body,
+    };
+    final redacted = detail
+        .replaceAll(apiKey, '***')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (redacted.isEmpty) return null;
+    return redacted.length <= 240 ? redacted : '${redacted.substring(0, 240)}…';
   }
 
   static Uri _chatUri(String baseUrl) {

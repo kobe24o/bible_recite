@@ -10,6 +10,7 @@ import '../../quiz/application/quiz_preparation_controller.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../quiz/domain/quiz_result.dart';
+import '../../quiz/domain/quiz_question_source.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
 import '../../reminder/reminder_providers.dart';
@@ -210,6 +211,7 @@ class _RecitationPracticeScreenState
           request: QuizPracticeRequest(
             scope: preparation.scope,
             questions: preparation.questions,
+            preparationNotice: preparation.notice,
           ),
         ),
       ),
@@ -410,6 +412,9 @@ class _RecitationPracticeScreenState
           request: QuizPracticeRequest(
             scope: scopes.first,
             questions: questions,
+            preparationNotice: outcome.modelError == null
+                ? null
+                : _modelFallbackNotice(outcome.modelError!, questions),
           ),
         );
       }
@@ -420,6 +425,19 @@ class _RecitationPracticeScreenState
     } catch (error) {
       return _QuizPreparation(error: '答题准备失败：$error');
     }
+  }
+
+  String _modelFallbackNotice(
+    String modelError,
+    Iterable<PendingQuizQuestion> questions,
+  ) {
+    final sources = questions
+        .where((question) => question.source != QuizQuestionSource.model)
+        .map((question) => question.source.labelZh)
+        .toSet()
+        .toList();
+    final sourceLabel = sources.isEmpty ? '已有题目' : sources.join('、');
+    return '模型出题失败：$modelError。本次使用$sourceLabel。题目页仍会显示每道题的真实来源。';
   }
 
   Future<List<PendingQuizQuestion>> _questionsForScopes(

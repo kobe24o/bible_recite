@@ -115,11 +115,17 @@ final class QuizGenerationOutcome {
     this.generated = 0,
     this.skippedCachedVerses = 0,
     this.error,
+    this.modelError,
   });
 
   final int generated;
   final int skippedCachedVerses;
   final String? error;
+
+  /// A model request can fail while a local/cloud question still makes the
+  /// range usable. Keep that diagnostic separate from [error], which means
+  /// the preparation itself cannot continue.
+  final String? modelError;
 
   bool get success => error == null;
 }

@@ -1014,7 +1014,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
       final scopes = await _randomQuizScopes(options.scopes, scripture);
       final service = await ref.read(quizGenerationServiceProvider.future);
       final outcome = await service.prepareScopes(scopes);
-      final modelError = outcome.error;
+      final modelError = outcome.modelError ?? outcome.error;
       final preferredSource = await service.modelAnsweringAvailable
           ? QuizQuestionSource.model
           : null;
@@ -1052,6 +1052,9 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                 endVerse: first.verse,
               ),
               questions: questions,
+              preparationNotice: modelError == null
+                  ? null
+                  : _modelFallbackNotice(modelError, questions),
             ),
           ),
         ),
@@ -1066,6 +1069,19 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  String _modelFallbackNotice(
+    String modelError,
+    Iterable<PendingQuizQuestion> questions,
+  ) {
+    final sources = questions
+        .where((question) => question.source != QuizQuestionSource.model)
+        .map((question) => question.source.labelZh)
+        .toSet()
+        .toList();
+    final sourceLabel = sources.isEmpty ? '已有题目' : sources.join('、');
+    return '模型出题失败：$modelError。本次使用$sourceLabel。题目页仍会显示每道题的真实来源。';
   }
 
   Future<List<QuizScope>> _randomQuizScopes(

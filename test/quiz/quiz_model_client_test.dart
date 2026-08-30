@@ -137,7 +137,12 @@ void main() {
   test('generic non-2xx errors never echo a key', () async {
     final client = QuizModelClient(
       httpClient: MockClient(
-        (request) async => http.Response('bad gateway', 502),
+        (request) async => http.Response(
+          jsonEncode({
+            'error': {'message': 'upstream overloaded'},
+          }),
+          502,
+        ),
       ),
     );
     try {
@@ -146,7 +151,29 @@ void main() {
     } on QuizModelException catch (error) {
       expect(error.message, isNot(contains('secret-key-value')));
       expect(error.message, contains('HTTP 502'));
+      expect(error.message, contains('upstream overloaded'));
     }
+  });
+
+  test('explains a request timeout with the configured duration', () async {
+    final client = QuizModelClient(
+      timeout: const Duration(milliseconds: 10),
+      httpClient: MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        return http.Response('{}', 200);
+      }),
+    );
+
+    await expectLater(
+      client.generate(settings, [verse]),
+      throwsA(
+        isA<QuizModelException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('请求超时'), contains('10 毫秒')),
+        ),
+      ),
+    );
   });
 
   test('explains Zhipu rate limiting without exposing the key', () async {

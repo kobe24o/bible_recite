@@ -311,6 +311,18 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
           ? Center(child: Text(chinese ? '暂无题目' : 'No questions'))
           : Column(
               children: [
+                if (widget.request.preparationNotice case final notice?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: Text(
+                      notice,
+                      key: const Key('quiz-preparation-notice'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: PageView.builder(
                     controller: _pageController,

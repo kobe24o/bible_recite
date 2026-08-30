@@ -160,7 +160,7 @@ void main() {
         repository: repository,
         scripture: scripture(),
         client: QuizModelClient(
-          httpClient: MockClient((_) async => http.Response('失败', 503)),
+          httpClient: MockClient((_) async => http.Response('failure', 503)),
         ),
         settingsLoader: () async => settings,
       );
@@ -168,11 +168,57 @@ void main() {
       final outcome = await service.prepare(scope());
 
       expect(outcome.success, isTrue, reason: outcome.error);
+      expect(outcome.modelError, contains('HTTP 503'));
       final pending = await repository.listPendingQuizQuestions(scope());
       expect(pending, hasLength(1));
       expect(pending.single.source, QuizQuestionSource.local);
     },
   );
+
+  test('reports an invalid model response before falling back locally', () async {
+    await repository.saveQuizQuestions([
+      ValidatedQuizQuestion(
+        reference: '3:16',
+        translationId: 'cmn-cu89s',
+        bookId: 'JHN',
+        chapter: 3,
+        verse: 16,
+        start: 2,
+        end: 4,
+        word: '世人',
+        partOfSpeech: '名词',
+        meaning: '世上的人',
+        verseText: '神爱世人',
+      ),
+    ]);
+    await repository.completeQuizQuestion(
+      questionId: 1,
+      correct: true,
+      answeredAt: DateTime.now(),
+    );
+    final service = QuizGenerationService(
+      repository: repository,
+      scripture: scripture(),
+      client: QuizModelClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            '{"choices":[{"message":{"content":"[]"}}]}',
+            200,
+          ),
+        ),
+      ),
+      settingsLoader: () async => settings,
+    );
+
+    final outcome = await service.prepare(scope());
+
+    expect(outcome.success, isTrue);
+    expect(outcome.modelError, contains('为空或未通过题目校验'));
+    expect(
+      (await repository.listPendingQuizQuestions(scope())).single.source,
+      QuizQuestionSource.local,
+    );
+  });
 
   test('prefers model generation over an existing local question', () async {
     await repository.saveQuizQuestions([

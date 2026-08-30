@@ -58,6 +58,21 @@ void main() {
     expect(find.text('来源：大模型生成'), findsOneWidget);
   });
 
+  testWidgets('shows model failure and fallback bank before answering', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final recognizer = FakeQuizRecognizer();
+    await tester.pumpWidget(
+      _app(repository, recognizer, preparationNotice: '模型出题失败：请求超时。本次使用本地题库。'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quiz-preparation-notice')), findsOneWidget);
+    expect(find.textContaining('本次使用本地题库'), findsOneWidget);
+  });
+
   testWidgets('hint shows length but never exposes answer letters', (
     tester,
   ) async {
@@ -168,6 +183,7 @@ Widget _app(
   SqlitePlanRepository repository,
   FakeQuizRecognizer recognizer, {
   QuizQuestionSource source = QuizQuestionSource.local,
+  String? preparationNotice,
 }) => ProviderScope(
   overrides: [
     planRepositoryProvider.overrideWith((ref) async => repository),
@@ -195,6 +211,7 @@ Widget _app(
           _question(16, source: source),
           _question(17, source: source),
         ],
+        preparationNotice: preparationNotice,
       ),
       recognizer: recognizer,
     ),
