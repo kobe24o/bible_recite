@@ -22,6 +22,7 @@ void main() {
     int start = 2,
     int end = 4,
     String meaning = '世上的人',
+    QuizQuestionSource source = QuizQuestionSource.local,
   }) => ValidatedQuizQuestion(
     reference: '约翰福音 3:$verse',
     translationId: 'cmn-cu89s',
@@ -34,6 +35,7 @@ void main() {
     partOfSpeech: '名词',
     meaning: meaning,
     verseText: '神爱世人',
+    source: source,
   );
 
   QuizScope scopeFor({int verse = 16}) => QuizScope(
@@ -245,6 +247,42 @@ void main() {
   });
 
   test(
+    'practice prefers a model question over local fallback questions',
+    () async {
+      await repository.saveQuizQuestions([
+        questionFor(start: 0, end: 1, source: QuizQuestionSource.local),
+        questionFor(start: 1, end: 2, source: QuizQuestionSource.model),
+      ]);
+
+      final questions = await repository.listQuizQuestionsForPractice(
+        scopeFor(),
+        preferredSource: QuizQuestionSource.model,
+      );
+
+      expect(questions, hasLength(1));
+      expect(questions.single.source, QuizQuestionSource.model);
+    },
+  );
+
+  test(
+    'practice can prefer local fallback questions when model is disabled',
+    () async {
+      await repository.saveQuizQuestions([
+        questionFor(start: 0, end: 1, source: QuizQuestionSource.local),
+        questionFor(start: 1, end: 2, source: QuizQuestionSource.model),
+      ]);
+
+      final questions = await repository.listQuizQuestionsForPractice(
+        scopeFor(),
+        preferredSource: QuizQuestionSource.local,
+      );
+
+      expect(questions, hasLength(1));
+      expect(questions.single.source, QuizQuestionSource.local);
+    },
+  );
+
+  test(
     'random local practice reopens answered questions for a new attempt',
     () async {
       await repository.saveQuizQuestions([
@@ -272,6 +310,23 @@ void main() {
       expect((await repository.getQuizSummary()).totalAnswered, 2);
     },
   );
+
+  test('random practice can prioritize model questions', () async {
+    await repository.saveQuizQuestions([
+      questionFor(start: 0, end: 1, source: QuizQuestionSource.local),
+      questionFor(start: 1, end: 2, source: QuizQuestionSource.model),
+    ]);
+
+    final selected = await repository
+        .listRandomQuizQuestionsForPracticeInScopes(
+          [scopeFor()],
+          1,
+          preferredSource: QuizQuestionSource.model,
+        );
+
+    expect(selected, hasLength(1));
+    expect(selected.single.source, QuizQuestionSource.model);
+  });
 
   test(
     'random local practice stays inside the selected chapter range',

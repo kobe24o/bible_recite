@@ -174,7 +174,7 @@ void main() {
     },
   );
 
-  test('skips cached pending verses without invoking the model', () async {
+  test('prefers model generation over an existing local question', () async {
     await repository.saveQuizQuestions([
       ValidatedQuizQuestion(
         reference: '3:16',
@@ -191,23 +191,87 @@ void main() {
       ),
     ]);
     var calls = 0;
-    final client = QuizModelClient(
-      httpClient: MockClient((request) async {
-        calls++;
-        return http.Response('{"choices":[]}', 200);
-      }),
-    );
     final service = QuizGenerationService(
       repository: repository,
       scripture: _FakeScripture([unit(16)]),
-      client: client,
+      client: QuizModelClient(
+        httpClient: MockClient((_) async {
+          calls++;
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': jsonEncode([
+                      {
+                        'reference': '3:16',
+                        'word': '世人',
+                        'start': 2,
+                        'end': 4,
+                        'length': 2,
+                        'partOfSpeech': '名词',
+                        'meaning': '世人：世上的人',
+                      },
+                    ]),
+                  },
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      ),
       settingsLoader: () async => settings,
     );
+
     final outcome = await service.prepare(scope());
-    expect(outcome.success, isTrue);
-    expect(outcome.generated, 0);
-    expect(calls, 0);
+
+    expect(outcome.success, isTrue, reason: outcome.error);
+    expect(calls, 1);
+    final practice = await repository.listQuizQuestionsForPractice(scope());
+    expect(practice, hasLength(1));
+    expect(practice.single.source, QuizQuestionSource.model);
   });
+
+  test(
+    'reuses an existing model question without invoking the model',
+    () async {
+      await repository.saveQuizQuestions([
+        const ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+          source: QuizQuestionSource.model,
+        ),
+      ]);
+      var calls = 0;
+      final client = QuizModelClient(
+        httpClient: MockClient((request) async {
+          calls++;
+          return http.Response('{"choices":[]}', 200);
+        }),
+      );
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: _FakeScripture([unit(16)]),
+        client: client,
+        settingsLoader: () async => settings,
+      );
+      final outcome = await service.prepare(scope());
+      expect(outcome.success, isTrue);
+      expect(outcome.generated, 0);
+      expect(calls, 0);
+    },
+  );
 
   test(
     'uses local questions without requesting the model when model answering is disabled',
@@ -253,7 +317,7 @@ void main() {
   );
 
   test(
-    'excludes only the cached verse when equal verse numbers span chapters',
+    'keeps equal verse numbers chapter-scoped during model-first generation',
     () async {
       await repository.saveQuizQuestions([
         ValidatedQuizQuestion(
@@ -320,7 +384,7 @@ void main() {
       final outcome = await service.prepare(crossChapterScope);
 
       expect(outcome.success, isTrue, reason: outcome.error);
-      expect(prompt, isNot(contains('3:16')));
+      expect(prompt, contains('3:16'));
       expect(prompt, contains('4:16'));
       expect(
         await repository.listPendingQuizQuestions(crossChapterScope),

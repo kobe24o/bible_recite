@@ -33,6 +33,13 @@ final class QuizGenerationService {
   Future<QuizGenerationOutcome> prepare(QuizScope scope) =>
       prepareScopes([scope]);
 
+  /// Whether new model questions should be preferred over local/cloud
+  /// questions for the current settings.
+  Future<bool> get modelAnsweringAvailable async {
+    final settings = await _loadSettings();
+    return settings.modelAnsweringEnabled && settings.isConfigured;
+  }
+
   /// Prepares several exact, possibly disjoint plan-task ranges. Each book is
   /// sent to the model separately so chapter:verse references stay unique,
   /// while cache lookup and returned questions remain restricted to the task
@@ -77,9 +84,28 @@ final class QuizGenerationService {
       if (presentUnits.isEmpty) {
         return const QuizGenerationOutcome(error: '该范围没有可用的经文');
       }
+      final settings = await _loadSettings();
+      final modelAvailable =
+          settings.modelAnsweringEnabled && settings.isConfigured;
       final cachedVerseKeys = <(String book, int chapter, int verse)>{};
       for (final unit in presentUnits) {
         final verse = unit.start.verse;
+        if (modelAvailable &&
+            await repository.requeueRandomQuizQuestion(
+              translationId: unit.translationId,
+              bookId: unit.start.osisBookId,
+              chapter: unit.start.chapter,
+              verse: verse,
+              source: QuizQuestionSource.model,
+            )) {
+          cachedVerseKeys.add((
+            unit.start.osisBookId,
+            unit.start.chapter,
+            verse,
+          ));
+          continue;
+        }
+        if (modelAvailable) continue;
         if (await repository.hasPendingQuizQuestion(
           translationId: unit.translationId,
           bookId: unit.start.osisBookId,
@@ -135,9 +161,6 @@ final class QuizGenerationService {
       // A fully cached range remains usable without any model credentials.
       // Only require configuration when one or more verses actually need a
       // new question from the remote model.
-      final settings = await _loadSettings();
-      final modelAvailable =
-          settings.modelAnsweringEnabled && settings.isConfigured;
       final questions = <ValidatedQuizQuestion>[];
       final modelVerseKeys = <(String book, int chapter, int verse)>{};
       Object? modelFailure;
@@ -163,13 +186,14 @@ final class QuizGenerationService {
         }
       }
       if (questions.isNotEmpty) {
-        await repository.saveQuizQuestions(questions);
+        await repository.saveQuizQuestions(questions, replaceExisting: true);
         for (final question in questions) {
-          if (await repository.hasPendingQuizQuestion(
+          if (await repository.requeueRandomQuizQuestion(
             translationId: question.translationId,
             bookId: question.bookId,
             chapter: question.chapter,
             verse: question.verse,
+            source: QuizQuestionSource.model,
           )) {
             modelVerseKeys.add((
               question.bookId,
@@ -211,9 +235,7 @@ final class QuizGenerationService {
       }
       final failure = modelFailure;
       if (questions.isEmpty && failure is QuizModelException) {
-        return QuizGenerationOutcome(
-          error: failure.message,
-        );
+        return QuizGenerationOutcome(error: failure.message);
       }
       if (questions.isEmpty && modelFailure != null) {
         return QuizGenerationOutcome(error: '生成答题题目失败：$modelFailure');

@@ -763,8 +763,9 @@ final class SqlitePlanRepository {
   /// repeated questions. Pick one locally, while leaving the other questions
   /// available for a later practice run.
   Future<List<PendingQuizQuestion>> listQuizQuestionsForPractice(
-    QuizScope scope,
-  ) async {
+    QuizScope scope, {
+    QuizQuestionSource? preferredSource,
+  }) async {
     final pending = await listPendingQuizQuestions(scope);
     final byVerse = <(int chapter, int verse), List<PendingQuizQuestion>>{};
     for (final question in pending) {
@@ -775,7 +776,11 @@ final class SqlitePlanRepository {
     final random = math.Random();
     final selected = <PendingQuizQuestion>[
       for (final questions in byVerse.values)
-        questions[random.nextInt(questions.length)],
+        _selectPracticeQuestion(
+          questions,
+          random,
+          preferredSource: preferredSource,
+        ),
     ];
     // Pick one candidate at random for each verse, then keep the passages in
     // scripture order so a multi-chapter practice remains easy to follow.
@@ -789,22 +794,47 @@ final class SqlitePlanRepository {
     return selected;
   }
 
+  PendingQuizQuestion _selectPracticeQuestion(
+    List<PendingQuizQuestion> questions,
+    math.Random random, {
+    QuizQuestionSource? preferredSource,
+  }) {
+    final preferredQuestions = preferredSource == null
+        ? const <PendingQuizQuestion>[]
+        : questions
+              .where((question) => question.source == preferredSource)
+              .toList(growable: false);
+    final candidates = preferredQuestions.isEmpty
+        ? questions
+        : preferredQuestions;
+    return candidates[random.nextInt(candidates.length)];
+  }
+
   /// Selects a random local-bank practice set and reopens the selected
   /// questions for a new attempt. This intentionally includes previously
   /// answered questions so “随机答题” can draw from the entire local bank;
   /// each new submission is recorded as a new quiz result.
   Future<List<PendingQuizQuestion>> listRandomQuizQuestionsForPractice(
-    int count,
-  ) async {
+    int count, {
+    QuizQuestionSource? preferredSource,
+  }) async {
     if (count <= 0) return const [];
+    final orderBy = preferredSource == null
+        ? 'RANDOM()'
+        : 'CASE WHEN source = ? THEN 0 ELSE 1 END, RANDOM()';
+    final arguments = <Object?>[
+      quizQuestionQualityVersion,
+      if (preferredSource != null) preferredSource.storageValue,
+      count,
+    ];
     _database.execute('BEGIN IMMEDIATE');
     try {
       final rows = _database.select(
         '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
           end_offset, word, part_of_speech, meaning, reference, source
         FROM quiz_question WHERE quality_version = ?
-        ORDER BY RANDOM() LIMIT ?''',
-        [quizQuestionQualityVersion, count],
+        ORDER BY $orderBy LIMIT ?''',
+        arguments,
       );
       for (final row in rows) {
         _database.execute(
@@ -827,8 +857,9 @@ final class SqlitePlanRepository {
   /// just like the unrestricted random-practice entry point.
   Future<List<PendingQuizQuestion>> listRandomQuizQuestionsForPracticeInScopes(
     Iterable<QuizScope> requestedScopes,
-    int count,
-  ) async {
+    int count, {
+    QuizQuestionSource? preferredSource,
+  }) async {
     final scopes = {...requestedScopes}.toList(growable: false);
     if (count <= 0 || scopes.isEmpty) return const [];
     final conditions = <String>[];
@@ -844,6 +875,13 @@ final class SqlitePlanRepository {
         scope.endChapter,
       ]);
     }
+    final orderBy = preferredSource == null
+        ? 'RANDOM()'
+        : 'CASE WHEN source = ? THEN 0 ELSE 1 END, RANDOM()';
+    if (preferredSource != null) {
+      arguments.add(preferredSource.storageValue);
+    }
+    arguments.add(count);
     _database.execute('BEGIN IMMEDIATE');
     try {
       final rows = _database.select(
@@ -851,8 +889,8 @@ final class SqlitePlanRepository {
           end_offset, word, part_of_speech, meaning, reference, source
         FROM quiz_question
         WHERE quality_version = ? AND (${conditions.join(' OR ')})
-        ORDER BY RANDOM() LIMIT ?''',
-        [...arguments, count],
+        ORDER BY $orderBy LIMIT ?''',
+        arguments,
       );
       for (final row in rows) {
         _database.execute(
@@ -1023,13 +1061,22 @@ final class SqlitePlanRepository {
     required String bookId,
     required int chapter,
     required int verse,
+    QuizQuestionSource? source,
   }) async {
+    final sourceClause = source == null ? '' : ' AND source = ?';
     final rows = _database.select(
       '''SELECT id FROM quiz_question
       WHERE translation_id = ? AND book_id = ? AND chapter = ? AND verse = ?
-        AND quality_version = ?
+        AND quality_version = ?$sourceClause
       ORDER BY RANDOM() LIMIT 1''',
-      [translationId, bookId, chapter, verse, quizQuestionQualityVersion],
+      [
+        translationId,
+        bookId,
+        chapter,
+        verse,
+        quizQuestionQualityVersion,
+        if (source != null) source.storageValue,
+      ],
     );
     if (rows.isEmpty) return false;
     _database.execute(
@@ -1041,36 +1088,54 @@ final class SqlitePlanRepository {
     return true;
   }
 
-  Future<void> saveQuizQuestions(List<ValidatedQuizQuestion> questions) async {
+  Future<void> saveQuizQuestions(
+    List<ValidatedQuizQuestion> questions, {
+    bool replaceExisting = false,
+  }) async {
     if (questions.isEmpty) return;
     final now = DateTime.now().toUtc().toIso8601String();
-    _database.execute('BEGIN IMMEDIATE');
-    try {
-      for (final question in questions) {
-        _database.execute(
-          '''
+    final insertSql = replaceExisting
+        ? '''
+          INSERT INTO quiz_question
+          (translation_id, book_id, chapter, verse, start_offset, end_offset,
+           word, part_of_speech, meaning, reference,
+           source, quality_version, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(translation_id, book_id, chapter, verse, start_offset,
+                      end_offset)
+          DO UPDATE SET word = excluded.word,
+                        part_of_speech = excluded.part_of_speech,
+                        meaning = excluded.meaning,
+                        reference = excluded.reference,
+                        source = excluded.source,
+                        quality_version = excluded.quality_version,
+                        created_at = excluded.created_at
+        '''
+        : '''
           INSERT OR IGNORE INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
            word, part_of_speech, meaning, reference,
            source, quality_version, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''',
-          [
-            question.translationId,
-            question.bookId,
-            question.chapter,
-            question.verse,
-            question.start,
-            question.end,
-            question.word,
-            question.partOfSpeech,
-            compactQuizMeaning(question.word, question.meaning),
-            question.reference,
-            question.source.storageValue,
-            quizQuestionQualityVersion,
-            now,
-          ],
-        );
+        ''';
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      for (final question in questions) {
+        _database.execute(insertSql, [
+          question.translationId,
+          question.bookId,
+          question.chapter,
+          question.verse,
+          question.start,
+          question.end,
+          question.word,
+          question.partOfSpeech,
+          compactQuizMeaning(question.word, question.meaning),
+          question.reference,
+          question.source.storageValue,
+          quizQuestionQualityVersion,
+          now,
+        ]);
       }
       _database.execute('COMMIT');
     } catch (_) {

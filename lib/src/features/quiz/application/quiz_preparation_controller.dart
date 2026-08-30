@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../domain/quiz_result.dart';
+import '../domain/quiz_question_source.dart';
 import '../domain/quiz_scope.dart';
 import 'quiz_generation_service.dart';
 
@@ -87,11 +88,17 @@ final class QuizPreparationController extends ChangeNotifier {
     int generation,
   ) async {
     try {
+      final preferredSource = await service.modelAnsweringAvailable
+          ? QuizQuestionSource.model
+          : null;
       final questions = <PendingQuizQuestion>[];
       final ids = <int>{};
       for (final scope in _effectiveScopes) {
         for (final question
-            in await service.repository.listQuizQuestionsForPractice(scope)) {
+            in await service.repository.listQuizQuestionsForPractice(
+              scope,
+              preferredSource: preferredSource,
+            )) {
           // The repository query is range-limited as well. Keep this guard at
           // the entry boundary so an old/corrupt cache can never surface a
           // question from outside the plan passage.

@@ -235,24 +235,10 @@ class AchievementBadgeArtwork extends StatelessWidget {
       );
     }
     if (compact) {
-      return Image.asset(
-        achievementBadgeAssetPath(progress.definition.id),
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
-      );
+      return _badgeImage(size);
     }
     if (!showSymbol) {
-      return Image.asset(
-        achievementBadgeAssetPath(progress.definition.id),
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
-      );
+      return _badgeImage(size);
     }
     return SizedBox(
       width: size,
@@ -260,14 +246,7 @@ class AchievementBadgeArtwork extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Image.asset(
-            achievementBadgeAssetPath(progress.definition.id),
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-            errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
-          ),
+          _badgeImage(size),
           Container(
             width: size * .34,
             height: size * .34,
@@ -285,6 +264,17 @@ class AchievementBadgeArtwork extends StatelessWidget {
       ),
     );
   }
+
+  Widget _badgeImage(double size) => ClipOval(
+    child: Image.asset(
+      achievementBadgeAssetPath(progress.definition.id),
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
+    ),
+  );
 
   Widget _fallbackBadgeIcon(double size) => Container(
     width: size,

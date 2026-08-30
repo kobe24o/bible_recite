@@ -23,6 +23,7 @@ import '../../quiz/application/quiz_bank_sync.dart';
 import '../../quiz/application/quiz_bank_local_validator.dart';
 import '../../quiz/application/quiz_providers.dart';
 import '../../quiz/data/quiz_bank_feed_client.dart';
+import '../../quiz/domain/quiz_question_source.dart';
 import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
@@ -1011,25 +1012,21 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     setState(() => _working = true);
     try {
       final scopes = await _randomQuizScopes(options.scopes, scripture);
-      var questions = await widget.repository
+      final service = await ref.read(quizGenerationServiceProvider.future);
+      final outcome = await service.prepareScopes(scopes);
+      final modelError = outcome.error;
+      final preferredSource = await service.modelAnsweringAvailable
+          ? QuizQuestionSource.model
+          : null;
+      // Preparation applies the model-first rule. If a model question exists,
+      // prioritize it while still filling a larger random set with local or
+      // cloud fallback questions when necessary.
+      final questions = await widget.repository
           .listRandomQuizQuestionsForPracticeInScopes(
             scopes,
             options.maxQuestionCount,
+            preferredSource: preferredSource,
           );
-      String? modelError;
-      // Random practice follows the same fallback rule as every scripture
-      // entry: do not call the model when its own local range already has
-      // questions; only try it after the scoped local selection is empty.
-      if (questions.isEmpty) {
-        final service = await ref.read(quizGenerationServiceProvider.future);
-        final outcome = await service.prepareScopes(scopes);
-        modelError = outcome.error;
-        questions = await widget.repository
-            .listRandomQuizQuestionsForPracticeInScopes(
-              scopes,
-              options.maxQuestionCount,
-            );
-      }
       if (!mounted) return;
       if (questions.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(

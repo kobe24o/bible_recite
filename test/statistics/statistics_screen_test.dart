@@ -167,6 +167,10 @@ void main() {
       find.descendant(of: detailArtwork, matching: find.byType(Icon)),
       findsNothing,
     );
+    expect(
+      find.descendant(of: detailArtwork, matching: find.byType(ClipOval)),
+      findsOneWidget,
+    );
     expect(find.textContaining('当前进度：100%'), findsOneWidget);
     final timeText = tester
         .widgetList<Text>(find.byType(Text))
