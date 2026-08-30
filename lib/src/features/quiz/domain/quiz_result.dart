@@ -1,3 +1,5 @@
+import 'quiz_question_source.dart';
+
 /// A saved, already-answered quiz question.
 final class StoredQuizQuestion {
   const StoredQuizQuestion({
@@ -15,6 +17,7 @@ final class StoredQuizQuestion {
     required this.answered,
     required this.correct,
     required this.answeredAt,
+    this.source = QuizQuestionSource.local,
   });
 
   final int id;
@@ -31,6 +34,7 @@ final class StoredQuizQuestion {
   final bool answered;
   final bool? correct;
   final DateTime? answeredAt;
+  final QuizQuestionSource source;
 
   int get length => end - start;
 }
@@ -49,6 +53,7 @@ final class PendingQuizQuestion extends StoredQuizQuestion {
     required super.partOfSpeech,
     required super.meaning,
     required super.reference,
+    super.source,
   }) : super(answered: false, correct: null, answeredAt: null);
 }
 

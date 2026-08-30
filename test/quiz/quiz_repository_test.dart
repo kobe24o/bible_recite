@@ -1,6 +1,7 @@
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_model_settings.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_question_source.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -139,6 +140,35 @@ void main() {
       );
     },
   );
+
+  test('persists cloud source for imported questions', () async {
+    final imported = questionFor();
+    await repository.importQuizBankQuestions([
+      ValidatedQuizQuestion(
+        reference: imported.reference,
+        translationId: imported.translationId,
+        bookId: imported.bookId,
+        chapter: imported.chapter,
+        verse: imported.verse,
+        start: imported.start,
+        end: imported.end,
+        word: imported.word,
+        partOfSpeech: imported.partOfSpeech,
+        meaning: imported.meaning,
+        verseText: imported.verseText,
+        source: QuizQuestionSource.cloud,
+      ),
+    ]);
+
+    expect(
+      (await repository.listPendingQuizQuestions(scopeFor())).single.source,
+      QuizQuestionSource.cloud,
+    );
+    expect(
+      (await repository.listQuizBankQuestions()).single.source,
+      QuizQuestionSource.cloud,
+    );
+  });
 
   test(
     'import refreshes a matching question meaning without resetting history',

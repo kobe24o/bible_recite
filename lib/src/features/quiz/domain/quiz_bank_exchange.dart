@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'quiz_models.dart';
+import 'quiz_question_source.dart';
 
 /// Portable question-only format. It intentionally excludes answer history,
 /// statistics and model credentials so a bank can be shared safely.
@@ -25,6 +26,7 @@ final class QuizBankExchange {
               'partOfSpeech': question.partOfSpeech,
               'meaning': compactQuizMeaning(question.word, question.meaning),
               'reference': question.reference,
+              'source': question.source.storageValue,
             },
         ],
       });
@@ -59,6 +61,7 @@ final class QuizBankExchange {
             word: word,
             partOfSpeech: _text(data['partOfSpeech'], 'partOfSpeech'),
             meaning: _text(data['meaning'], 'meaning'),
+            source: QuizQuestionSourcePresentation.fromStorage(data['source']),
           );
         })
         .toList(growable: false);

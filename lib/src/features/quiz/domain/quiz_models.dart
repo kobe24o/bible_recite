@@ -1,3 +1,5 @@
+import 'quiz_question_source.dart';
+
 /// A verse sent to the model for question generation.  `reference` and
 /// `text` are the only fields included in the model prompt.
 final class QuizGenerationVerse {
@@ -36,6 +38,7 @@ final class ValidatedQuizQuestion {
     required this.partOfSpeech,
     required this.meaning,
     required this.verseText,
+    this.source = QuizQuestionSource.local,
   });
 
   final String reference;
@@ -49,6 +52,7 @@ final class ValidatedQuizQuestion {
   final String partOfSpeech;
   final String meaning;
   final String verseText;
+  final QuizQuestionSource source;
 
   int get length => end - start;
 
@@ -63,6 +67,7 @@ final class ValidatedQuizQuestion {
     word: word,
     partOfSpeech: partOfSpeech,
     meaning: meaning,
+    source: source,
   );
 }
 
@@ -80,6 +85,7 @@ final class QuizBankQuestion {
     required this.word,
     required this.partOfSpeech,
     required this.meaning,
+    this.source = QuizQuestionSource.local,
   });
 
   final String reference;
@@ -92,6 +98,7 @@ final class QuizBankQuestion {
   final String word;
   final String partOfSpeech;
   final String meaning;
+  final QuizQuestionSource source;
 
   int get length => end - start;
 }

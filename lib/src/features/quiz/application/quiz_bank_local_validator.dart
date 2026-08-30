@@ -1,6 +1,7 @@
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../domain/quiz_models.dart';
+import '../domain/quiz_question_source.dart';
 
 /// Validates portable question metadata against the scripture installed on
 /// this device. Imported text is never used as a source of scripture.
@@ -10,8 +11,9 @@ final class QuizBankLocalValidator {
   final ScriptureRepository _scripture;
 
   Future<QuizBankLocalValidation> validate(
-    Iterable<QuizBankQuestion> questions,
-  ) async {
+    Iterable<QuizBankQuestion> questions, {
+    QuizQuestionSource? source,
+  }) async {
     final accepted = <ValidatedQuizQuestion>[];
     var rejected = 0;
     final byChapter =
@@ -66,6 +68,7 @@ final class QuizBankLocalValidator {
             partOfSpeech: question.partOfSpeech,
             meaning: compactQuizMeaning(question.word, question.meaning),
             verseText: unit.text,
+            source: source ?? question.source,
           ),
         );
       }

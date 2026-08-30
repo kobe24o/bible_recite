@@ -346,7 +346,7 @@ void main() {
         omittedCount: 0,
         reorderedCount: 0,
         accuracy: 1,
-        completedAt: DateTime(2026, 8, 26),
+        completedAt: DateTime.now(),
       ),
     );
 

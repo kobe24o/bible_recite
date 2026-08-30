@@ -4,6 +4,7 @@ import '../../scripture/domain/scripture_repository.dart';
 import '../data/quiz_model_client.dart';
 import '../domain/quiz_model_settings.dart';
 import '../domain/quiz_models.dart';
+import '../domain/quiz_question_source.dart';
 import '../domain/quiz_question_validator.dart';
 import '../domain/quiz_scope.dart';
 
@@ -135,36 +136,99 @@ final class QuizGenerationService {
       // Only require configuration when one or more verses actually need a
       // new question from the remote model.
       final settings = await _loadSettings();
-      if (!settings.modelAnsweringEnabled) {
-        return const QuizGenerationOutcome(error: '本地题库没有该范围可用题目');
+      final modelAvailable =
+          settings.modelAnsweringEnabled && settings.isConfigured;
+      final questions = <ValidatedQuizQuestion>[];
+      final modelVerseKeys = <(String book, int chapter, int verse)>{};
+      Object? modelFailure;
+      if (modelAvailable) {
+        for (final bookVerses in _groupByBook(generationVerses).values) {
+          try {
+            var valid = _validate(
+              await client.generate(settings, bookVerses),
+              bookVerses,
+              source: QuizQuestionSource.model,
+            );
+            if (valid.isEmpty) {
+              valid = _validate(
+                await client.generate(settings, bookVerses),
+                bookVerses,
+                source: QuizQuestionSource.model,
+              );
+            }
+            questions.addAll(valid);
+          } on Object catch (error) {
+            modelFailure ??= error;
+          }
+        }
       }
-      if (!settings.isConfigured) {
+      if (questions.isNotEmpty) {
+        await repository.saveQuizQuestions(questions);
+        for (final question in questions) {
+          if (await repository.hasPendingQuizQuestion(
+            translationId: question.translationId,
+            bookId: question.bookId,
+            chapter: question.chapter,
+            verse: question.verse,
+          )) {
+            modelVerseKeys.add((
+              question.bookId,
+              question.chapter,
+              question.verse,
+            ));
+          }
+        }
+      }
+      var fallbackCount = 0;
+      var missingCount = 0;
+      for (final verse in generationVerses) {
+        final key = (verse.bookId, verse.chapter, verse.verse);
+        if (modelVerseKeys.contains(key)) continue;
+        if (await repository.requeueRandomQuizQuestion(
+          translationId: verse.translationId,
+          bookId: verse.bookId,
+          chapter: verse.chapter,
+          verse: verse.verse,
+        )) {
+          fallbackCount++;
+        } else {
+          missingCount++;
+        }
+      }
+      if (missingCount == 0) {
+        return QuizGenerationOutcome(
+          generated: questions.length,
+          skippedCachedVerses: fallbackCount,
+        );
+      }
+      if (!modelAvailable && settings.modelAnsweringEnabled) {
         return QuizGenerationOutcome(
           error: settings.missingConfigurationMessage,
         );
       }
-      final questions = <ValidatedQuizQuestion>[];
-      for (final bookVerses in _groupByBook(generationVerses).values) {
-        var valid = _validate(
-          await client.generate(settings, bookVerses),
-          bookVerses,
+      if (!modelAvailable && !settings.modelAnsweringEnabled) {
+        return const QuizGenerationOutcome(error: '本地题库没有该范围可用题目');
+      }
+      final failure = modelFailure;
+      if (questions.isEmpty && failure is QuizModelException) {
+        return QuizGenerationOutcome(
+          error: failure.message,
         );
-        if (valid.isEmpty) {
-          valid = _validate(
-            await client.generate(settings, bookVerses),
-            bookVerses,
-          );
-        }
-        questions.addAll(valid);
+      }
+      if (questions.isEmpty && modelFailure != null) {
+        return QuizGenerationOutcome(error: '生成答题题目失败：$modelFailure');
       }
       if (questions.isEmpty) {
         return const QuizGenerationOutcome(error: '模型没有返回有效的答题题目，请稍后重试');
       }
-      await repository.saveQuizQuestions(questions);
-      return QuizGenerationOutcome(generated: questions.length);
-    } on QuizModelException catch (error) {
-      return QuizGenerationOutcome(error: error.message);
+      return QuizGenerationOutcome(
+        generated: questions.length,
+        error: '该范围仍有 $missingCount 节经文没有可用题目',
+      );
     } on Object catch (error) {
+      if (error is QuizModelException) {
+        return QuizGenerationOutcome(error: error.message);
+      }
       return QuizGenerationOutcome(error: '生成答题题目失败：$error');
     }
   }
@@ -187,10 +251,15 @@ final class QuizGenerationService {
 
   List<ValidatedQuizQuestion> _validate(
     Object decoded,
-    List<QuizGenerationVerse> verses,
-  ) {
+    List<QuizGenerationVerse> verses, {
+    QuizQuestionSource source = QuizQuestionSource.local,
+  }) {
     try {
-      return validator.validate(verses: verses, decodedJson: decoded);
+      return validator.validate(
+        verses: verses,
+        decodedJson: decoded,
+        source: source,
+      );
     } on FormatException {
       return const [];
     }

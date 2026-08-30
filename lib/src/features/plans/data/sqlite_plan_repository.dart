@@ -6,6 +6,7 @@ import '../../review/domain/ebbinghaus_models.dart';
 import '../../review/domain/ebbinghaus_scheduler.dart';
 import '../../quiz/domain/quiz_models.dart';
 import '../../quiz/domain/quiz_model_settings.dart';
+import '../../quiz/domain/quiz_question_source.dart';
 import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/domain/quiz_scope.dart';
 import '../../statistics/domain/achievement.dart';
@@ -163,6 +164,7 @@ final class SqlitePlanRepository {
         part_of_speech TEXT NOT NULL,
         meaning TEXT NOT NULL,
         reference TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'local',
         quality_version INTEGER NOT NULL DEFAULT 1,
         answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
         is_correct INTEGER,
@@ -177,6 +179,11 @@ final class SqlitePlanRepository {
     if (!quizQuestionColumns.contains('quality_version')) {
       _database.execute(
         'ALTER TABLE quiz_question ADD COLUMN quality_version INTEGER NOT NULL DEFAULT 1',
+      );
+    }
+    if (!quizQuestionColumns.contains('source')) {
+      _database.execute(
+        "ALTER TABLE quiz_question ADD COLUMN source TEXT NOT NULL DEFAULT 'local'",
       );
     }
     _database.execute('''CREATE INDEX IF NOT EXISTS idx_quiz_question_scope
@@ -238,10 +245,20 @@ final class SqlitePlanRepository {
         part_of_speech TEXT NOT NULL,
         meaning TEXT NOT NULL,
         reference TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'cloud',
         staged_at TEXT NOT NULL,
         UNIQUE(revision, translation_id, book_id, chapter, verse, start_offset, end_offset)
       )
     ''');
+    final stagingColumns = _database
+        .select('PRAGMA table_info(quiz_bank_snapshot_staging)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!stagingColumns.contains('source')) {
+      _database.execute(
+        "ALTER TABLE quiz_bank_snapshot_staging ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud'",
+      );
+    }
     _database.execute('''
       CREATE TABLE IF NOT EXISTS plan_schedule_span (
         plan_id INTEGER PRIMARY KEY REFERENCES memorization_plan(id) ON DELETE CASCADE,
@@ -717,7 +734,7 @@ final class SqlitePlanRepository {
     final rows = _database.select(
       '''
       SELECT id, translation_id, book_id, chapter, verse, start_offset,
-        end_offset, word, part_of_speech, meaning, reference
+        end_offset, word, part_of_speech, meaning, reference, source
       FROM quiz_question
       WHERE translation_id = ? AND book_id = ?
         AND ((chapter > ? OR (chapter = ? AND verse >= ?))
@@ -784,7 +801,7 @@ final class SqlitePlanRepository {
     try {
       final rows = _database.select(
         '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
-          end_offset, word, part_of_speech, meaning, reference
+          end_offset, word, part_of_speech, meaning, reference, source
         FROM quiz_question WHERE quality_version = ?
         ORDER BY RANDOM() LIMIT ?''',
         [quizQuestionQualityVersion, count],
@@ -831,7 +848,7 @@ final class SqlitePlanRepository {
     try {
       final rows = _database.select(
         '''SELECT id, translation_id, book_id, chapter, verse, start_offset,
-          end_offset, word, part_of_speech, meaning, reference
+          end_offset, word, part_of_speech, meaning, reference, source
         FROM quiz_question
         WHERE quality_version = ? AND (${conditions.join(' OR ')})
         ORDER BY RANDOM() LIMIT ?''',
@@ -859,7 +876,7 @@ final class SqlitePlanRepository {
   Future<List<QuizBankQuestion>> listQuizBankQuestions() async {
     final rows = _database.select(
       '''SELECT translation_id, book_id, chapter, verse, start_offset,
-        end_offset, word, part_of_speech, meaning, reference
+        end_offset, word, part_of_speech, meaning, reference, source
       FROM quiz_question WHERE quality_version = ?
       ORDER BY translation_id, book_id, chapter, verse, start_offset, end_offset''',
       [quizQuestionQualityVersion],
@@ -877,6 +894,7 @@ final class SqlitePlanRepository {
             word: row['word'] as String,
             partOfSpeech: row['part_of_speech'] as String,
             meaning: row['meaning'] as String,
+            source: QuizQuestionSourcePresentation.fromStorage(row['source']),
           ),
         )
         .toList(growable: false);
@@ -1034,8 +1052,8 @@ final class SqlitePlanRepository {
           INSERT OR IGNORE INTO quiz_question
           (translation_id, book_id, chapter, verse, start_offset, end_offset,
            word, part_of_speech, meaning, reference,
-           quality_version, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           source, quality_version, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
           [
             question.translationId,
@@ -1048,6 +1066,7 @@ final class SqlitePlanRepository {
             question.partOfSpeech,
             compactQuizMeaning(question.word, question.meaning),
             question.reference,
+            question.source.storageValue,
             quizQuestionQualityVersion,
             now,
           ],
@@ -1077,7 +1096,7 @@ final class SqlitePlanRepository {
         final meaning = compactQuizMeaning(question.word, question.meaning);
         final existing = _database.select(
           '''SELECT id, word, part_of_speech, meaning, reference,
-                    quality_version
+                    quality_version, source
              FROM quiz_question
              WHERE translation_id = ? AND book_id = ? AND chapter = ?
                AND verse = ? AND start_offset = ? AND end_offset = ?''',
@@ -1096,8 +1115,8 @@ final class SqlitePlanRepository {
             INSERT INTO quiz_question
             (translation_id, book_id, chapter, verse, start_offset, end_offset,
              word, part_of_speech, meaning, reference,
-             quality_version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             source, quality_version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ''',
             [
               question.translationId,
@@ -1110,6 +1129,7 @@ final class SqlitePlanRepository {
               question.partOfSpeech,
               meaning,
               question.reference,
+              question.source.storageValue,
               quizQuestionQualityVersion,
               now,
             ],
@@ -1123,18 +1143,20 @@ final class SqlitePlanRepository {
             row['part_of_speech'] != question.partOfSpeech ||
             row['meaning'] != meaning ||
             row['reference'] != question.reference ||
+            row['source'] != question.source.storageValue ||
             row['quality_version'] != quizQuestionQualityVersion;
         if (!changed) continue;
         _database.execute(
           '''UPDATE quiz_question
              SET word = ?, part_of_speech = ?, meaning = ?, reference = ?,
-                 quality_version = ?
+                 source = ?, quality_version = ?
              WHERE id = ?''',
           [
             question.word,
             question.partOfSpeech,
             meaning,
             question.reference,
+            question.source.storageValue,
             quizQuestionQualityVersion,
             row['id'],
           ],
@@ -1169,14 +1191,16 @@ final class SqlitePlanRepository {
           '''
           INSERT INTO quiz_bank_snapshot_staging
           (revision, translation_id, book_id, chapter, verse, start_offset,
-           end_offset, word, part_of_speech, meaning, reference, staged_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           end_offset, word, part_of_speech, meaning, reference, source,
+           staged_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(revision, translation_id, book_id, chapter, verse,
                       start_offset, end_offset)
           DO UPDATE SET word = excluded.word,
                         part_of_speech = excluded.part_of_speech,
                         meaning = excluded.meaning,
                         reference = excluded.reference,
+                        source = excluded.source,
                         staged_at = excluded.staged_at
         ''',
           [
@@ -1191,6 +1215,7 @@ final class SqlitePlanRepository {
             question.partOfSpeech,
             compactQuizMeaning(question.word, question.meaning),
             question.reference,
+            question.source.storageValue,
             now,
           ],
         );
@@ -1223,11 +1248,12 @@ final class SqlitePlanRepository {
       _database.execute(
         '''
         INSERT INTO quiz_question
-        (translation_id, book_id, chapter, verse, start_offset, end_offset,
-         word, part_of_speech, meaning, reference, quality_version, answered,
+         (translation_id, book_id, chapter, verse, start_offset, end_offset,
+         word, part_of_speech, meaning, reference, source, quality_version,
+         answered,
          created_at)
         SELECT translation_id, book_id, chapter, verse, start_offset, end_offset,
-          word, part_of_speech, meaning, reference, ?, 0, staged_at
+          word, part_of_speech, meaning, reference, source, ?, 0, staged_at
         FROM quiz_bank_snapshot_staging WHERE revision = ?
         ORDER BY translation_id, book_id, chapter, verse, start_offset, end_offset
       ''',
@@ -1494,6 +1520,7 @@ final class SqlitePlanRepository {
     partOfSpeech: row['part_of_speech'] as String,
     meaning: row['meaning'] as String,
     reference: row['reference'] as String,
+    source: QuizQuestionSourcePresentation.fromStorage(row['source']),
   );
 
   /// quiz_result used to cascade-delete history with quiz_question. A replace
@@ -1556,6 +1583,7 @@ final class SqlitePlanRepository {
           part_of_speech TEXT NOT NULL,
           meaning TEXT NOT NULL,
           reference TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'local',
           quality_version INTEGER NOT NULL DEFAULT 1,
           answered INTEGER NOT NULL DEFAULT 0 CHECK(answered IN (0, 1)),
           is_correct INTEGER,
@@ -1567,10 +1595,10 @@ final class SqlitePlanRepository {
         INSERT INTO quiz_question_without_verse_text
         (id, translation_id, book_id, chapter, verse, start_offset, end_offset,
          word, part_of_speech, meaning, reference, quality_version, answered,
-         is_correct, answered_at, created_at)
+         source, is_correct, answered_at, created_at)
         SELECT id, translation_id, book_id, chapter, verse, start_offset, end_offset,
           word, part_of_speech, meaning, reference, quality_version, answered,
-          is_correct, answered_at, created_at
+          source, is_correct, answered_at, created_at
         FROM quiz_question
       ''');
       _database.execute('DROP TABLE quiz_question');

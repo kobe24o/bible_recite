@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/achievement.dart';
+import 'achievement_badge_assets.dart';
 
 Future<void> showAchievementUnlockDialog(
   BuildContext context,
@@ -234,26 +235,23 @@ class AchievementBadgeArtwork extends StatelessWidget {
       );
     }
     if (compact) {
-      return Container(
+      return Image.asset(
+        achievementBadgeAssetPath(progress.definition.id),
         width: size,
         height: size,
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFF4C9),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          _symbolFor(progress.definition.id),
-          size: size * .58,
-          color: const Color(0xFF7B5615),
-        ),
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
       );
     }
     if (!showSymbol) {
       return Image.asset(
-        'assets/achievements/golden_bible_badge.png',
+        achievementBadgeAssetPath(progress.definition.id),
         width: size,
         height: size,
+        fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
       );
     }
     return SizedBox(
@@ -263,10 +261,12 @@ class AchievementBadgeArtwork extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Image.asset(
-            'assets/achievements/golden_bible_badge.png',
+            achievementBadgeAssetPath(progress.definition.id),
             width: size,
             height: size,
+            fit: BoxFit.contain,
             filterQuality: FilterQuality.high,
+            errorBuilder: (_, _, _) => _fallbackBadgeIcon(size),
           ),
           Container(
             width: size * .34,
@@ -285,6 +285,20 @@ class AchievementBadgeArtwork extends StatelessWidget {
       ),
     );
   }
+
+  Widget _fallbackBadgeIcon(double size) => Container(
+    width: size,
+    height: size,
+    decoration: const BoxDecoration(
+      color: Color(0xFFFFF4C9),
+      shape: BoxShape.circle,
+    ),
+    child: Icon(
+      _symbolFor(progress.definition.id),
+      size: size * .58,
+      color: const Color(0xFF7B5615),
+    ),
+  );
 }
 
 IconData _symbolFor(String id) {

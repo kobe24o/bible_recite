@@ -13,6 +13,7 @@ import '../../recitation/domain/speech_recognizer.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../domain/quiz_result.dart';
+import '../domain/quiz_question_source.dart';
 import 'quiz_practice_request.dart';
 
 final _quizVerseTextProvider =
@@ -398,6 +399,20 @@ class _QuestionPage extends ConsumerWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Chip(
+            key: Key('quiz-source-${question.source.storageValue}'),
+            avatar: const Icon(Icons.label_outline_rounded, size: 16),
+            label: Text(
+              chinese
+                  ? '来源：${question.source.labelZh}'
+                  : 'Source: ${question.source.labelEn}',
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        const SizedBox(height: 4),
         Text(
           chinese ? '请朗读被隐藏的词语' : 'Read aloud the hidden word',
           style: Theme.of(context).textTheme.bodyMedium,

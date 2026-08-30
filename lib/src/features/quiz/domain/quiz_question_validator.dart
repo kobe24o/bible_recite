@@ -1,4 +1,5 @@
 import 'quiz_models.dart';
+import 'quiz_question_source.dart';
 
 /// Validates untrusted model JSON output against the original verses.
 ///
@@ -16,6 +17,7 @@ final class QuizQuestionValidator {
   List<ValidatedQuizQuestion> validate({
     required List<QuizGenerationVerse> verses,
     required Object decodedJson,
+    QuizQuestionSource source = QuizQuestionSource.local,
   }) {
     final items = switch (decodedJson) {
       List<Object?> list => list,
@@ -79,6 +81,7 @@ final class QuizQuestionValidator {
           partOfSpeech: partOfSpeech.trim(),
           meaning: compactQuizMeaning(word, meaning),
           verseText: verse.text,
+          source: source,
         ),
       );
     }

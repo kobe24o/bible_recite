@@ -10,6 +10,7 @@ import 'quiz_bank_local_validator.dart';
 import '../domain/quiz_bank_exchange.dart';
 import '../domain/quiz_bank_index.dart';
 import '../domain/quiz_models.dart';
+import '../domain/quiz_question_source.dart';
 
 const officialQuizBankGcoreBaseUrl =
     'https://gcore.jsdelivr.net/gh/kobe24o/bible-recite-plans@main/';
@@ -125,9 +126,10 @@ Future<QuizBankSyncResult> syncQuizBank({
         shard: shard,
         indexSource: newest.source,
       );
-      final validated = await QuizBankLocalValidator(
-        scripture,
-      ).validate(QuizBankExchange.decode(response.text));
+      final validated = await QuizBankLocalValidator(scripture).validate(
+        QuizBankExchange.decode(response.text),
+        source: QuizQuestionSource.cloud,
+      );
       if (replacing) {
         await repository.stageQuizBankSnapshot(
           index.revision,
@@ -204,9 +206,10 @@ Future<QuizBankImportResult> importBundledQuizBank({
   if (bytes.length != shard.bytes || bankHash != shard.sha256) {
     throw const FormatException('内置题库文件校验失败');
   }
-  final validation = await QuizBankLocalValidator(
-    scripture,
-  ).validate(QuizBankExchange.decode(bankText));
+  final validation = await QuizBankLocalValidator(scripture).validate(
+    QuizBankExchange.decode(bankText),
+    source: QuizQuestionSource.cloud,
+  );
   final result = await repository.importQuizBankQuestions(validation.accepted);
   await repository.setSetting(_quizBankBundledHashKey, bankHash);
   await repository.setSetting(

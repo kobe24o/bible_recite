@@ -5,6 +5,7 @@ import 'package:bible_recite/src/features/quiz/application/quiz_generation_servi
 import 'package:bible_recite/src/features/quiz/data/quiz_model_client.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_model_settings.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_question_source.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
@@ -129,7 +130,49 @@ void main() {
     final pending = await repository.listPendingQuizQuestions(scope());
     expect(pending, hasLength(1));
     expect(pending.single.word, '世人');
+    expect(pending.single.source, QuizQuestionSource.model);
   });
+
+  test(
+    'falls back to an existing local question when model generation fails',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: scripture(),
+        client: QuizModelClient(
+          httpClient: MockClient((_) async => http.Response('失败', 503)),
+        ),
+        settingsLoader: () async => settings,
+      );
+
+      final outcome = await service.prepare(scope());
+
+      expect(outcome.success, isTrue, reason: outcome.error);
+      final pending = await repository.listPendingQuizQuestions(scope());
+      expect(pending, hasLength(1));
+      expect(pending.single.source, QuizQuestionSource.local);
+    },
+  );
 
   test('skips cached pending verses without invoking the model', () async {
     await repository.saveQuizQuestions([

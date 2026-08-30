@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_result.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_question_source.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
 import 'package:bible_recite/src/features/quiz/presentation/quiz_practice_request.dart';
 import 'package:bible_recite/src/features/quiz/presentation/quiz_practice_screen.dart';
@@ -43,6 +44,18 @@ void main() {
     expect(find.text('答对了！'), findsOneWidget);
     expect(find.textContaining('正确答案'), findsOneWidget);
     expect(find.text('世人'), findsWidgets);
+  });
+
+  testWidgets('shows the question source for later cleaning', (tester) async {
+    final recognizer = FakeQuizRecognizer();
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      _app(repository, recognizer, source: QuizQuestionSource.model),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('来源：大模型生成'), findsOneWidget);
   });
 
   testWidgets('hint shows length but never exposes answer letters', (
@@ -151,40 +164,47 @@ void main() {
   });
 }
 
-Widget _app(SqlitePlanRepository repository, FakeQuizRecognizer recognizer) =>
-    ProviderScope(
-      overrides: [
-        planRepositoryProvider.overrideWith((ref) async => repository),
-        scriptureRepositoryProvider.overrideWith(
-          (ref) async => _FakeScripture(),
+Widget _app(
+  SqlitePlanRepository repository,
+  FakeQuizRecognizer recognizer, {
+  QuizQuestionSource source = QuizQuestionSource.local,
+}) => ProviderScope(
+  overrides: [
+    planRepositoryProvider.overrideWith((ref) async => repository),
+    scriptureRepositoryProvider.overrideWith((ref) async => _FakeScripture()),
+  ],
+  child: MaterialApp(
+    locale: const Locale('zh'),
+    supportedLocales: const [Locale('zh'), Locale('en')],
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    home: QuizPracticeScreen(
+      request: QuizPracticeRequest(
+        scope: const QuizScope(
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 3,
+          startVerse: 16,
+          endChapter: 3,
+          endVerse: 17,
         ),
-      ],
-      child: MaterialApp(
-        locale: const Locale('zh'),
-        supportedLocales: const [Locale('zh'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
+        questions: [
+          _question(16, source: source),
+          _question(17, source: source),
         ],
-        home: QuizPracticeScreen(
-          request: QuizPracticeRequest(
-            scope: const QuizScope(
-              translationId: 'cmn-cu89s',
-              bookId: 'JHN',
-              startChapter: 3,
-              startVerse: 16,
-              endChapter: 3,
-              endVerse: 17,
-            ),
-            questions: [_question(16), _question(17)],
-          ),
-          recognizer: recognizer,
-        ),
       ),
-    );
+      recognizer: recognizer,
+    ),
+  ),
+);
 
-PendingQuizQuestion _question(int verse) => PendingQuizQuestion(
+PendingQuizQuestion _question(
+  int verse, {
+  QuizQuestionSource source = QuizQuestionSource.local,
+}) => PendingQuizQuestion(
   id: verse == 16 ? 1 : 2,
   translationId: 'cmn-cu89s',
   bookId: 'JHN',
@@ -196,6 +216,7 @@ PendingQuizQuestion _question(int verse) => PendingQuizQuestion(
   partOfSpeech: '名词',
   meaning: '世上的人',
   reference: verse == 16 ? '3:16' : '3:17',
+  source: source,
 );
 
 final class _FakeScripture implements ScriptureRepository {
