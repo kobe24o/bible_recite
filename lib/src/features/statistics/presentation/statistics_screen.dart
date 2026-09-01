@@ -849,7 +849,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     'app.biblerecite/plan_json_store',
   );
   late Future<_QuizBankCardData> _data;
-  bool _working = false;
+  bool _busy = false;
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -903,7 +904,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                         Expanded(
                           child: OutlinedButton.icon(
                             key: const Key('quiz-bank-random-practice'),
-                            onPressed: _working ? null : _randomPractice,
+                            onPressed: _busy ? null : _randomPractice,
                             icon: const Icon(Icons.casino_outlined),
                             label: const Text('随机答题'),
                           ),
@@ -912,7 +913,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                         Expanded(
                           child: OutlinedButton.icon(
                             key: const Key('quiz-bank-import'),
-                            onPressed: _working ? null : _import,
+                            onPressed: _busy ? null : _import,
                             icon: const Icon(Icons.file_open_outlined),
                             label: const Text('导入题库'),
                           ),
@@ -925,7 +926,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                         Expanded(
                           child: OutlinedButton.icon(
                             key: const Key('quiz-bank-export'),
-                            onPressed: _working ? null : _export,
+                            onPressed: _busy ? null : _export,
                             icon: const Icon(Icons.ios_share_outlined),
                             label: const Text('导出题库'),
                           ),
@@ -934,8 +935,8 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
                         Expanded(
                           child: FilledButton.icon(
                             key: const Key('quiz-bank-sync'),
-                            onPressed: _working ? null : _sync,
-                            icon: _working
+                            onPressed: _busy ? null : _sync,
+                            icon: _syncing
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
@@ -961,7 +962,10 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
   );
 
   Future<void> _sync() async {
-    setState(() => _working = true);
+    setState(() {
+      _busy = true;
+      _syncing = true;
+    });
     try {
       final result = await syncQuizBank(
         repository: widget.repository,
@@ -996,7 +1000,12 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
         ).showSnackBar(const SnackBar(content: Text('题库同步失败，请检查网络后重试')));
       }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _syncing = false;
+        });
+      }
     }
   }
 
@@ -1009,12 +1018,15 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
       builder: (_) => RandomQuizOptionsDialog(books: books),
     );
     if (options == null || !mounted) return;
-    setState(() => _working = true);
+    setState(() => _busy = true);
     try {
       final scopes = await _randomQuizScopes(options.scopes, scripture);
       final service = await ref.read(quizGenerationServiceProvider.future);
-      final outcome = await service.prepareScopes(scopes);
-      final modelError = outcome.modelError ?? outcome.error;
+      final outcome = await service.prepareScopes(
+        scopes,
+        maxModelCandidateCount: options.maxQuestionCount,
+      );
+      final modelError = outcome.modelError;
       final preferredSource = await service.modelAnsweringAvailable
           ? QuizQuestionSource.model
           : null;
@@ -1067,7 +1079,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
         ).showSnackBar(SnackBar(content: Text('随机答题准备失败：$error')));
       }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -1170,7 +1182,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
     );
     final selected = await openFile(acceptedTypeGroups: const [jsonType]);
     if (selected == null) return;
-    setState(() => _working = true);
+    setState(() => _busy = true);
     try {
       final bytes = await selected.readAsBytes();
       if (bytes.length > 10 * 1024 * 1024) {
@@ -1200,7 +1212,7 @@ class _QuizBankCardState extends ConsumerState<_QuizBankCard> {
         ).showSnackBar(SnackBar(content: Text('导入题库失败：$error')));
       }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 

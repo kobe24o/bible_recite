@@ -175,50 +175,137 @@ void main() {
     },
   );
 
-  test('reports an invalid model response before falling back locally', () async {
-    await repository.saveQuizQuestions([
-      ValidatedQuizQuestion(
-        reference: '3:16',
-        translationId: 'cmn-cu89s',
-        bookId: 'JHN',
-        chapter: 3,
-        verse: 16,
-        start: 2,
-        end: 4,
-        word: '世人',
-        partOfSpeech: '名词',
-        meaning: '世上的人',
-        verseText: '神爱世人',
-      ),
-    ]);
-    await repository.completeQuizQuestion(
-      questionId: 1,
-      correct: true,
-      answeredAt: DateTime.now(),
-    );
-    final service = QuizGenerationService(
-      repository: repository,
-      scripture: scripture(),
-      client: QuizModelClient(
-        httpClient: MockClient(
-          (_) async => http.Response(
-            '{"choices":[{"message":{"content":"[]"}}]}',
-            200,
+  test(
+    'limits random model candidates and fills the rest from the local bank',
+    () async {
+      await repository.saveQuizQuestions([
+        for (final verse in [16, 17])
+          ValidatedQuizQuestion(
+            reference: '3:$verse',
+            translationId: 'cmn-cu89s',
+            bookId: 'JHN',
+            chapter: 3,
+            verse: verse,
+            start: 2,
+            end: 4,
+            word: '世人',
+            partOfSpeech: '名词',
+            meaning: '世上的人',
+            verseText: '神爱世人',
+          ),
+      ]);
+      for (final id in [1, 2]) {
+        await repository.completeQuizQuestion(
+          questionId: id,
+          correct: true,
+          answeredAt: DateTime.now(),
+        );
+      }
+      String? prompt;
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: scripture(),
+        client: QuizModelClient(
+          httpClient: MockClient((request) async {
+            final body = jsonDecode(request.body) as Map<String, Object?>;
+            final messages = body['messages']! as List<Object?>;
+            prompt =
+                (messages.last! as Map<String, Object?>)['content'] as String;
+            final reference = RegExp(
+              r'3:(16|17)',
+            ).firstMatch(prompt!)!.group(0)!;
+            return http.Response(
+              jsonEncode({
+                'choices': [
+                  {
+                    'message': {
+                      'content': jsonEncode([
+                        {
+                          'reference': reference,
+                          'word': '世人',
+                          'start': 2,
+                          'end': 4,
+                          'length': 2,
+                          'partOfSpeech': '名词',
+                          'meaning': '世人：世上的人',
+                        },
+                      ]),
+                    },
+                  },
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }),
+        ),
+        settingsLoader: () async => settings,
+      );
+
+      final outcome = await service.prepareScopes([
+        scopeThroughVerse17(),
+      ], maxModelCandidateCount: 1);
+
+      expect(outcome.success, isTrue, reason: outcome.error);
+      expect(RegExp(r'3:(16|17)').allMatches(prompt!), hasLength(1));
+      final questions = await repository.listPendingQuizQuestions(
+        scopeThroughVerse17(),
+      );
+      expect(questions, hasLength(2));
+      expect(
+        questions.map((question) => question.source),
+        containsAll([QuizQuestionSource.model, QuizQuestionSource.local]),
+      );
+    },
+  );
+
+  test(
+    'reports an invalid model response before falling back locally',
+    () async {
+      await repository.saveQuizQuestions([
+        ValidatedQuizQuestion(
+          reference: '3:16',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          chapter: 3,
+          verse: 16,
+          start: 2,
+          end: 4,
+          word: '世人',
+          partOfSpeech: '名词',
+          meaning: '世上的人',
+          verseText: '神爱世人',
+        ),
+      ]);
+      await repository.completeQuizQuestion(
+        questionId: 1,
+        correct: true,
+        answeredAt: DateTime.now(),
+      );
+      final service = QuizGenerationService(
+        repository: repository,
+        scripture: scripture(),
+        client: QuizModelClient(
+          httpClient: MockClient(
+            (_) async => http.Response(
+              '{"choices":[{"message":{"content":"[]"}}]}',
+              200,
+            ),
           ),
         ),
-      ),
-      settingsLoader: () async => settings,
-    );
+        settingsLoader: () async => settings,
+      );
 
-    final outcome = await service.prepare(scope());
+      final outcome = await service.prepare(scope());
 
-    expect(outcome.success, isTrue);
-    expect(outcome.modelError, contains('为空或未通过题目校验'));
-    expect(
-      (await repository.listPendingQuizQuestions(scope())).single.source,
-      QuizQuestionSource.local,
-    );
-  });
+      expect(outcome.success, isTrue);
+      expect(outcome.modelError, contains('为空或未通过题目校验'));
+      expect(
+        (await repository.listPendingQuizQuestions(scope())).single.source,
+        QuizQuestionSource.local,
+      );
+    },
+  );
 
   test('prefers model generation over an existing local question', () async {
     await repository.saveQuizQuestions([

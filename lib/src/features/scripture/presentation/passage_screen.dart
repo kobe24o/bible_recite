@@ -456,12 +456,24 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                         ],
                         if (_quizPreparation?.notice case final notice?) ...[
                           const SizedBox(height: 6),
-                          Text(
-                            notice,
-                            key: const Key('quiz-preparation-notice'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              notice,
+                              key: const Key('quiz-preparation-notice'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSecondaryContainer,
+                              ),
                             ),
                           ),
                         ],
@@ -480,13 +492,13 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                         ? _SinglePassage(
                             units: data.units,
                             initialVerse: _isPlanTaskReading
-                                ? null
+                                ? _activePlanTaskGroup?.firstScheduledVerse
                                 : widget.initialVerse,
                             initialEndVerse: _isPlanTaskReading
-                                ? null
+                                ? _activePlanTaskGroup?.firstScheduledVerse
                                 : widget.initialEndVerse,
                             initialEndChapter: _isPlanTaskReading
-                                ? null
+                                ? _activeChapter
                                 : widget.initialEndChapter,
                             initialChapter: _activeChapter,
                             highlighted: _activePlanTaskGroup?.includesVerse,
@@ -821,11 +833,25 @@ class _SinglePassageState extends State<_SinglePassage> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialVerse != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _centerInitialTarget();
-      });
+    _scheduleInitialTargetCentering();
+  }
+
+  @override
+  void didUpdateWidget(_SinglePassage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialVerse != widget.initialVerse ||
+        oldWidget.initialChapter != widget.initialChapter ||
+        oldWidget.units != widget.units) {
+      _leadingTargetInset = 0;
+      _scheduleInitialTargetCentering();
     }
+  }
+
+  void _scheduleInitialTargetCentering() {
+    if (widget.initialVerse == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _centerInitialTarget();
+    });
   }
 
   bool _isTarget(int index) {

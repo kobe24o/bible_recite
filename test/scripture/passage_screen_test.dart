@@ -316,6 +316,63 @@ void main() {
     },
   );
 
+  testWidgets('centers the first scheduled verse when reading a plan chapter', (
+    tester,
+  ) async {
+    final chapter = [
+      for (var verse = 1; verse <= 40; verse++)
+        _planReadingUnit(bookId: 'JHN', chapter: 3, verse: verse),
+    ];
+    final groups = groupPlanTaskBlocksByChapter(const [
+      PlanTaskBlock(
+        id: 1,
+        taskId: 1,
+        sortOrder: 0,
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 20,
+        endChapter: 3,
+        endVerse: 20,
+      ),
+    ]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(
+              chapterUnitsByReference: {'JHN:3': chapter},
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          home: PassageScreen(
+            translationId: 'eng-web',
+            bookId: 'JHN',
+            chapter: 3,
+            planTaskGroups: groups,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final target = find.text('Reading JHN 3:20', skipOffstage: false);
+    final reader = find.byKey(const Key('passage-reader'));
+    expect(target, findsOneWidget);
+    expect(
+      (tester.getCenter(target).dy - tester.getCenter(reader).dy).abs(),
+      lessThan(80),
+    );
+  });
+
   testWidgets(
     'opens the date editor when creating a plan from selected verses',
     (tester) async {

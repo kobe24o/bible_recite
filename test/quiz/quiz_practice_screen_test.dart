@@ -73,6 +73,27 @@ void main() {
     expect(find.textContaining('本次使用本地题库'), findsOneWidget);
   });
 
+  testWidgets(
+    'shows a successful fallback notice as guidance rather than an error',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final recognizer = FakeQuizRecognizer();
+      await tester.pumpWidget(
+        _app(repository, recognizer, preparationNotice: '模型暂时不可用，本次使用本地题库。'),
+      );
+      await tester.pumpAndSettle();
+
+      final notice = tester.widget<Text>(
+        find.byKey(const Key('quiz-preparation-notice')),
+      );
+      final colorScheme = Theme.of(
+        tester.element(find.byKey(const Key('quiz-preparation-notice'))),
+      ).colorScheme;
+      expect(notice.style?.color, colorScheme.onSecondaryContainer);
+    },
+  );
+
   testWidgets('hint shows length but never exposes answer letters', (
     tester,
   ) async {

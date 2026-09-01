@@ -14,6 +14,12 @@ final class PlanTaskChapterGroup {
   final int chapter;
   final List<PlanTaskBlock> blocks;
 
+  /// The first scheduled verse in this chapter. It is used only to position
+  /// the reading viewport; [includesVerse] remains authoritative for scope.
+  int get firstScheduledVerse => blocks
+      .map((block) => chapter == block.startChapter ? block.startVerse : 1)
+      .reduce((first, verse) => first < verse ? first : verse);
+
   bool includesVerse(int verse) {
     for (final block in blocks) {
       final startsInChapter = chapter == block.startChapter;

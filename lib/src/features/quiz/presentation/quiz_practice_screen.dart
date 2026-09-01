@@ -314,12 +314,21 @@ class _QuizPracticeScreenState extends ConsumerState<QuizPracticeScreen> {
                 if (widget.request.preparationNotice case final notice?)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Text(
-                      notice,
-                      key: const Key('quiz-preparation-notice'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        notice,
+                        key: const Key('quiz-preparation-notice'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSecondaryContainer,
+                        ),
                       ),
                     ),
                   ),

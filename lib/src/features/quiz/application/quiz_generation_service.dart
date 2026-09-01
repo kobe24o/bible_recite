@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
@@ -45,8 +47,9 @@ final class QuizGenerationService {
   /// while cache lookup and returned questions remain restricted to the task
   /// ranges rather than their enclosing chapter interval.
   Future<QuizGenerationOutcome> prepareScopes(
-    Iterable<QuizScope> requestedScopes,
-  ) async {
+    Iterable<QuizScope> requestedScopes, {
+    int? maxModelCandidateCount,
+  }) async {
     final scopes = {...requestedScopes}.toList(growable: false);
     if (scopes.isEmpty ||
         scopes.any(
@@ -165,7 +168,11 @@ final class QuizGenerationService {
       final modelVerseKeys = <(String book, int chapter, int verse)>{};
       Object? modelFailure;
       if (modelAvailable) {
-        for (final bookVerses in _groupByBook(generationVerses).values) {
+        final modelCandidates = _selectModelCandidates(
+          generationVerses,
+          maxModelCandidateCount,
+        );
+        for (final bookVerses in _groupByBook(modelCandidates).values) {
           try {
             var valid = _validate(
               await client.generate(settings, bookVerses),
@@ -265,6 +272,20 @@ final class QuizGenerationService {
     QuizModelException(:final message) => message,
     _ => '生成答题题目失败：$error',
   };
+
+  List<QuizGenerationVerse> _selectModelCandidates(
+    List<QuizGenerationVerse> generationVerses,
+    int? maxModelCandidateCount,
+  ) {
+    if (maxModelCandidateCount == null ||
+        maxModelCandidateCount >= generationVerses.length) {
+      return generationVerses;
+    }
+    if (maxModelCandidateCount <= 0) return const [];
+    final candidates = List<QuizGenerationVerse>.of(generationVerses)
+      ..shuffle(Random());
+    return candidates.take(maxModelCandidateCount).toList(growable: false);
+  }
 
   Map<String, List<QuizGenerationVerse>> _groupByBook(
     List<QuizGenerationVerse> verses,
