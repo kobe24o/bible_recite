@@ -577,6 +577,24 @@ void main() {
     },
   );
 
+  test('iOS does not read the Android APK update feed', () async {
+    var feedReads = 0;
+    final harness = _Harness(
+      root: root,
+      runtimePlatform: UpdateRuntimePlatform.ios,
+      manifestLoader: () async {
+        feedReads++;
+        return _manifest();
+      },
+    );
+
+    await harness.controller.autoCheck();
+
+    expect(feedReads, 0);
+    expect(harness.controller.state, isA<UpdateIdle>());
+    harness.dispose();
+  });
+
   test('R2 public base URL configuration has stable failures', () {
     expect(
       () => parseR2PublicBaseUrl(''),
@@ -809,7 +827,11 @@ void main() {
 
       expect(attempts, [0, 1]);
       expect(await collision.readAsBytes(), [7, 7, 7]);
-      expect(staged.path, '${updates.path}${Platform.pathSeparator}owned.apk');
+      final canonicalUpdates = await updates.resolveSymbolicLinks();
+      expect(
+        staged.path,
+        '$canonicalUpdates${Platform.pathSeparator}owned.apk',
+      );
       expect(await staged.readAsBytes(), [1, 2, 3]);
     },
   );

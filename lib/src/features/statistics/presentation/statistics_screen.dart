@@ -9,9 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
+import '../../../app/runtime_platform.dart';
 import '../../../app/empty_state_page.dart';
+import '../../distribution/application/distribution_providers.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/application/preset_plan_sync.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
@@ -711,6 +714,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Future<void> _showSharePlatforms() async {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final platform = ref.read(appRuntimePlatformProvider);
+    final testFlightLink = ref.read(testFlightLinkProvider);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -718,22 +723,33 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              key: const Key('share-android'),
-              leading: const Icon(Icons.android_rounded),
-              title: const Text('Android'),
-              subtitle: Text(chinese ? '获取最新版安装包' : 'Get the latest APK'),
-              onTap: () {
-                Navigator.pop(context);
-                _showAndroidQr();
-              },
-            ),
-            const ListTile(
-              leading: Icon(Icons.phone_iphone_outlined),
-              title: Text('iOS'),
-              subtitle: Text('即将支持'),
-              enabled: false,
-            ),
+            if (platform == AppRuntimePlatform.android)
+              ListTile(
+                key: const Key('share-android'),
+                leading: const Icon(Icons.android_rounded),
+                title: const Text('Android'),
+                subtitle: Text(chinese ? '获取最新版安装包' : 'Get the latest APK'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAndroidQr();
+                },
+              ),
+            if (platform == AppRuntimePlatform.ios && testFlightLink != null)
+              ListTile(
+                key: const Key('share-ios-testflight'),
+                leading: const Icon(Icons.phone_iphone_outlined),
+                title: const Text('TestFlight'),
+                subtitle: Text(
+                  chinese ? '加入 iPhone 测试' : 'Join iPhone beta testing',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await launchUrl(
+                    testFlightLink.url,
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
             const ListTile(
               leading: Icon(Icons.devices_other_outlined),
               title: Text('鸿蒙'),

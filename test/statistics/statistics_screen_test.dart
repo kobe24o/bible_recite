@@ -1,4 +1,7 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
+import 'package:bible_recite/src/app/runtime_platform.dart';
+import 'package:bible_recite/src/features/distribution/application/distribution_providers.dart';
+import 'package:bible_recite/src/features/distribution/domain/testflight_link.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart';
@@ -49,6 +52,45 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  testWidgets('shows only TestFlight on iOS when a public link is configured', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await _pumpScreen(
+      tester,
+      repository,
+      platform: AppRuntimePlatform.ios,
+      testFlightLink: TestFlightLink.parse(
+        'https://testflight.apple.com/join/AbCdEf12',
+      ),
+    );
+
+    final shareButton = find.byKey(const Key('share-app-button'));
+    await tester.ensureVisible(shareButton);
+    await tester.tap(shareButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('share-ios-testflight')), findsOneWidget);
+    expect(find.byKey(const Key('share-android')), findsNothing);
+  });
+
+  testWidgets('does not offer a distribution link on iOS before TestFlight', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await _pumpScreen(tester, repository, platform: AppRuntimePlatform.ios);
+
+    final shareButton = find.byKey(const Key('share-app-button'));
+    await tester.ensureVisible(shareButton);
+    await tester.tap(shareButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('share-ios-testflight')), findsNothing);
+    expect(find.byKey(const Key('share-android')), findsNothing);
+  });
+
   testWidgets('shows Ebbinghaus settings before any recitation exists', (
     tester,
   ) async {
@@ -490,6 +532,8 @@ Future<void> _pumpScreen(
   SqlitePlanRepository repository, {
   FakeRepositoryForPassage? scripture,
   StatisticsScreenView view = StatisticsScreenView.overview,
+  AppRuntimePlatform? platform,
+  TestFlightLink? testFlightLink,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -500,6 +544,9 @@ Future<void> _pumpScreen(
         ),
         if (scripture != null)
           scriptureRepositoryProvider.overrideWith((ref) async => scripture),
+        if (platform != null)
+          appRuntimePlatformProvider.overrideWithValue(platform),
+        testFlightLinkProvider.overrideWithValue(testFlightLink),
       ],
       child: MaterialApp(
         locale: Locale('zh'),

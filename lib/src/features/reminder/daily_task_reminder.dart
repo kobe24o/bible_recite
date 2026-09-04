@@ -1,10 +1,25 @@
-import 'dart:io';
-
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../app/runtime_platform.dart';
 import '../plans/data/sqlite_plan_repository.dart';
+
+InitializationSettings dailyTaskReminderInitializationSettings(
+  AppRuntimePlatform platform,
+) => switch (platform) {
+  AppRuntimePlatform.android => const InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher_bible'),
+  ),
+  AppRuntimePlatform.ios => const InitializationSettings(
+    iOS: DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    ),
+  ),
+  AppRuntimePlatform.other => const InitializationSettings(),
+};
 
 final class DailyTaskReminderSettings {
   const DailyTaskReminderSettings({
@@ -33,44 +48,49 @@ final class DailyTaskReminderSettings {
 }
 
 final class DailyTaskReminderScheduler {
-  DailyTaskReminderScheduler({FlutterLocalNotificationsPlugin? notifications})
-    : _notifications = notifications ?? FlutterLocalNotificationsPlugin();
+  DailyTaskReminderScheduler({
+    FlutterLocalNotificationsPlugin? notifications,
+    AppRuntimePlatform? platform,
+  }) : _notifications = notifications ?? FlutterLocalNotificationsPlugin(),
+       _platform = platform ?? detectRuntimePlatform();
 
   // A new channel restores high-priority delivery on devices where users or
   // OEM settings previously downgraded the old channel.
   static const _channelId = 'daily_task_reminders_v2';
   static const _notificationBaseId = 7100;
   final FlutterLocalNotificationsPlugin _notifications;
+  final AppRuntimePlatform _platform;
   bool _initialized = false;
 
   Future<void> initialize() async {
-    // The app currently distributes the reminder feature on Android only.
-    // Avoid creating an Android plugin instance on desktop/test hosts.
-    if (!Platform.isAndroid) return;
+    if (_platform == AppRuntimePlatform.other) return;
     if (_initialized) return;
     tz.initializeTimeZones();
     await _notifications.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher_bible'),
-      ),
+      settings: dailyTaskReminderInitializationSettings(_platform),
     );
-    final android = _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await android?.requestNotificationsPermission();
+    if (_platform == AppRuntimePlatform.android) {
+      final android = _notifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      await android?.requestNotificationsPermission();
+    }
     _initialized = true;
   }
 
   Future<void> reschedule(SqlitePlanRepository repository) async {
-    if (!Platform.isAndroid) return;
+    if (_platform == AppRuntimePlatform.other) return;
     await initialize();
-    final android = _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    final allowed = await android?.areNotificationsEnabled();
-    if (allowed == false) return;
+    AndroidFlutterLocalNotificationsPlugin? android;
+    if (_platform == AppRuntimePlatform.android) {
+      android = _notifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      final allowed = await android?.areNotificationsEnabled();
+      if (allowed == false) return;
+    }
     for (var index = 0; index < 32; index++) {
       await _notifications.cancel(id: _notificationBaseId + index);
     }
@@ -81,12 +101,14 @@ final class DailyTaskReminderScheduler {
     final pendingReviews = await repository.dueEbbinghausReviews(now);
     final pendingCount = pendingTasks.length + pendingReviews.length;
     if (pendingCount == 0) return;
-    // Inexact alarms can be deferred while Android is idle. Ask only when a
-    // reminder is actually needed, then the app lifecycle callback will
-    // schedule the alarms as soon as the user returns from Android settings.
-    if (await android?.canScheduleExactNotifications() == false) {
-      await android?.requestExactAlarmsPermission();
-      return;
+    if (_platform == AppRuntimePlatform.android) {
+      // Inexact alarms can be deferred while Android is idle. Ask only when a
+      // reminder is actually needed, then the app lifecycle callback will
+      // schedule the alarms as soon as the user returns from Android settings.
+      if (await android?.canScheduleExactNotifications() == false) {
+        await android?.requestExactAlarmsPermission();
+        return;
+      }
     }
     final slots = reminderSlots(now: now, settings: settings, maxSlots: 32);
     for (var index = 0; index < slots.length; index++) {
@@ -95,20 +117,34 @@ final class DailyTaskReminderScheduler {
         title: '背诵助手',
         body: '今天还有 $pendingCount 项背诵任务未完成',
         scheduledDate: tz.TZDateTime.from(slots[index], tz.local),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            '今日背诵提醒',
-            channelDescription: '提醒完成当天的背诵计划',
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-          ),
-        ),
+        notificationDetails: _notificationDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     }
   }
+
+  NotificationDetails get _notificationDetails => switch (_platform) {
+    AppRuntimePlatform.android => const NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        '今日背诵提醒',
+        channelDescription: '提醒完成当天的背诵计划',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+      ),
+    ),
+    AppRuntimePlatform.ios => const NotificationDetails(
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        presentBanner: true,
+        presentList: true,
+      ),
+    ),
+    AppRuntimePlatform.other => const NotificationDetails(),
+  };
 
   static Future<DailyTaskReminderSettings> readSettings(
     SqlitePlanRepository repository,

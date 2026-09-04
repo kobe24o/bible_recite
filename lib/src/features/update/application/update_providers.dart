@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../app/runtime_platform.dart';
 import '../data/resumable_downloader.dart';
 import '../data/update_feed_client.dart';
 import '../data/update_signing_public_key.dart';
@@ -15,7 +16,7 @@ import '../domain/update_manifest.dart';
 import '../domain/update_status.dart';
 import '../platform/android_update_bridge.dart';
 
-enum UpdateRuntimePlatform { android, other }
+enum UpdateRuntimePlatform { android, ios, other }
 
 typedef UpdateManifestLoader = Future<UpdateManifest> Function();
 typedef UpdateNetworkTransport = Future<String> Function();
@@ -89,9 +90,11 @@ Uri parseR2PublicBaseUrl(String value) {
 }
 
 final updateRuntimePlatformProvider = Provider<UpdateRuntimePlatform>(
-  (ref) => Platform.isAndroid
-      ? UpdateRuntimePlatform.android
-      : UpdateRuntimePlatform.other,
+  (ref) => switch (ref.watch(appRuntimePlatformProvider)) {
+    AppRuntimePlatform.android => UpdateRuntimePlatform.android,
+    AppRuntimePlatform.ios => UpdateRuntimePlatform.ios,
+    AppRuntimePlatform.other => UpdateRuntimePlatform.other,
+  },
 );
 
 final installedPackageInfoProvider = FutureProvider<PackageInfo>(

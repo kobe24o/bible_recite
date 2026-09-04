@@ -3,6 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('iOS declares its display name and microphone reason', () {
+    final plist = File('ios/Runner/Info.plist').readAsStringSync();
+
+    expect(plist, contains('<string>圣经背诵</string>'));
+    expect(plist, contains('<key>NSMicrophoneUsageDescription</key>'));
+  });
+
   test('Android manifest allows routing audio through bluetooth headsets', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
