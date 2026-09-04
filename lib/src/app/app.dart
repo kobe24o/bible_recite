@@ -15,6 +15,7 @@ import '../features/quiz/application/quiz_providers.dart';
 import '../features/scripture/application/scripture_providers.dart';
 import '../features/reminder/reminder_providers.dart';
 import 'router.dart';
+import 'runtime_platform.dart';
 
 class BibleReciteApp extends ConsumerStatefulWidget {
   const BibleReciteApp({this.locale, super.key});
@@ -33,14 +34,16 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_checkUpdateAtLaunch());
+      if (_usesAndroidUpdater) unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
       unawaited(_syncPresetPlansAtLaunch());
       unawaited(_syncQuizBankAtLaunch());
     });
-    _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
-      unawaited(_checkUpdateAtLaunch());
-    });
+    if (_usesAndroidUpdater) {
+      _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+        unawaited(_checkUpdateAtLaunch());
+      });
+    }
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -55,7 +58,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshDailyReminders());
-      unawaited(_checkUpdateAtLaunch());
+      if (_usesAndroidUpdater) unawaited(_checkUpdateAtLaunch());
     }
   }
 
@@ -127,6 +130,9 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       await UpdateAvailableNotification().showDownloaded(manifest);
     }
   }
+
+  bool get _usesAndroidUpdater =>
+      ref.read(appRuntimePlatformProvider) == AppRuntimePlatform.android;
 
   @override
   Widget build(BuildContext context) {

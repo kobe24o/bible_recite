@@ -1,6 +1,6 @@
 # 背诵助手
 
-一款离线圣经背诵应用。目前支持 Android；iOS（暂未支持）、Windows（暂未支持）、macOS（暂未支持）和鸿蒙（暂未支持）。经文浏览、计划、背诵检查、统计和艾宾浩斯复习均保存在本机；语音识别使用本地 sherpa-onnx 模型。
+一款离线圣经背诵应用。目前支持 Android；iOS 版本正在准备 TestFlight 测试；Windows、macOS 和鸿蒙暂未支持。经文浏览、计划、背诵检查、统计和艾宾浩斯复习均保存在本机；语音识别使用本地 sherpa-onnx 模型。
 
 ## 更新日志
 
@@ -456,6 +456,15 @@ flutter test
 flutter analyze
 flutter build apk --release
 ```
+
+完成 Apple Developer Program 注册并取得 TestFlight 公共链接后，iOS 归档使用：
+
+```bash
+flutter build ipa --release \
+  --dart-define=TESTFLIGHT_URL=https://testflight.apple.com/join/<code>
+```
+
+`<code>` 只能替换为 App Store Connect 生成的公共 TestFlight 链接。链接尚未生成时无需传入该参数；应用不会显示无效的测试入口。
 
 离线语音模型不放进普通 Git 历史，因为 `encoder.onnx` 超过 GitHub 的 100 MB 单文件限制。请按 [assets/models/README.md](assets/models/README.md) 下载项目 Release 中的模型包。
 

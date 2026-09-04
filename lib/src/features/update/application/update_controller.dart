@@ -85,7 +85,7 @@ final class UpdateController extends Notifier<UpdateStatus> {
   }
 
   Future<void> check({bool automatic = false}) async {
-    if (_checking || !_mounted) {
+    if (_isIos || _checking || !_mounted) {
       return;
     }
     _checking = true;
@@ -494,6 +494,10 @@ final class UpdateController extends Notifier<UpdateStatus> {
   bool get _isAndroid =>
       _mounted &&
       ref.read(updateRuntimePlatformProvider) == UpdateRuntimePlatform.android;
+
+  bool get _isIos =>
+      _mounted &&
+      ref.read(updateRuntimePlatformProvider) == UpdateRuntimePlatform.ios;
 
   void _emit(UpdateStatus next) {
     if (_mounted) {

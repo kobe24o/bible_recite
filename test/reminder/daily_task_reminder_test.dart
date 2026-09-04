@@ -1,7 +1,18 @@
+import 'package:bible_recite/src/app/runtime_platform.dart';
 import 'package:bible_recite/src/features/reminder/daily_task_reminder.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('uses Darwin notification initialization on iOS', () {
+    final settings = dailyTaskReminderInitializationSettings(
+      AppRuntimePlatform.ios,
+    );
+
+    expect(settings.iOS, isA<DarwinInitializationSettings>());
+    expect(settings.android, isNull);
+  });
+
   test('moves the next reminder to tomorrow after today window has ended', () {
     final settings = DailyTaskReminderSettings(
       enabled: true,
