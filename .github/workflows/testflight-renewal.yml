@@ -1,0 +1,153 @@
+name: Renew TestFlight beta
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:17 UTC on the first day of every other month. This produces a
+    # replacement build well before TestFlight's 90-day build expiry.
+    - cron: "17 2 1 */2 *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-renewal
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Build and upload iOS beta
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      IOS_BUNDLE_ID: app.biblerecite
+      FLUTTER_VERSION: 3.47.3
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      APPSTORE_CERTIFICATES_FILE_BASE64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
+      APPSTORE_CERTIFICATES_PASSWORD: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Verify release credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            APPSTORE_ISSUER_ID \
+            APPSTORE_API_KEY_ID \
+            APPSTORE_API_PRIVATE_KEY \
+            APPSTORE_CERTIFICATES_FILE_BASE64 \
+            APPSTORE_CERTIFICATES_PASSWORD; do
+            test -n "${!name}" || {
+              echo "Missing GitHub Actions credential: $name" >&2
+              exit 1
+            }
+          done
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Download offline speech models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/offline-models" assets/models
+          gh release download offline-models-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip \
+            --dir "$RUNNER_TEMP/offline-models"
+          unzip -oq "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
+            -d assets/models
+
+      - name: Verify offline speech models
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do
+            test -s "assets/models/sherpa/$file"
+          done
+
+      - name: Bundle latest shared quiz bank
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/quiz_bank
+          index_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.index.json --jq .download_url)"
+          curl --fail --location "$index_url" --output "$RUNNER_TEMP/quiz-bank.index.json"
+          shard_path="$(jq -r '.shards[0].path' "$RUNNER_TEMP/quiz-bank.index.json")"
+          shard_url="$(gh api "repos/kobe24o/bible-recite-plans/contents/$shard_path" --jq .download_url)"
+          curl --fail --location "$shard_url" --output assets/quiz_bank/quiz-bank.json
+          actual_sha="$(openssl dgst -sha256 -r assets/quiz_bank/quiz-bank.json | awk '{print $1}')"
+          actual_bytes="$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')"
+          jq --arg sha "$actual_sha" --argjson bytes "$actual_bytes" \
+            '.shards = [{path: "quiz-bank.json", sha256: $sha, bytes: $bytes}] | del(.snapshotMode, .qualityVersion)' \
+            "$RUNNER_TEMP/quiz-bank.index.json" > assets/quiz_bank/quiz-bank.index.json
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Import Apple Distribution certificate
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ env.APPSTORE_CERTIFICATES_FILE_BASE64 }}
+          p12-password: ${{ env.APPSTORE_CERTIFICATES_PASSWORD }}
+
+      - name: Download App Store provisioning profile
+        uses: apple-actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: ${{ env.IOS_BUNDLE_ID }}
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
+
+      - name: Build a replacement TestFlight IPA
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          version_name="${version%%+*}"
+          build_number="$(date -u +%Y%m%d%H%M%S)"
+          flutter build ipa --release \
+            --build-name="$version_name" \
+            --build-number="$build_number"
+          test -s build/ios/ipa/bible_recite.ipa
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build to TestFlight
+        uses: apple-actions/upload-testflight-build@v5
+        with:
+          app-path: build/ios/ipa/bible_recite.ipa
+          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
+          uses-non-exempt-encryption: "false"
+          wait-for-processing: "true"
+          backend: appstore-api
+
+      - name: Publish job summary
+        shell: bash
+        run: |
+          {
+            echo "## TestFlight build uploaded"
+            echo
+            echo "- App: \`$IOS_BUNDLE_ID\`"
+            echo "- Build number: \`${{ steps.build.outputs.build_number }}\`"
+            echo "- TestFlight builds expire after 90 days; this workflow runs every two months."
+          } >> "$GITHUB_STEP_SUMMARY"
