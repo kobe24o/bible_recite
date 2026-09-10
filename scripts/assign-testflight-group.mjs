@@ -37,6 +37,7 @@ async function main() {
   const bundleId = required('IOS_BUNDLE_ID');
   const buildNumber = required('TESTFLIGHT_BUILD_NUMBER');
   const groupName = required('TESTFLIGHT_GROUP_NAME');
+  const submitBetaReview = process.env.AUTO_SUBMIT_BETA_REVIEW === 'true';
   const token = createToken({
     issuerId: required('APPSTORE_ISSUER_ID'),
     keyId: required('APPSTORE_API_KEY_ID'),
@@ -93,16 +94,47 @@ async function main() {
   const currentBuilds = await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds?limit=200`);
   if (currentBuilds.data.some((candidate) => candidate.id === build.id)) {
     console.log(`Build ${buildNumber} is already assigned to TestFlight group ${groupName}.`);
+  } else {
+    await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds`, {
+      method: 'POST',
+      body: JSON.stringify({
+        data: [{ id: build.id, type: 'builds' }],
+      }),
+    });
+    console.log(`Assigned build ${buildNumber} to TestFlight group ${groupName}.`);
+  }
+
+  if (!submitBetaReview) {
     return;
   }
 
-  await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds`, {
+  const reviewSubmissions = await api(`/v1/betaAppReviewSubmissions?${new URLSearchParams({
+    'filter[build]': build.id,
+    limit: '1',
+  })}`);
+  const existingSubmission = reviewSubmissions.data[0];
+  if (existingSubmission) {
+    console.log(
+      `Build ${buildNumber} already has a Beta App Review submission ` +
+        `(${existingSubmission.attributes.betaReviewState}).`,
+    );
+    return;
+  }
+
+  await api('/v1/betaAppReviewSubmissions', {
     method: 'POST',
     body: JSON.stringify({
-      data: [{ id: build.id, type: 'builds' }],
+      data: {
+        type: 'betaAppReviewSubmissions',
+        relationships: {
+          build: {
+            data: { id: build.id, type: 'builds' },
+          },
+        },
+      },
     }),
   });
-  console.log(`Assigned build ${buildNumber} to TestFlight group ${groupName}.`);
+  console.log(`Submitted build ${buildNumber} for Beta App Review.`);
 }
 
 main().catch((error) => {

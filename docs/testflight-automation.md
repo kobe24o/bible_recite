@@ -26,6 +26,6 @@ base64 -i ios_distribution.p12 | pbcopy
 
 ## 测试组
 
-当前 `inner` 与 `outer` 测试组已经自动获得构建 98。首次手动运行该工作流后，请在 App Store Connect 确认新构建仍已分配到这两个群组；如果 Apple 未自动分配，在 TestFlight 的构建页面将其添加到对应群组一次即可。
+工作流会在 Apple 完成构建处理后自动将新构建加入外部 `outer` 测试组，并自动提交 Beta App Review。Apple 批准后，外部测试者即可获得该构建；Apple 的审核结果和处理时长无法自动化。
 
-外部测试的新构建仍可能需要 Apple 的 Beta App Review；自动化不会绕过此审核。GitHub 对长期无活动的公开仓库可能会停用计划工作流，因此建议偶尔检查 Actions 页面，或在需要时手动运行一次。
+自动提交依赖已填写完整的 Test Information（包括 Beta 描述、反馈邮箱和联系信息）。如果 Apple 拒绝审核、要求补充资料，或同一版本已有构建处于审核中，工作流会失败并显示 Apple 的具体原因，不会继续伪造“已测试”状态。GitHub 对长期无活动的公开仓库可能会停用计划工作流，因此建议偶尔检查 Actions 页面，或在需要时手动运行一次。
