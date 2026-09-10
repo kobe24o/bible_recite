@@ -66,8 +66,34 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --pattern sherpa-models.zip \
             --dir "$RUNNER_TEMP/offline-models"
-          unzip -oq "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
-            -d assets/models
+          # The release archive was produced on Windows and uses backslashes
+          # in entry names. Normalize them while extracting so macOS does not
+          # treat the archive warning as a failed release build.
+          ARCHIVE_PATH="$RUNNER_TEMP/offline-models/sherpa-models.zip" \
+          DESTINATION_PATH="assets/models" \
+          python3 - <<'PY'
+          import os
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          archive_path = Path(os.environ["ARCHIVE_PATH"])
+          destination = Path(os.environ["DESTINATION_PATH"]).resolve()
+
+          with ZipFile(archive_path) as archive:
+              for member in archive.infolist():
+                  normalized = PurePosixPath(member.filename.replace("\\", "/"))
+                  if normalized.is_absolute() or ".." in normalized.parts:
+                      raise RuntimeError(f"Unsafe archive path: {member.filename}")
+                  target = destination.joinpath(*normalized.parts)
+                  if not target.is_relative_to(destination):
+                      raise RuntimeError(f"Unsafe archive path: {member.filename}")
+                  if member.is_dir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  else:
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with archive.open(member) as source, target.open("wb") as output:
+                          output.write(source.read())
+          PY
 
       - name: Verify offline speech models
         shell: bash
