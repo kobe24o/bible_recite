@@ -22,6 +22,7 @@ jobs:
     env:
       IOS_BUNDLE_ID: app.biblerecite
       FLUTTER_VERSION: 3.47.3
+      TESTFLIGHT_GROUP_NAME: outer
       APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
       APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
       APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
@@ -167,6 +168,11 @@ jobs:
           uses-non-exempt-encryption: "false"
           wait-for-processing: "true"
           backend: appstore-api
+
+      - name: Add processed build to external TestFlight group
+        env:
+          TESTFLIGHT_BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+        run: node scripts/assign-testflight-group.mjs
 
       - name: Publish job summary
         shell: bash
