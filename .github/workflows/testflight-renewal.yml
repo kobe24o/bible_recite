@@ -152,7 +152,8 @@ jobs:
           build_number="$(date -u +%Y%m%d%H%M%S)"
           flutter build ipa --release \
             --build-name="$version_name" \
-            --build-number="$build_number"
+            --build-number="$build_number" \
+            --export-options-plist=ios/ExportOptions.plist
           test -s build/ios/ipa/bible_recite.ipa
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
