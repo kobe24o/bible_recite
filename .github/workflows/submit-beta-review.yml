@@ -1,0 +1,59 @@
+name: Submit existing TestFlight build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: TestFlight build number to assign to the outer group and submit for Beta App Review
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-beta-review
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    name: Assign build and submit beta review
+    runs-on: macos-latest
+    timeout-minutes: 10
+    env:
+      IOS_BUNDLE_ID: app.biblerecite
+      TESTFLIGHT_GROUP_NAME: outer
+      AUTO_SUBMIT_BETA_REVIEW: "true"
+      TESTFLIGHT_BUILD_NUMBER: ${{ inputs.build_number }}
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Verify App Store Connect API credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in APPSTORE_ISSUER_ID APPSTORE_API_KEY_ID APPSTORE_API_PRIVATE_KEY; do
+            test -n "${!name}" || {
+              echo "Missing GitHub Actions credential: $name" >&2
+              exit 1
+            }
+          done
+
+      - name: Assign build to external group and submit beta review
+        run: node scripts/assign-testflight-group.mjs
+
+      - name: Publish job summary
+        shell: bash
+        run: |
+          {
+            echo "## Beta App Review submitted"
+            echo
+            echo "- App: \`$IOS_BUNDLE_ID\`"
+            echo "- Build number: \`$TESTFLIGHT_BUILD_NUMBER\`"
+            echo "- External TestFlight group: \`$TESTFLIGHT_GROUP_NAME\`"
+          } >> "$GITHUB_STEP_SUMMARY"

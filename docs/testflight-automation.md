@@ -28,4 +28,6 @@ base64 -i ios_distribution.p12 | pbcopy
 
 工作流会在 Apple 完成构建处理后自动将新构建加入外部 `outer` 测试组，并自动提交 Beta App Review。Apple 批准后，外部测试者即可获得该构建；Apple 的审核结果和处理时长无法自动化。
 
+如需为已经上传的构建补交审核，可在 GitHub 的 **Actions → Submit existing TestFlight build → Run workflow** 输入构建号。该工作流不会重新打包或上传 IPA，只会确认构建已加入 `outer` 并向 Apple 提交 Beta App Review。
+
 自动提交依赖已填写完整的 Test Information（包括 Beta 描述、反馈邮箱和联系信息）。如果 Apple 拒绝审核、要求补充资料，或同一版本已有构建处于审核中，工作流会失败并显示 Apple 的具体原因，不会继续伪造“已测试”状态。GitHub 对长期无活动的公开仓库可能会停用计划工作流，因此建议偶尔检查 Actions 页面，或在需要时手动运行一次。
