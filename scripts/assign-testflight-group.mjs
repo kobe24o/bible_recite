@@ -33,23 +33,55 @@ function createToken({ issuerId, keyId, privateKey }) {
   return `${signingInput}.${signature}`;
 }
 
+export async function waitForProcessedBuild(
+  queryBuild,
+  {
+    attemptLimit = 25,
+    waitMilliseconds = 60_000,
+    sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    logger = console,
+  } = {},
+) {
+  for (let attempt = 1; attempt <= attemptLimit; attempt += 1) {
+    const build = await queryBuild();
+    const processingState = build?.attributes?.processingState;
+    if (processingState === 'VALID') {
+      return build;
+    }
+    if (processingState === 'FAILED' || processingState === 'INVALID') {
+      throw new Error(`TestFlight build processing failed (${processingState}).`);
+    }
+    if (attempt === attemptLimit) {
+      break;
+    }
+    logger.log(
+      `Waiting for TestFlight build processing: attempt ${attempt}/${attemptLimit}` +
+      (processingState ? ` (${processingState})` : ' (not visible yet)') + '.',
+    );
+    await sleep(waitMilliseconds);
+  }
+  throw new Error(`TestFlight build did not become valid after ${attemptLimit} checks.`);
+}
+
 async function main() {
   const bundleId = required('IOS_BUNDLE_ID');
   const buildNumber = required('TESTFLIGHT_BUILD_NUMBER');
   const groupName = required('TESTFLIGHT_GROUP_NAME');
   const submitBetaReview = process.env.AUTO_SUBMIT_BETA_REVIEW === 'true';
-  const token = createToken({
+  const credentials = {
     issuerId: required('APPSTORE_ISSUER_ID'),
     keyId: required('APPSTORE_API_KEY_ID'),
     privateKey: required('APPSTORE_API_PRIVATE_KEY'),
-  });
+  };
 
   async function api(path, options = {}) {
     const response = await fetch(`${apiBaseUrl}${path}`, {
       ...options,
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
+        // Build processing can take longer than Apple's JWT lifetime. Sign every
+        // request so a long wait cannot leave the handoff with an expired token.
+        Authorization: `Bearer ${createToken(credentials)}`,
         'Content-Type': 'application/json',
         ...options.headers,
       },
@@ -81,15 +113,15 @@ async function main() {
     throw new Error(`No TestFlight group named "${groupName}" was found`);
   }
 
-  const builds = await api(`/v1/builds?${new URLSearchParams({
+  const buildsPath = `/v1/builds?${new URLSearchParams({
     'filter[app]': app.id,
     'filter[version]': buildNumber,
     limit: '1',
-  })}`);
-  const build = builds.data[0];
-  if (!build) {
-    throw new Error(`Processed TestFlight build ${buildNumber} was not found`);
-  }
+  })}`;
+  const build = await waitForProcessedBuild(async () => {
+    const builds = await api(buildsPath);
+    return builds.data[0];
+  });
 
   const currentBuilds = await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds?limit=200`);
   if (currentBuilds.data.some((candidate) => candidate.id === build.id)) {
@@ -137,7 +169,9 @@ async function main() {
   console.log(`Submitted build ${buildNumber} for Beta App Review.`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

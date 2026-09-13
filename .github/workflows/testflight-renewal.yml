@@ -34,6 +34,9 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
+      - name: Test TestFlight processing handoff
+        run: node --test scripts/assign-testflight-group.test.mjs
+
       - name: Verify release credentials
         shell: bash
         run: |
@@ -170,7 +173,9 @@ jobs:
           api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
           api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
           uses-non-exempt-encryption: "false"
-          wait-for-processing: "true"
+          # The action keeps one JWT while it polls. Long App Store processing can
+          # outlive that token; our following step polls with a fresh JWT per call.
+          wait-for-processing: "false"
           backend: appstore-api
 
       - name: Add build to external TestFlight group and submit beta review
