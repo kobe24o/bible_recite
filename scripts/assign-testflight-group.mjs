@@ -63,6 +63,19 @@ export async function waitForProcessedBuild(
   throw new Error(`TestFlight build did not become valid after ${attemptLimit} checks.`);
 }
 
+export async function recordExemptEncryptionUse(api, buildId) {
+  await api(`/v1/builds/${buildId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      data: {
+        type: 'builds',
+        id: buildId,
+        attributes: { usesNonExemptEncryption: false },
+      },
+    }),
+  });
+}
+
 async function main() {
   const bundleId = required('IOS_BUNDLE_ID');
   const buildNumber = required('TESTFLIGHT_BUILD_NUMBER');
@@ -122,6 +135,7 @@ async function main() {
     const builds = await api(buildsPath);
     return builds.data[0];
   });
+  await recordExemptEncryptionUse(api, build.id);
 
   const currentBuilds = await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds?limit=200`);
   if (currentBuilds.data.some((candidate) => candidate.id === build.id)) {
