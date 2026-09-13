@@ -111,17 +111,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p assets/quiz_bank
+          shard_dir="$RUNNER_TEMP/quiz-bank-shards"
+          mkdir -p assets/quiz_bank "$shard_dir"
           index_url="$(gh api repos/kobe24o/bible-recite-plans/contents/quiz-bank.index.json --jq .download_url)"
           curl --fail --location "$index_url" --output "$RUNNER_TEMP/quiz-bank.index.json"
-          shard_path="$(jq -r '.shards[0].path' "$RUNNER_TEMP/quiz-bank.index.json")"
-          shard_url="$(gh api "repos/kobe24o/bible-recite-plans/contents/$shard_path" --jq .download_url)"
-          curl --fail --location "$shard_url" --output assets/quiz_bank/quiz-bank.json
-          actual_sha="$(openssl dgst -sha256 -r assets/quiz_bank/quiz-bank.json | awk '{print $1}')"
-          actual_bytes="$(wc -c < assets/quiz_bank/quiz-bank.json | tr -d '[:space:]')"
-          jq --arg sha "$actual_sha" --argjson bytes "$actual_bytes" \
-            '.shards = [{path: "quiz-bank.json", sha256: $sha, bytes: $bytes}] | del(.snapshotMode, .qualityVersion)' \
-            "$RUNNER_TEMP/quiz-bank.index.json" > assets/quiz_bank/quiz-bank.index.json
+          while IFS= read -r shard_path; do
+            mkdir -p "$shard_dir/$(dirname "$shard_path")"
+            shard_url="$(gh api "repos/kobe24o/bible-recite-plans/contents/$shard_path" --jq .download_url)"
+            curl --fail --location "$shard_url" --output "$shard_dir/$shard_path"
+          done < <(jq -r '.shards[].path' "$RUNNER_TEMP/quiz-bank.index.json")
+          dart run tool/bundle_quiz_bank.dart \
+            --index "$RUNNER_TEMP/quiz-bank.index.json" \
+            --shard-dir "$shard_dir" \
+            --output-bank assets/quiz_bank/quiz-bank.json \
+            --output-index assets/quiz_bank/quiz-bank.index.json
 
       - name: Install Flutter dependencies
         run: flutter pub get
