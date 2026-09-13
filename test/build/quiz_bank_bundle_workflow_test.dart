@@ -24,6 +24,13 @@ void main() {
     });
   }
 
+  test('mobile release builds use the Flutter SDK required by the locked tests', () {
+    final workflow = File('.github/workflows/android-apk.yml').readAsStringSync();
+
+    expect(workflow, contains('flutter-version: 3.47.3'));
+    expect(workflow, isNot(contains('flutter-version: 3.44.4')));
+  });
+
   test('combines every validated shard into the offline bank asset', () async {
     final directory = await Directory.systemTemp.createTemp('quiz-bank-bundle-');
     addTearDown(() => directory.delete(recursive: true));
