@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../backup/domain/user_data_backup.dart';
 import '../../devotion/domain/devotion_models.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../review/domain/ebbinghaus_scheduler.dart';
@@ -468,6 +469,182 @@ final class SqlitePlanRepository {
   }
 
   final Database _database;
+
+  Map<String, List<Map<String, Object?>>> _userDataRows() => {
+    for (final table in backupTables)
+      table.name: _database
+          .select(
+            'SELECT ${{table.primaryKey, ...table.fields.keys, ...table.references.map((r) => r.column)}.join(', ')} FROM ${table.name} ORDER BY ${table.primaryKey}',
+          )
+          .where(
+            (row) =>
+                table.name != 'app_setting' ||
+                backupSettingKeys.contains(row['setting_key']),
+          )
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(),
+  };
+
+  Future<UserDataBackup> exportUserData() async {
+    _database.execute('BEGIN');
+    try {
+      final backup = UserDataBackup.fromRecords(_userDataRows());
+      _database.execute('COMMIT');
+      return backup;
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// Validate the complete graph before touching local data. The synchronous
+  /// transaction has no await points, so other repository calls cannot observe
+  /// or interleave with a partially restored graph.
+  Future<RestoreReport> restoreUserData(
+    UserDataBackup backup, {
+    required RestoreMode mode,
+  }) async {
+    final validated = UserDataBackup.decode(backup.encode());
+    _database.execute('BEGIN IMMEDIATE');
+    try {
+      // Replacement must also work when local rows are damaged; only the
+      // incoming graph needs validation before those rows are removed.
+      final localRows = mode == RestoreMode.merge
+          ? _userDataRows()
+          : <String, List<Map<String, Object?>>>{};
+      final localBackup = UserDataBackup.fromRecords(localRows);
+      final ids = <String, Map<String, Object?>>{};
+      final counts = <String, RestoreCounts>{};
+      if (mode == RestoreMode.replace) {
+        for (final table in backupTables.reversed) {
+          if (table.name == 'app_setting') {
+            _database.execute(
+              'DELETE FROM app_setting WHERE setting_key IN (${List.filled(backupSettingKeys.length, '?').join(', ')})',
+              backupSettingKeys.toList(),
+            );
+          } else {
+            _database.execute('DELETE FROM ${table.name}');
+          }
+        }
+      }
+      for (final table in backupTables) {
+        final local = <String, Map<String, Object?>>{};
+        final tableIds = ids[table.name] = {};
+        if (mode == RestoreMode.merge) {
+          final portable = localBackup.records[table.name]!;
+          for (var index = 0; index < portable.length; index++) {
+            final row = portable[index];
+            final key = row['key'] as String;
+            local[key] = row;
+            tableIds[key] = localRows[table.name]![index][table.primaryKey];
+          }
+        }
+        var imported = 0;
+        var skipped = 0;
+        var updated = 0;
+        for (final row in validated.records[table.name]!) {
+          final key = row['key'] as String;
+          final existing = local[key];
+          if (existing != null) {
+            final changes = _backupMergeChanges(table.name, existing, row);
+            if (changes.isEmpty) {
+              skipped++;
+            } else {
+              _database.execute(
+                'UPDATE ${table.name} SET ${changes.keys.map((k) => '$k = ?').join(', ')} WHERE ${table.primaryKey} = ?',
+                [...changes.values, tableIds[key]],
+              );
+              imported++;
+              updated++;
+            }
+            continue;
+          }
+          final values = <String, Object?>{
+            for (final field in table.fields.keys) field: row[field],
+            for (final ref in table.references)
+              ref.column: row[ref.field] == null
+                  ? null
+                  : ids[ref.table]![row[ref.field]],
+            if (table.name == 'ebbinghaus_settings') 'id': 1,
+          };
+          _database.execute(
+            'INSERT INTO ${table.name} (${values.keys.join(', ')}) VALUES (${List.filled(values.length, '?').join(', ')})',
+            values.values.toList(),
+          );
+          tableIds[key] = values[table.primaryKey] ?? _database.lastInsertRowId;
+          imported++;
+        }
+        counts[table.name] = RestoreCounts(
+          imported: imported,
+          skipped: skipped,
+          retained: mode == RestoreMode.merge ? local.length - updated : 0,
+        );
+      }
+      // A valid empty backup resets this singleton to the same first-run
+      // default expected by the settings screen.
+      _database.execute(
+        '''INSERT OR IGNORE INTO ebbinghaus_settings
+        (id, enabled, pass_threshold, enabled_at, updated_at) VALUES (1, 0, 0.8, NULL, ?)''',
+        [DateTime.now().toUtc().toIso8601String()],
+      );
+      if (_database.select('PRAGMA foreign_key_check').isNotEmpty) {
+        throw StateError('恢复后的数据关联无效');
+      }
+      // Retained parents can conflict with otherwise valid incoming children.
+      // Validate the combined graph before committing any changes.
+      UserDataBackup.fromRecords(_userDataRows());
+      _database.execute('COMMIT');
+      return RestoreReport(counts);
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  Map<String, Object?> _backupMergeChanges(
+    String table,
+    Map<String, Object?> local,
+    Map<String, Object?> incoming,
+  ) {
+    switch (table) {
+      case 'devotion_note':
+        if (DateTime.parse(
+          incoming['updated_at'] as String,
+        ).isAfter(DateTime.parse(local['updated_at'] as String))) {
+          return {
+            'content': incoming['content'],
+            'updated_at': incoming['updated_at'],
+          };
+        }
+      case 'plan_task':
+        if (local['completed'] == 0 && incoming['completed'] == 1) {
+          return {'completed': 1};
+        }
+      case 'quiz_question':
+        if (incoming['answered'] == 1 &&
+            (local['answered'] == 0 ||
+                DateTime.parse(
+                  incoming['answered_at'] as String,
+                ).isAfter(DateTime.parse(local['answered_at'] as String)))) {
+          return {
+            for (final key in ['answered', 'is_correct', 'answered_at'])
+              key: incoming[key],
+          };
+        }
+      case 'achievement_unlock':
+        final changes = <String, Object?>{};
+        if ((incoming['award_count'] as int) > (local['award_count'] as int)) {
+          changes['award_count'] = incoming['award_count'];
+        }
+        if (DateTime.parse(
+          incoming['unlocked_at'] as String,
+        ).isBefore(DateTime.parse(local['unlocked_at'] as String))) {
+          changes['unlocked_at'] = incoming['unlocked_at'];
+        }
+        return changes;
+    }
+    return {};
+  }
 
   /// The old global setting was copied to every plan when per-plan reviews
   /// were introduced. That was not a deliberate choice for each plan, so a
