@@ -20,6 +20,40 @@ void main() {
     );
   });
 
+  test(
+    'rejects a verse beyond the real chapter end for every accepted book',
+    () {
+      expect(
+        () => DevotionManifest.parse(
+          _jsonForDays({
+            DateTime(2026, 1, 1): [_passage('JHN', 3, 1, 3, 37)],
+          }),
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test('rejects an OSIS book without complete verse-count data', () {
+    expect(
+      () => DevotionManifest.parse(
+        _jsonForDays({
+          DateTime(2026, 1, 1): [_passage('GEN', 1, 1, 1, 31)],
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('defensively freezes the manifest year list', () {
+    final years = <DevotionYear>[];
+    final manifest = DevotionManifest(revision: 1, years: years);
+
+    years.add(DevotionYear(year: 2026, days: const []));
+
+    expect(manifest.years, isEmpty);
+  });
+
   test('splits cross chapter ranges at real chapter ends', () {
     final manifest = DevotionManifest.parse(
       _jsonForDays({
