@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,32 +51,13 @@ Future<DevotionManifest> syncDevotionManifest({
     'devotion_source_url',
     defaultDevotionSourceUrl,
   );
-  final manifest = await client.fetchFirst(devotionSourceCandidates(source));
-  await repository.cacheDevotionManifest(_encodeManifest(manifest));
+  final response = await client.fetchFirstWithSource(
+    devotionSourceCandidates(source),
+  );
+  await repository.cacheDevotionManifest(response.source);
   await onCached?.call();
-  return manifest;
+  return response.manifest;
 }
-
-String _encodeManifest(DevotionManifest manifest) => jsonEncode({
-  'format': 'bible-recite-devotion-plans',
-  'version': 1,
-  'revision': manifest.revision,
-  'years': [
-    for (final year in manifest.years)
-      {
-        'year': year.year,
-        'days': [
-          for (final day in year.days)
-            {
-              'date': day.date.toIso8601String().substring(0, 10),
-              'passages': [
-                for (final passage in day.passages) passage.toJson(),
-              ],
-            },
-        ],
-      },
-  ],
-});
 
 final devotionRevisionProvider = NotifierProvider<DevotionRevision, int>(
   DevotionRevision.new,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/devotion/data/devotion_feed_client.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
@@ -49,19 +51,49 @@ void main() {
     expect(note.updatedAt, secondUpdatedAt);
   });
 
-  test('syncs a validated feed before notifying the UI', () async {
-    var callbackSawCachedManifest = false;
+  test(
+    'sync caches the exact validated feed before notifying the UI',
+    () async {
+      var callbackSawCachedManifest = false;
+      final payload = jsonDecode(complete2026Json) as Map<String, Object?>;
+      payload['publisherNote'] =
+          'metadata that the schedule model does not use';
+      final originalSource =
+          '\n${const JsonEncoder.withIndent('  ').convert(payload)}\n';
 
-    final manifest = await syncDevotionManifest(
-      repository: repository,
-      client: DevotionFeedClient(loader: (_) async => complete2026Json),
-      onCached: () async {
-        callbackSawCachedManifest =
-            await repository.loadCachedDevotionManifest() != null;
-      },
+      final manifest = await syncDevotionManifest(
+        repository: repository,
+        client: DevotionFeedClient(loader: (_) async => originalSource),
+        onCached: () async {
+          callbackSawCachedManifest =
+              await repository.loadCachedDevotionManifest() != null;
+        },
+      );
+
+      expect(manifest.revision, 1);
+      expect(manifest.dayFor(DateTime(2026, 2, 2))!.passages, hasLength(2));
+      expect(
+        await repository.getSetting(devotionManifestSettingKey, ''),
+        originalSource,
+      );
+      expect(callbackSawCachedManifest, isTrue);
+    },
+  );
+
+  test('a failed sync preserves the last valid cache', () async {
+    await repository.cacheDevotionManifest(complete2026Json);
+
+    await expectLater(
+      syncDevotionManifest(
+        repository: repository,
+        client: DevotionFeedClient(loader: (_) async => '{'),
+      ),
+      throwsA(isA<DevotionFeedException>()),
     );
 
-    expect(manifest.revision, 1);
-    expect(callbackSawCachedManifest, isTrue);
+    expect(
+      await repository.getSetting(devotionManifestSettingKey, ''),
+      complete2026Json,
+    );
   });
 }

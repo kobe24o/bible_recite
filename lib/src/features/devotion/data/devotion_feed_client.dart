@@ -5,6 +5,16 @@ import '../domain/devotion_models.dart';
 
 typedef DevotionTextLoader = Future<String> Function(Uri uri);
 
+/// A manifest parsed from, and paired with, the exact response text that
+/// passed validation. Callers that persist the manifest must retain [source],
+/// not re-encode the model.
+final class DevotionFeedResponse {
+  const DevotionFeedResponse({required this.source, required this.manifest});
+
+  final String source;
+  final DevotionManifest manifest;
+}
+
 final class DevotionFeedException implements Exception {
   const DevotionFeedException(this.message);
 
@@ -26,10 +36,16 @@ final class DevotionFeedClient {
   final Duration timeout;
 
   Future<DevotionManifest> fetchFirst(Iterable<Uri> uris) async {
+    return (await fetchFirstWithSource(uris)).manifest;
+  }
+
+  /// Returns the first successfully downloaded response together with its
+  /// validated manifest, preserving the response text byte-for-byte.
+  Future<DevotionFeedResponse> fetchFirstWithSource(Iterable<Uri> uris) async {
     final errors = <String>[];
     for (final uri in uris) {
       try {
-        return await fetch(uri);
+        return await _fetchWithSource(uri);
       } on DevotionFeedException catch (error) {
         errors.add('${uri.host}: ${error.message}');
       }
@@ -43,6 +59,10 @@ final class DevotionFeedClient {
   }
 
   Future<DevotionManifest> fetch(Uri uri) async {
+    return (await _fetchWithSource(uri)).manifest;
+  }
+
+  Future<DevotionFeedResponse> _fetchWithSource(Uri uri) async {
     if (uri.scheme != 'https' || uri.host.isEmpty) {
       throw ArgumentError.value(uri, 'uri', 'Devotion URL must use HTTPS');
     }
@@ -60,7 +80,10 @@ final class DevotionFeedClient {
       throw DevotionFeedException('Devotion response exceeds $maxBytes bytes');
     }
     try {
-      return DevotionManifest.parse(text);
+      return DevotionFeedResponse(
+        source: text,
+        manifest: DevotionManifest.parse(text),
+      );
     } on FormatException catch (error) {
       throw DevotionFeedException(error.message);
     }
