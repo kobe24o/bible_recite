@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../devotion/domain/devotion_models.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../review/domain/ebbinghaus_scheduler.dart';
 import '../../quiz/domain/quiz_models.dart';
@@ -13,6 +14,15 @@ import '../../statistics/domain/achievement.dart';
 import '../../statistics/domain/achievement_engine.dart';
 import '../../statistics/domain/recitation_result.dart';
 import '../domain/plan_models.dart';
+
+const devotionCachedManifestSettingKey = 'devotion_cached_manifest';
+
+final class DevotionNote {
+  const DevotionNote({required this.content, required this.updatedAt});
+
+  final String content;
+  final DateTime updatedAt;
+}
 
 final class SqlitePlanRepository {
   /// Bump this when stricter question validation makes cached unanswered
@@ -151,6 +161,13 @@ final class SqlitePlanRepository {
       VALUES ('first_opened_at', ?)''',
       [DateTime.now().toUtc().toIso8601String()],
     );
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS devotion_note (
+        date TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
     _database.execute('''
       CREATE TABLE IF NOT EXISTS quiz_question (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -447,7 +464,7 @@ final class SqlitePlanRepository {
       end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''',
     );
     _migratePerPlanEbbinghausConsent();
-    _database.execute('PRAGMA user_version = 8');
+    _database.execute('PRAGMA user_version = 9');
   }
 
   final Database _database;
@@ -689,6 +706,58 @@ final class SqlitePlanRepository {
       ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
     ''',
       [key, value],
+    );
+  }
+
+  /// Returns the last fully validated devotion manifest, if one is available.
+  /// Older installs can contain an invalid setting, which must not block
+  /// offline startup.
+  Future<DevotionManifest?> loadCachedDevotionManifest() async {
+    final source = await getSetting(devotionCachedManifestSettingKey, '');
+    if (source.isEmpty) return null;
+    try {
+      return DevotionManifest.parse(source);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Validates before writing so a bad download can never replace a usable
+  /// offline schedule.
+  Future<void> cacheDevotionManifest(String source) async {
+    DevotionManifest.parse(source);
+    await setSetting(devotionCachedManifestSettingKey, source);
+  }
+
+  Future<DevotionNote?> devotionNoteFor(DateTime day) async {
+    final rows = _database.select(
+      'SELECT content, updated_at FROM devotion_note WHERE date = ?',
+      [_date(day)],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return DevotionNote(
+      content: row['content'] as String,
+      updatedAt: DateTime.parse(row['updated_at'] as String).toUtc(),
+    );
+  }
+
+  /// A note remains present even when its content is empty: clearing a note is
+  /// itself a user edit that must take part in later backup conflict handling.
+  Future<void> saveDevotionNote(
+    DateTime day,
+    String content, {
+    DateTime? updatedAt,
+  }) async {
+    final timestamp = (updatedAt ?? DateTime.now()).toUtc().toIso8601String();
+    _database.execute(
+      '''
+      INSERT INTO devotion_note(date, content, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(date) DO UPDATE SET
+        content = excluded.content,
+        updated_at = excluded.updated_at
+      ''',
+      [_date(day), content, timestamp],
     );
   }
 
