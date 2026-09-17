@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/devotion/data/devotion_feed_client.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -10,6 +11,30 @@ import 'devotion_models_test.dart' show complete2026Json;
 
 void main() {
   late SqlitePlanRepository repository;
+
+  test('today provider exposes an exact calendar day', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final now = DateTime.now();
+
+    expect(
+      container.read(devotionTodayProvider),
+      DateTime(now.year, now.month, now.day),
+    );
+  });
+
+  test('today provider refreshes a retained container across dates', () {
+    var now = DateTime(2026, 9, 17, 23, 59);
+    final container = ProviderContainer(
+      overrides: [devotionClockProvider.overrideWithValue(() => now)],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(devotionTodayProvider), DateTime(2026, 9, 17));
+    now = DateTime(2026, 9, 18, 0, 1);
+    container.read(devotionTodayProvider.notifier).refresh();
+    expect(container.read(devotionTodayProvider), DateTime(2026, 9, 18));
+  });
 
   setUp(() {
     repository = SqlitePlanRepository(sqlite3.openInMemory());

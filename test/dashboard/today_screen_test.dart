@@ -35,7 +35,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
-            devotionTodayProvider.overrideWithValue(DateTime(2026, 9, 17)),
+            devotionClockProvider.overrideWithValue(
+              () => DateTime(2026, 9, 17),
+            ),
           ],
           child: MaterialApp.router(
             locale: const Locale('zh'),
@@ -238,6 +240,7 @@ void main() {
       ProviderScope(
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => DateTime(2026, 9, 17)),
         ],
         child: const MaterialApp(
           locale: Locale('zh'),
@@ -253,6 +256,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('today-devotion-2026-09-17')), findsOneWidget);
 
     await tester.tap(find.byKey(Key('complete-task-${task.id}')));
     await tester.pump(const Duration(milliseconds: 100));

@@ -41,7 +41,30 @@ final devotionFeedClientProvider = Provider<DevotionFeedClient>(
   (ref) => DevotionFeedClient(),
 );
 
-final devotionTodayProvider = Provider<DateTime>((ref) => DateTime.now());
+typedef DevotionClock = DateTime Function();
+
+/// An injectable clock keeps calendar-day behavior deterministic in tests.
+final devotionClockProvider = Provider<DevotionClock>((ref) => DateTime.now);
+
+/// The current local calendar day for devotion lookup.
+///
+/// The app refreshes this provider when it resumes and at the next midnight;
+/// consumers therefore do not retain a startup timestamp across a day change.
+final devotionTodayProvider = NotifierProvider<DevotionToday, DateTime>(
+  DevotionToday.new,
+);
+
+final class DevotionToday extends Notifier<DateTime> {
+  @override
+  DateTime build() => _calendarDay(ref.watch(devotionClockProvider)());
+
+  void refresh() {
+    state = _calendarDay(ref.read(devotionClockProvider)());
+  }
+}
+
+DateTime _calendarDay(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
 
 final cachedDevotionManifestProvider = FutureProvider<DevotionManifest?>((
   ref,

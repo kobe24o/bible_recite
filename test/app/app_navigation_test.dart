@@ -1,5 +1,6 @@
 import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/app/router.dart';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/update/application/update_providers.dart';
 import 'package:bible_recite/src/features/update/presentation/about_screen.dart';
 import 'package:bible_recite/src/features/update/presentation/update_available_notification.dart';
@@ -11,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sqlite3/sqlite3.dart';
+
+import '../devotion/devotion_models_test.dart' show complete2026Json;
 
 void main() {
   testWidgets('opens About when the update notification is selected', (
@@ -90,6 +93,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('今日任务'), findsOneWidget);
   });
+
+  testWidgets(
+    'refreshes devotion date at rollover and resume in one app container',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await repository.cacheDevotionManifest(complete2026Json);
+      var now = DateTime(2026, 9, 17, 23, 59, 59);
+      appRouter.go('/');
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            devotionClockProvider.overrideWithValue(() => now),
+          ],
+          child: const BibleReciteApp(locale: Locale('zh')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(BibleReciteApp)),
+      );
+      expect(container.read(devotionTodayProvider), DateTime(2026, 9, 17));
+      expect(
+        find.byKey(const Key('today-devotion-2026-09-17')),
+        findsOneWidget,
+      );
+
+      now = DateTime(2026, 9, 18, 0, 0, 1);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(container.read(devotionTodayProvider), DateTime(2026, 9, 18));
+      expect(
+        find.byKey(const Key('today-devotion-2026-09-18')),
+        findsOneWidget,
+      );
+
+      appRouter.go('/devotion');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('devotion-day-2026-09-18')), findsOneWidget);
+      expect(find.text('今天'), findsOneWidget);
+
+      now = DateTime(2026, 9, 19, 8);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(container.read(devotionTodayProvider), DateTime(2026, 9, 19));
+      expect(find.byKey(const Key('devotion-day-2026-09-19')), findsOneWidget);
+      expect(find.text('今天'), findsOneWidget);
+    },
+  );
 
   testWidgets('About is the only route that checks for updates', (
     tester,

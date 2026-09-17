@@ -24,7 +24,9 @@ void main() {
         ProviderScope(
           overrides: [
             planRepositoryProvider.overrideWith((ref) async => repository),
-            devotionTodayProvider.overrideWithValue(DateTime(2026, 9, 17)),
+            devotionClockProvider.overrideWithValue(
+              () => DateTime(2026, 9, 17),
+            ),
           ],
           child: MaterialApp.router(
             locale: const Locale('zh'),
@@ -70,7 +72,9 @@ void main() {
           ProviderScope(
             overrides: [
               planRepositoryProvider.overrideWith((ref) async => repository),
-              devotionTodayProvider.overrideWithValue(DateTime(2026, 9, 17)),
+              devotionClockProvider.overrideWithValue(
+                () => DateTime(2026, 9, 17),
+              ),
               devotionFeedClientProvider.overrideWithValue(
                 DevotionFeedClient(
                   loader: (_) async {
