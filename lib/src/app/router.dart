@@ -1,6 +1,9 @@
 import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
 
 import '../features/dashboard/presentation/today_screen.dart';
+import '../features/devotion/presentation/devotion_schedule_screen.dart';
+import '../features/devotion/presentation/devotion_detail_screen.dart';
 import '../features/update/presentation/about_screen.dart';
 import '../features/plans/presentation/plans_screen.dart';
 import '../features/quiz/presentation/quiz_practice_request.dart';
@@ -16,6 +19,21 @@ import 'responsive_shell.dart';
 
 final appRouter = GoRouter(
   routes: [
+    GoRoute(
+      path: '/devotion',
+      builder: (context, state) => const DevotionScheduleScreen(),
+    ),
+    GoRoute(
+      path: '/devotion/:date',
+      builder: (context, state) {
+        final raw = state.pathParameters['date']!;
+        final date = DateTime.tryParse(raw);
+        if (date == null || devotionDateLabel(date) != raw) {
+          return const Scaffold(body: Center(child: Text('无效的灵修日期')));
+        }
+        return DevotionDetailScreen(key: ValueKey(raw), date: date);
+      },
+    ),
     GoRoute(
       path: '/',
       builder: (context, state) => const ResponsiveShell(child: TodayScreen()),

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
+import '../../devotion/application/devotion_providers.dart';
+import '../../devotion/presentation/devotion_schedule_screen.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../statistics/domain/achievement.dart';
@@ -33,6 +35,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final localizations = AppLocalizations.of(context)!;
     final repository = ref.watch(planRepositoryProvider);
     final bookNames = ref.watch(bookNameCatalogProvider);
+    final devotion = ref
+        .watch(cachedDevotionManifestProvider)
+        .asData
+        ?.value
+        ?.dayFor(ref.watch(devotionTodayProvider));
     return Scaffold(
       appBar: AppBar(title: Text(localizations.todayTitle)),
       body: Stack(
@@ -48,7 +55,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final data = snapshot.data!;
-                if (data.tasks.isEmpty && data.reviews.isEmpty) {
+                if (devotion == null &&
+                    data.tasks.isEmpty &&
+                    data.reviews.isEmpty) {
                   return _EmptyToday(
                     localizations: localizations,
                     showStartJourney: !data.hasActivePlan,
@@ -71,6 +80,38 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (devotion != null)
+                      Card(
+                        child: ListTile(
+                          key: Key(
+                            'today-devotion-${devotionDateLabel(devotion.date)}',
+                          ),
+                          leading: const Icon(Icons.auto_stories_outlined),
+                          title: const Text('今日灵修'),
+                          subtitle: Text(
+                            devotion.passages
+                                .map(
+                                  (passage) => devotionPassageLabel(
+                                    passage,
+                                    bookNames.nameFor(
+                                      passage.bookId,
+                                      Localizations.localeOf(context),
+                                    ),
+                                  ),
+                                )
+                                .join('；'),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push(
+                            '/devotion/${devotionDateLabel(devotion.date)}',
+                          ),
+                        ),
+                      ),
+                    if (data.tasks.isEmpty && data.reviews.isEmpty)
+                      _EmptyToday(
+                        localizations: localizations,
+                        showStartJourney: !data.hasActivePlan,
+                      ),
                     if (pending.isNotEmpty || pendingReviews.isNotEmpty) ...[
                       Text(
                         chinese ? '待完成' : 'To do',
@@ -329,10 +370,7 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final blocks = task.effectiveBlocks;
-    final summary = compactPlanTaskSummary(
-      blocks,
-      bookNameFor: bookNameFor,
-    );
+    final summary = compactPlanTaskSummary(blocks, bookNameFor: bookNameFor);
     return Card(
       child: ListTile(
         onTap: plan == null ? null : onStart,

@@ -1,4 +1,5 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
+import 'package:bible_recite/src/features/devotion/domain/devotion_models.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_task_chapter_groups.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
@@ -13,6 +14,83 @@ import 'package:go_router/go_router.dart';
 import 'scripture_browser_screen_test.dart' show FakeRepositoryForPassage;
 
 void main() {
+  testWidgets('cross chapter devotion highlights exact endpoints only', (
+    tester,
+  ) async {
+    final day = DevotionDay(
+      date: DateTime(2026, 9, 17),
+      passages: const [
+        DevotionPassage(
+          bookId: 'JHN',
+          startChapter: 3,
+          startVerse: 16,
+          endChapter: 4,
+          endVerse: 3,
+        ),
+        DevotionPassage(
+          bookId: 'JHN',
+          startChapter: 4,
+          startVerse: 8,
+          endChapter: 4,
+          endVerse: 9,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          scriptureRepositoryProvider.overrideWith(
+            (ref) async => FakeRepositoryForPassage(
+              chapterUnitsByReference: {
+                'JHN:3': [
+                  for (final verse in [15, 16, 36])
+                    _planReadingUnit(bookId: 'JHN', chapter: 3, verse: verse),
+                ],
+                'JHN:4': [
+                  for (final verse in [1, 3, 4, 8, 9, 10])
+                    _planReadingUnit(bookId: 'JHN', chapter: 4, verse: verse),
+                ],
+              },
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PassageScreen(
+            translationId: 'eng-web',
+            bookId: 'JHN',
+            chapter: 3,
+            planTaskGroups: day.chapterGroups(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    void expectHighlighted(String reference, bool highlighted) {
+      final text = find.text('Reading $reference');
+      final material = tester.widget<Material>(
+        find.ancestor(of: text, matching: find.byType(Material)).first,
+      );
+      final highlight = Theme.of(
+        tester.element(text),
+      ).colorScheme.primaryContainer;
+      expect(material.color == highlight, highlighted, reason: reference);
+    }
+
+    expectHighlighted('JHN 3:15', false);
+    expectHighlighted('JHN 3:16', true);
+    expectHighlighted('JHN 3:36', true);
+    await tester.tap(find.byKey(const Key('next-plan-passage-button')));
+    await tester.pumpAndSettle();
+    expectHighlighted('JHN 4:1', true);
+    expectHighlighted('JHN 4:3', true);
+    expectHighlighted('JHN 4:4', false);
+    expectHighlighted('JHN 4:8', true);
+    expectHighlighted('JHN 4:9', true);
+    expectHighlighted('JHN 4:10', false);
+  });
   testWidgets('renders a local chapter without network access', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

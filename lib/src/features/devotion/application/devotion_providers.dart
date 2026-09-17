@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/devotion_feed_client.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../plans/application/plan_providers.dart';
 import '../domain/devotion_models.dart';
 
 const officialDevotionGcoreUrl =
@@ -39,6 +40,37 @@ List<Uri> devotionSourceCandidates(String source) {
 final devotionFeedClientProvider = Provider<DevotionFeedClient>(
   (ref) => DevotionFeedClient(),
 );
+
+final devotionTodayProvider = Provider<DateTime>((ref) => DateTime.now());
+
+final cachedDevotionManifestProvider = FutureProvider<DevotionManifest?>((
+  ref,
+) async {
+  ref.watch(devotionRevisionProvider);
+  final repository = await ref.watch(planRepositoryProvider.future);
+  return repository.loadCachedDevotionManifest();
+});
+
+final devotionSyncProvider = NotifierProvider<DevotionSync, AsyncValue<void>>(
+  DevotionSync.new,
+);
+
+final class DevotionSync extends Notifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncData(null);
+
+  Future<void> sync() async {
+    if (state.isLoading) return;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await syncDevotionManifest(
+        repository: await ref.read(planRepositoryProvider.future),
+        client: ref.read(devotionFeedClientProvider),
+        onCached: () => ref.read(devotionRevisionProvider.notifier).refresh(),
+      );
+    });
+  }
+}
 
 /// Downloads the current schedule, persists it, then lets the caller refresh
 /// UI state. The callback runs only after a validated cache write succeeds.
