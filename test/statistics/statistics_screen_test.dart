@@ -1,4 +1,10 @@
+import 'dart:convert';
+
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
+import 'package:bible_recite/src/features/backup/domain/user_data_backup.dart';
+import 'package:bible_recite/src/features/backup/presentation/user_data_backup_card.dart';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
+import 'package:bible_recite/src/features/quiz/application/quiz_providers.dart';
 import 'package:bible_recite/src/app/runtime_platform.dart';
 import 'package:bible_recite/src/features/distribution/application/distribution_providers.dart';
 import 'package:bible_recite/src/features/distribution/domain/testflight_link.dart';
@@ -8,16 +14,22 @@ import 'package:bible_recite/src/features/plans/domain/cloud_plan_manifest.dart'
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_scope.dart';
+import 'package:bible_recite/src/features/reminder/daily_task_reminder.dart';
+import 'package:bible_recite/src/features/reminder/reminder_providers.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:bible_recite/src/features/statistics/presentation/statistics_screen.dart';
 import 'package:bible_recite/src/features/statistics/presentation/random_quiz_options_dialog.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../scripture/scripture_browser_screen_test.dart'
     show FakeRepositoryForPassage;
@@ -52,6 +64,258 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  for (final enabled in [false, true]) {
+    testWidgets(
+      'restore reconciles scheduled alarms when reminders are ${enabled ? 'retimed' : 'disabled'}',
+      (tester) async {
+        final repository = SqlitePlanRepository(sqlite3.openInMemory());
+        addTearDown(repository.close);
+        await repository.createPlan(
+          NewMemorizationPlan(
+            title: '提醒计划',
+            translationId: 'cmn-cu89s',
+            bookId: 'GEN',
+            startChapter: 1,
+            endChapter: 1,
+            startDate: DateTime(2020),
+            endDate: DateTime(2020),
+            tasks: const [
+              NewPlanTask(
+                dayIndex: 0,
+                startChapter: 1,
+                startVerse: 1,
+                endChapter: 1,
+                endVerse: 1,
+              ),
+            ],
+          ),
+        );
+        await DailyTaskReminderScheduler.saveSettings(
+          repository,
+          DailyTaskReminderSettings(
+            enabled: enabled,
+            startMinutes: 555,
+            endMinutes: 615,
+            intervalMinutes: 30,
+          ),
+        );
+        final backup = await repository.exportUserData();
+        await DailyTaskReminderScheduler.saveSettings(
+          repository,
+          const DailyTaskReminderSettings(
+            enabled: true,
+            startMinutes: 300,
+            endMinutes: 360,
+            intervalMinutes: 60,
+          ),
+        );
+        final notifications = _ScheduledNotifications();
+        final scheduler = DailyTaskReminderScheduler(
+          notifications: notifications,
+          platform: AppRuntimePlatform.ios,
+        );
+        await scheduler.reschedule(repository);
+        expect(notifications.scheduled, hasLength(32));
+        expect(
+          notifications.scheduled.values.every(
+            (time) => time.hour == 5 || time.hour == 6,
+          ),
+          isTrue,
+        );
+        notifications.cancelled.clear();
+        await _pumpScreen(
+          tester,
+          repository,
+          backupFiles: _BackupFiles(backup.encode()),
+          reminderScheduler: scheduler,
+        );
+        await tester.ensureVisible(find.byKey(const Key('restore-user-data')));
+        await tester.tap(find.byKey(const Key('restore-user-data')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('restore-replace')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirm-restore-replace')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('restore-report')), findsOneWidget);
+        expect(
+          notifications.cancelled,
+          List.generate(32, (index) => 7100 + index),
+        );
+        if (enabled) {
+          expect(notifications.scheduled, hasLength(32));
+          expect(
+            notifications.scheduled.values.every(
+              (time) =>
+                  (time.hour == 9 &&
+                      (time.minute == 15 || time.minute == 45)) ||
+                  (time.hour == 10 && time.minute == 15),
+            ),
+            isTrue,
+          );
+        } else {
+          expect(notifications.scheduled, isEmpty);
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'valid backup offers merge and full replacement and refreshes providers',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final files = _BackupFiles(
+        UserDataBackup.fromRecords({
+          'app_setting': [
+            {'setting_key': 'profile_name', 'setting_value': '恢复名字'},
+          ],
+          'devotion_note': [
+            {
+              'date': '2026-01-01',
+              'content': '已恢复',
+              'updated_at': '2026-01-01T00:00:00Z',
+            },
+          ],
+        }).encode(),
+      );
+      await _pumpScreen(tester, repository, backupFiles: files);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StatisticsScreen)),
+      );
+      final before = [
+        container.read(recitationDataRevisionProvider),
+        container.read(profileRevisionProvider),
+        container.read(presetPlanRevisionProvider),
+        container.read(devotionRevisionProvider),
+        container.read(quizBankRevisionProvider),
+      ];
+      await tester.ensureVisible(find.byKey(const Key('restore-user-data')));
+      await tester.tap(find.byKey(const Key('restore-user-data')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('restore-merge')), findsOneWidget);
+      expect(find.byKey(const Key('restore-replace')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('restore-merge')));
+      await tester.pumpAndSettle();
+      expect(
+        (await repository.devotionNoteFor(DateTime(2026)))!.content,
+        '已恢复',
+      );
+      expect(find.byKey(const Key('restore-report')), findsOneWidget);
+      expect(find.textContaining('导入'), findsWidgets);
+      expect([
+        container.read(recitationDataRevisionProvider),
+        container.read(profileRevisionProvider),
+        container.read(presetPlanRevisionProvider),
+        container.read(devotionRevisionProvider),
+        container.read(quizBankRevisionProvider),
+      ], before.map((n) => n + 1).toList());
+      expect(await container.read(profileNameProvider.future), '恢复名字');
+    },
+  );
+
+  testWidgets(
+    'replacement requires a second confirmation and cancel preserves data',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await repository.saveDevotionNote(DateTime(2026), '本机笔记');
+      await _pumpScreen(
+        tester,
+        repository,
+        backupFiles: _BackupFiles(UserDataBackup.fromRecords({}).encode()),
+      );
+      Future<void> chooseReplace() async {
+        await tester.ensureVisible(find.byKey(const Key('restore-user-data')));
+        await tester.tap(find.byKey(const Key('restore-user-data')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('restore-replace')));
+        await tester.pumpAndSettle();
+      }
+
+      await chooseReplace();
+      expect(find.byKey(const Key('confirm-restore-replace')), findsOneWidget);
+      expect(
+        (await repository.devotionNoteFor(DateTime(2026)))!.content,
+        '本机笔记',
+      );
+      await tester.tap(find.byKey(const Key('cancel-restore-replace')));
+      await tester.pumpAndSettle();
+      expect(
+        (await repository.devotionNoteFor(DateTime(2026)))!.content,
+        '本机笔记',
+      );
+      await chooseReplace();
+      await tester.tap(find.byKey(const Key('confirm-restore-replace')));
+      await tester.pumpAndSettle();
+      expect(await repository.devotionNoteFor(DateTime(2026)), isNull);
+      expect(find.byKey(const Key('restore-report')), findsOneWidget);
+    },
+  );
+
+  testWidgets('invalid backup shows an error before offering restore modes', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.saveDevotionNote(DateTime(2026), '保留');
+    await _pumpScreen(
+      tester,
+      repository,
+      backupFiles: _BackupFiles('{"format":"other","version":1}'),
+    );
+    await tester.ensureVisible(find.byKey(const Key('restore-user-data')));
+    await tester.tap(find.byKey(const Key('restore-user-data')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('restore-merge')), findsNothing);
+    expect(find.textContaining('恢复失败'), findsOneWidget);
+    expect((await repository.devotionNoteFor(DateTime(2026)))!.content, '保留');
+  });
+
+  testWidgets('exports a dated portable backup from My', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.setSetting('quiz_model_api_key', 'private-key');
+    await repository.saveDevotionNote(DateTime(2026), '导出笔记');
+    final files = _BackupFiles(null);
+    await _pumpScreen(tester, repository, backupFiles: files);
+    await tester.ensureVisible(find.byKey(const Key('export-user-data')));
+    await tester.tap(find.byKey(const Key('export-user-data')));
+    await tester.pumpAndSettle();
+    expect(files.savedName, matches(r'^BibleRecite-backup-\d{8}\.json$'));
+    final backup = UserDataBackup.decode(utf8.decode(files.savedBytes!));
+    expect(backup.devotionNotes.single.content, '导出笔记');
+    expect(backup.settings.containsKey('quiz_model_api_key'), isFalse);
+  });
+
+  test(
+    'Android backup saves through the existing JSON download channel',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('app.biblerecite/plan_json_store');
+      MethodCall? received;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            received = call;
+            return 'content://downloads/backup';
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      final path = await UserDataBackupFiles(AppRuntimePlatform.android).save(
+        Uint8List.fromList([123, 125]),
+        'BibleRecite-backup-20260917.json',
+      );
+      expect(received!.method, 'saveJson');
+      expect(received!.arguments['bytes'], [123, 125]);
+      expect(
+        received!.arguments['displayName'],
+        'BibleRecite-backup-20260917.json',
+      );
+      expect(path, contains('Download/BibleRecite/'));
+    },
+  );
+
   testWidgets('shows only TestFlight on iOS when a public link is configured', (
     tester,
   ) async {
@@ -534,6 +798,8 @@ Future<void> _pumpScreen(
   StatisticsScreenView view = StatisticsScreenView.overview,
   AppRuntimePlatform? platform,
   TestFlightLink? testFlightLink,
+  UserDataBackupFiles? backupFiles,
+  DailyTaskReminderScheduler? reminderScheduler,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -547,6 +813,12 @@ Future<void> _pumpScreen(
         if (platform != null)
           appRuntimePlatformProvider.overrideWithValue(platform),
         testFlightLinkProvider.overrideWithValue(testFlightLink),
+        if (backupFiles != null)
+          userDataBackupFilesProvider.overrideWithValue(backupFiles),
+        if (reminderScheduler != null)
+          dailyTaskReminderSchedulerProvider.overrideWithValue(
+            reminderScheduler,
+          ),
       ],
       child: MaterialApp(
         locale: Locale('zh'),
@@ -562,4 +834,62 @@ Future<void> _pumpScreen(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+class _BackupFiles extends UserDataBackupFiles {
+  _BackupFiles(this.source) : super(AppRuntimePlatform.other);
+  final String? source;
+  Uint8List? savedBytes;
+  String? savedName;
+
+  @override
+  Future<XFile?> choose() async => source == null
+      ? null
+      : XFile.fromData(
+          Uint8List.fromList(utf8.encode(source!)),
+          name: 'backup.json',
+        );
+
+  @override
+  Future<String?> save(Uint8List bytes, String name) async {
+    savedBytes = bytes;
+    savedName = name;
+    return '/tmp/$name';
+  }
+}
+
+class _ScheduledNotifications extends Fake
+    implements FlutterLocalNotificationsPlugin {
+  final scheduled = <int, DateTime>{};
+  final cancelled = <int>[];
+
+  @override
+  Future<bool?> initialize({
+    required InitializationSettings settings,
+    DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
+    DidReceiveBackgroundNotificationResponseCallback?
+    onDidReceiveBackgroundNotificationResponse,
+  }) async => true;
+
+  @override
+  Future<void> cancel({required int id, String? tag}) async {
+    cancelled.add(id);
+    scheduled.remove(id);
+  }
+
+  @override
+  Future<void> zonedSchedule({
+    required int id,
+    required tz.TZDateTime scheduledDate,
+    required NotificationDetails notificationDetails,
+    required AndroidScheduleMode androidScheduleMode,
+    String? title,
+    String? body,
+    String? payload,
+    DateTimeComponents? matchDateTimeComponents,
+  }) async {
+    scheduled[id] = DateTime.fromMillisecondsSinceEpoch(
+      scheduledDate.millisecondsSinceEpoch,
+    );
+  }
 }

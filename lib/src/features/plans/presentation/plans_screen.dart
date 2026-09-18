@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
+import '../../devotion/presentation/devotion_schedule_screen.dart';
 import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
@@ -97,6 +98,8 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const DevotionOverviewCard(),
+          const SizedBox(height: 16),
           if (_working) const LinearProgressIndicator(),
           Row(
             children: [

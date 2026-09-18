@@ -8,6 +8,7 @@ import '../../l10n/generated/app_localizations.dart';
 import '../features/update/application/update_controller.dart';
 import '../features/update/domain/update_status.dart';
 import '../features/update/presentation/update_available_notification.dart';
+import '../features/devotion/application/devotion_providers.dart';
 import '../features/plans/application/plan_providers.dart';
 import '../features/plans/application/preset_plan_sync.dart';
 import '../features/quiz/application/quiz_bank_sync.dart';
@@ -28,6 +29,7 @@ class BibleReciteApp extends ConsumerStatefulWidget {
 
 class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     with WidgetsBindingObserver {
+  Timer? _devotionDateTimer;
   Timer? _updateTimer;
 
   @override
@@ -39,6 +41,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       unawaited(_syncPresetPlansAtLaunch());
       unawaited(_syncQuizBankAtLaunch());
     });
+    _scheduleDevotionDateRefresh();
     if (_usesAndroidUpdater) {
       _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
         unawaited(_checkUpdateAtLaunch());
@@ -49,6 +52,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
 
   @override
   void dispose() {
+    _devotionDateTimer?.cancel();
     _updateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -58,8 +62,21 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshDailyReminders());
+      _refreshDevotionToday();
       if (_usesAndroidUpdater) unawaited(_checkUpdateAtLaunch());
     }
+  }
+
+  void _refreshDevotionToday() {
+    ref.read(devotionTodayProvider.notifier).refresh();
+    _scheduleDevotionDateRefresh();
+  }
+
+  void _scheduleDevotionDateRefresh() {
+    _devotionDateTimer?.cancel();
+    final now = ref.read(devotionClockProvider)();
+    final nextDay = DateTime(now.year, now.month, now.day + 1);
+    _devotionDateTimer = Timer(nextDay.difference(now), _refreshDevotionToday);
   }
 
   Future<void> _refreshDailyReminders() async {

@@ -1,5 +1,6 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/dashboard/presentation/today_screen.dart';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
@@ -10,8 +11,57 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sqlite3/sqlite3.dart';
+import '../devotion/devotion_models_test.dart' show complete2026Json;
 
 void main() {
+  testWidgets(
+    'Today shows only todays devotion without completion or hiding onboarding',
+    (tester) async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      await repository.cacheDevotionManifest(complete2026Json);
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const TodayScreen()),
+          GoRoute(
+            path: '/devotion/:date',
+            builder: (_, state) =>
+                Scaffold(body: Text('灵修详情:${state.pathParameters['date']}')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            devotionClockProvider.overrideWithValue(
+              () => DateTime(2026, 9, 17),
+            ),
+          ],
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('today-devotion-2026-09-17')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('today-devotion-2026-09-18')), findsNothing);
+      expect(find.byKey(const Key('complete-devotion')), findsNothing);
+      expect(find.byKey(const Key('completion-confetti')), findsNothing);
+      expect(find.text('开始背诵之旅'), findsOneWidget);
+      expect(await repository.listPlans(), isEmpty);
+      await tester.tap(find.byKey(const Key('today-devotion-2026-09-17')));
+      await tester.pumpAndSettle();
+      expect(find.text('灵修详情:2026-09-17'), findsOneWidget);
+    },
+  );
   testWidgets('shows a due Ebbinghaus review as a direct recitation task', (
     tester,
   ) async {
@@ -163,6 +213,7 @@ void main() {
   ) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
+    await repository.cacheDevotionManifest(complete2026Json);
     final today = DateTime.now();
     final planId = await repository.createPlan(
       NewMemorizationPlan(
@@ -189,6 +240,7 @@ void main() {
       ProviderScope(
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => DateTime(2026, 9, 17)),
         ],
         child: const MaterialApp(
           locale: Locale('zh'),
@@ -204,6 +256,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('today-devotion-2026-09-17')), findsOneWidget);
 
     await tester.tap(find.byKey(Key('complete-task-${task.id}')));
     await tester.pump(const Duration(milliseconds: 100));

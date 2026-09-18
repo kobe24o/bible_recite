@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../../app/runtime_platform.dart';
 import '../../../app/empty_state_page.dart';
+import '../../backup/presentation/user_data_backup_card.dart';
 import '../../distribution/application/distribution_providers.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/application/preset_plan_sync.dart';
@@ -69,7 +70,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
-    ref.watch(recitationDataRevisionProvider);
+    final dataRevision = ref.watch(recitationDataRevisionProvider);
     final quizBankRevision = ref.watch(quizBankRevisionProvider);
     final name = ref.watch(profileNameProvider).asData?.value ?? '';
     final repository = ref.watch(planRepositoryProvider);
@@ -316,19 +317,28 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     const SizedBox(height: 12),
                   ],
                   if (overview) ...[
+                    UserDataBackupCard(repository: repository),
+                    const SizedBox(height: 12),
                     _EbbinghausSettingsCard(
+                      key: ValueKey('review-settings-$dataRevision'),
                       repository: repository,
                       initial: data.settings,
                     ),
                     const SizedBox(height: 12),
-                    QuizModelSettingsCard(repository: repository),
+                    QuizModelSettingsCard(
+                      key: ValueKey('model-settings-$dataRevision'),
+                      repository: repository,
+                    ),
                     const SizedBox(height: 12),
                     _QuizBankCard(
                       key: ValueKey(quizBankRevision),
                       repository: repository,
                     ),
                     const SizedBox(height: 12),
-                    _DailyReminderCard(repository: repository),
+                    _DailyReminderCard(
+                      key: ValueKey('reminder-settings-$dataRevision'),
+                      repository: repository,
+                    ),
                     const SizedBox(height: 12),
                     Card(
                       child: SwitchListTile(
@@ -1244,7 +1254,7 @@ final class _QuizBankCardData {
 }
 
 class _DailyReminderCard extends ConsumerStatefulWidget {
-  const _DailyReminderCard({required this.repository});
+  const _DailyReminderCard({super.key, required this.repository});
 
   final SqlitePlanRepository repository;
 
@@ -1408,6 +1418,7 @@ class _DailyReminderCardState extends ConsumerState<_DailyReminderCard> {
 
 class _EbbinghausSettingsCard extends StatefulWidget {
   const _EbbinghausSettingsCard({
+    super.key,
     required this.repository,
     required this.initial,
   });
