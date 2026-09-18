@@ -10,6 +10,7 @@ import '../../devotion/application/devotion_providers.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../quiz/application/quiz_providers.dart';
+import '../../reminder/reminder_providers.dart';
 import '../domain/user_data_backup.dart';
 
 final userDataBackupFilesProvider = Provider<UserDataBackupFiles>(
@@ -183,10 +184,12 @@ class _UserDataBackupCardState extends ConsumerState<UserDataBackupCard> {
         );
         if (!mounted || confirmed != true) return;
       }
+      final reminderScheduler = ref.read(dailyTaskReminderSchedulerProvider);
       final report = await widget.repository.restoreUserData(
         backup,
         mode: mode,
       );
+      await reminderScheduler.reschedule(widget.repository);
       if (!mounted) return;
       ref.read(recitationDataRevisionProvider.notifier).refresh();
       ref.read(profileRevisionProvider.notifier).refresh();

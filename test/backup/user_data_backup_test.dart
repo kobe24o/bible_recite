@@ -91,6 +91,46 @@ void main() {
   });
 
   test(
+    'nullable quiz history still validates references and scripture scope',
+    () {
+      for (final reference in ['missing', 42]) {
+        final json = validJson();
+        final row =
+            ((json['records'] as Map)['quiz_result'] as List).single as Map;
+        row['question_ref'] = reference;
+        expect(
+          () => UserDataBackup.decode(jsonEncode(json)),
+          throwsFormatException,
+        );
+      }
+      final mismatched = backupRecords();
+      mismatched['quiz_result']!.single['verse'] = 17;
+      expect(
+        () => UserDataBackup.fromRecords(mismatched),
+        throwsFormatException,
+      );
+
+      final detached = backupRecords();
+      detached['quiz_result']!.single['question_id'] = null;
+      detached['quiz_question'] = [];
+      final backup = UserDataBackup.fromRecords(detached);
+      expect(backup.records['quiz_result']!.single['question_ref'], isNull);
+      detached['quiz_result']!.single['verse'] = 37;
+      expect(() => UserDataBackup.fromRecords(detached), throwsFormatException);
+    },
+  );
+
+  test('rejects duplicate portable quiz event keys', () {
+    final json = validJson();
+    final rows = (json['records'] as Map)['quiz_result'] as List;
+    rows.add({...rows.single as Map});
+    expect(
+      () => UserDataBackup.decode(jsonEncode(json)),
+      throwsFormatException,
+    );
+  });
+
+  test(
     'rejects dangling parents and relationships with inconsistent scope',
     () {
       for (final changes in [

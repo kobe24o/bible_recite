@@ -89,11 +89,12 @@ final class UserDataBackup {
     final keys = <String, Map<Object?, String>>{};
     for (final table in backupTables) {
       final localKeys = keys[table.name] = {};
+      final occurrences = <String, int>{};
       portable[table.name] = [
         for (final row in rows[table.name] ?? <Map<String, Object?>>[])
           if (table.name != 'app_setting' ||
               backupSettingKeys.contains(row['setting_key']))
-            _portableRow(table, row, keys, localKeys),
+            _portableRow(table, row, keys, localKeys, occurrences),
       ];
     }
     return UserDataBackup.decode(
@@ -111,6 +112,7 @@ final class UserDataBackup {
     Map<String, Object?> row,
     Map<String, Map<Object?, String>> keys,
     Map<Object?, String> localKeys,
+    Map<String, int> occurrences,
   ) {
     final result = <String, Object?>{
       for (final field in table.fields.keys) field: row[field],
@@ -123,7 +125,7 @@ final class UserDataBackup {
       }
       result[ref.field] = key;
     }
-    result['key'] = table.keyFor(result);
+    result['key'] = _portableKey(table, result, occurrences);
     localKeys[row[table.primaryKey]] = result['key'] as String;
     return result;
   }
@@ -150,6 +152,7 @@ final class UserDataBackup {
       final raw = data[table.name];
       if (raw is! List) throw FormatException('Missing ${table.name} records');
       final index = indexed[table.name] = {};
+      final occurrences = <String, int>{};
       rows[table.name] = [];
       for (final value in raw) {
         final row = Map<String, Object?>.from(_map(value));
@@ -160,7 +163,7 @@ final class UserDataBackup {
             row[field.key] = _timestamp(row[field.key]).toIso8601String();
           }
         }
-        final key = table.keyFor(row);
+        final key = _portableKey(table, row, occurrences);
         if (row['key'] != key || index.containsKey(key)) {
           throw FormatException('Invalid or duplicate ${table.name} identity');
         }
@@ -505,9 +508,14 @@ const backupTables = <BackupTable>[
       'correct': 'b',
       'answered_at': 'time',
     },
-    ['question_ref', 'answered_at', 'correct'],
+    ['translation_id', 'book_id', 'chapter', 'verse', 'answered_at', 'correct'],
     references: [
-      BackupReference('question_id', 'question_ref', 'quiz_question'),
+      BackupReference(
+        'question_id',
+        'question_ref',
+        'quiz_question',
+        nullable: true,
+      ),
     ],
   ),
   BackupTable(
@@ -588,6 +596,26 @@ const backupTables = <BackupTable>[
     primaryKey: 'setting_key',
   ),
 ];
+
+String _portableKey(
+  BackupTable table,
+  Map<String, Object?> row,
+  Map<String, int> occurrences,
+) {
+  final identity = table.keyFor(row);
+  if (table.name != 'quiz_result') return identity;
+  // Snapshot activation removes question IDs, but each history row retains
+  // its own verse scope and answer event. Keep that identity stable before
+  // and after detachment, and retain multiple indistinguishable attempts.
+  // Occurrence order is stable in exports (local row order); re-importing
+  // either snapshot preserves the maximum observed multiplicity.
+  final occurrence = occurrences.update(
+    identity,
+    (n) => n + 1,
+    ifAbsent: () => 0,
+  );
+  return jsonEncode([identity, occurrence]);
+}
 
 Map<String, Object?> _map(Object? value) {
   if (value is! Map<String, Object?>) {
@@ -704,9 +732,9 @@ void _validateRelationships(
       final plan = parent('memorization_plan', 'plan_ref');
       final span = index['plan_schedule_span']![jsonEncode([row['plan_ref']])];
       final days = (span?['days'] ?? plan['days']) as int;
-      if ((row['day_index'] as int) >= days ||
-          _day(row['due_date']).difference(_day(plan['start_date'])).inDays !=
-              row['day_index']) {
+      // Completion records its actual date, and resume rebases unfinished
+      // tasks without changing the plan's original start date.
+      if ((row['day_index'] as int) >= days) {
         throw const FormatException('Task is outside its schedule');
       }
     case 'recitation_verse_metric':
@@ -717,12 +745,14 @@ void _validateRelationships(
         throw const FormatException('Metric outside result range');
       }
     case 'quiz_result':
-      same(parent('quiz_question', 'question_ref'), [
-        'translation_id',
-        'book_id',
-        'chapter',
-        'verse',
-      ]);
+      if (row['question_ref'] != null) {
+        same(parent('quiz_question', 'question_ref'), [
+          'translation_id',
+          'book_id',
+          'chapter',
+          'verse',
+        ]);
+      }
     case 'ebbinghaus_cycle':
       final result = parent('recitation_result', 'source_result_ref');
       same(result, [

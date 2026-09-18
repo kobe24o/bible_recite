@@ -1,6 +1,7 @@
 import 'package:bible_recite/src/features/backup/domain/user_data_backup.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
+import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
 import 'package:bible_recite/src/features/statistics/domain/recitation_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -15,6 +16,139 @@ void main() {
     repository = SqlitePlanRepository(database);
   });
   tearDown(() => repository.close());
+
+  test(
+    'snapshot-detached quiz history round trips without collisions',
+    () async {
+      final questions = [
+        for (final position in [(16, 0), (16, 2), (17, 0)])
+          ValidatedQuizQuestion(
+            reference: '约翰福音 3:${position.$1}',
+            translationId: 'cmn-cu89s',
+            bookId: 'JHN',
+            chapter: 3,
+            verse: position.$1,
+            start: position.$2,
+            end: position.$2 + 1,
+            word: '神',
+            partOfSpeech: '名词',
+            meaning: '创造主',
+            verseText: '神爱世人',
+          ),
+      ];
+      await repository.saveQuizQuestions(questions);
+      for (final question in database.select(
+        'SELECT id FROM quiz_question ORDER BY id',
+      )) {
+        await repository.completeQuizQuestion(
+          questionId: question['id'] as int,
+          correct: true,
+          answeredAt: DateTime.utc(2026, 8, 21),
+        );
+      }
+      final attached = await repository.exportUserData();
+      await repository.stageQuizBankSnapshot(702, [questions.first]);
+      await repository.activateStagedQuizBankSnapshot(702);
+      expect(
+        database
+            .select('SELECT question_id FROM quiz_result')
+            .map((r) => r['question_id']),
+        [null, null, null],
+      );
+      final detached = UserDataBackup.decode(
+        (await repository.exportUserData()).encode(),
+      );
+      expect(detached.records['quiz_result']!.map((r) => r['question_ref']), [
+        null,
+        null,
+        null,
+      ]);
+      expect(
+        detached.records['quiz_result']!.map((r) => r['key']),
+        attached.records['quiz_result']!.map((r) => r['key']),
+      );
+      final targetDatabase = sqlite3.openInMemory();
+      final target = SqlitePlanRepository(targetDatabase);
+      addTearDown(target.close);
+      await target.restoreUserData(detached, mode: RestoreMode.replace);
+      expect((await target.getQuizSummary()).totalAnswered, 3);
+      expect(
+        targetDatabase
+            .select('SELECT question_id FROM quiz_result')
+            .map((r) => r['question_id']),
+        [null, null, null],
+      );
+      expect(
+        (await target.exportUserData()).records['quiz_result'],
+        detached.records['quiz_result'],
+      );
+      final report = await target.restoreUserData(
+        attached,
+        mode: RestoreMode.merge,
+      );
+      expect(report.categories['quiz_result']!.imported, 0);
+      expect(report.categories['quiz_result']!.skipped, 3);
+      expect((await target.getQuizSummary()).totalAnswered, 3);
+    },
+  );
+
+  test(
+    'partly completed resumed plan preserves its rebased task dates',
+    () async {
+      final planId = await repository.createPlan(
+        NewMemorizationPlan(
+          title: '恢复排期',
+          translationId: 'cmn-cu89s',
+          bookId: 'GEN',
+          startChapter: 1,
+          endChapter: 1,
+          startDate: DateTime(2020, 1, 1),
+          endDate: DateTime(2020, 1, 3),
+          tasks: [
+            for (var day = 0; day < 3; day++)
+              NewPlanTask(
+                dayIndex: day,
+                startChapter: 1,
+                startVerse: day + 1,
+                endChapter: 1,
+                endVerse: day + 1,
+              ),
+          ],
+        ),
+      );
+      final first = (await repository.listTasks(planId)).first;
+      await repository.setTaskCompleted(first.id, true);
+      await repository.pausePlan(planId);
+      await repository.resumePlan(planId);
+      final tasks = await repository.listTasks(planId);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      expect(tasks.map((task) => task.dueDate), [
+        today,
+        today,
+        today.add(const Duration(days: 1)),
+      ]);
+      expect(
+        (await repository.listPlans()).single.startDate,
+        DateTime(2020, 1, 1),
+      );
+      final backup = UserDataBackup.decode(
+        (await repository.exportUserData()).encode(),
+      );
+      final target = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(target.close);
+      await target.restoreUserData(backup, mode: RestoreMode.replace);
+      final restoredPlan = (await target.listPlans()).single;
+      final restoredTasks = await target.listTasks(restoredPlan.id);
+      expect(restoredPlan.startDate, DateTime(2020, 1, 1));
+      expect(restoredTasks.map((task) => task.dueDate), [
+        today,
+        today,
+        today.add(const Duration(days: 1)),
+      ]);
+      expect(restoredTasks.map((task) => task.completed), [true, false, false]);
+    },
+  );
 
   test(
     'replacement preserves quiz streak statistics from the backup',
@@ -69,7 +203,7 @@ void main() {
 
   test('replacement can recover a locally inconsistent schedule', () async {
     seedRecords(database);
-    database.execute("UPDATE plan_task SET due_date = '2026-01-03'");
+    database.execute('UPDATE plan_task SET day_index = 999');
     await repository.restoreUserData(
       UserDataBackup.fromRecords({}),
       mode: RestoreMode.replace,
