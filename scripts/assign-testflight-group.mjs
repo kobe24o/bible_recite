@@ -76,6 +76,44 @@ export async function recordExemptEncryptionUse(api, buildId) {
   });
 }
 
+export async function submitBetaReview(
+  api,
+  { buildId, buildNumber, logger = console },
+) {
+  try {
+    await api('/v1/betaAppReviewSubmissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'betaAppReviewSubmissions',
+          relationships: {
+            build: {
+              data: { id: buildId, type: 'builds' },
+            },
+          },
+        },
+      }),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.appStoreErrorCodes?.includes(
+        'ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW',
+      )
+    ) {
+      logger.log(
+        `Build ${buildNumber} is uploaded and assigned; ` +
+        'a previous Beta App Review is still pending.',
+      );
+      return false;
+    }
+    throw error;
+  }
+
+  logger.log(`Submitted build ${buildNumber} for Beta App Review.`);
+  return true;
+}
+
 async function main() {
   const bundleId = required('IOS_BUNDLE_ID');
   const buildNumber = required('TESTFLIGHT_BUILD_NUMBER');
@@ -104,7 +142,11 @@ async function main() {
     }
     const body = await response.json();
     if (!response.ok) {
-      throw new Error(`App Store Connect API ${response.status}: ${JSON.stringify(body.errors ?? body)}`);
+      const error = new Error(
+        `App Store Connect API ${response.status}: ${JSON.stringify(body.errors ?? body)}`,
+      );
+      error.appStoreErrorCodes = (body.errors ?? []).map((item) => item.code);
+      throw error;
     }
     return body;
   }
@@ -167,20 +209,10 @@ async function main() {
     return;
   }
 
-  await api('/v1/betaAppReviewSubmissions', {
-    method: 'POST',
-    body: JSON.stringify({
-      data: {
-        type: 'betaAppReviewSubmissions',
-        relationships: {
-          build: {
-            data: { id: build.id, type: 'builds' },
-          },
-        },
-      },
-    }),
+  await submitBetaReview(api, {
+    buildId: build.id,
+    buildNumber,
   });
-  console.log(`Submitted build ${buildNumber} for Beta App Review.`);
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

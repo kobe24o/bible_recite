@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   recordExemptEncryptionUse,
+  submitBetaReview,
   waitForProcessedBuild,
 } from './assign-testflight-group.mjs';
 
@@ -57,4 +58,26 @@ test('stops immediately when Apple marks a build invalid', async () => {
     ),
     /processing failed \(INVALID\)/,
   );
+});
+
+test('leaves an uploaded build ready when another beta review is pending', async () => {
+  const pendingReview = new Error('Another build is in review.');
+  pendingReview.appStoreErrorCodes = [
+    'ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW',
+  ];
+  const messages = [];
+
+  const submitted = await submitBetaReview(
+    async (path, options) => {
+      assert.equal(path, '/v1/betaAppReviewSubmissions');
+      assert.equal(options.method, 'POST');
+      throw pendingReview;
+    },
+    { buildId: 'build-1', buildNumber: '20260919073600', logger: { log: (message) => messages.push(message) } },
+  );
+
+  assert.equal(submitted, false);
+  assert.deepEqual(messages, [
+    'Build 20260919073600 is uploaded and assigned; a previous Beta App Review is still pending.',
+  ]);
 });
