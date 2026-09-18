@@ -155,6 +155,15 @@ void main() {
     expect(workflow, contains('gh release create'));
     expect(workflow, contains('--latest'));
   });
+
+  test('every master publish starts an automatic TestFlight upload', () {
+    final workflow = File(
+      '.github/workflows/testflight-renewal.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains('push:\n    branches:\n      - master'));
+    expect(workflow, contains('apple-actions/upload-testflight-build@v5'));
+  });
 }
 
 Map<String, String> _attributes(String source) => {

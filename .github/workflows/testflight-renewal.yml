@@ -2,6 +2,9 @@ name: Renew TestFlight beta
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
   schedule:
     # 02:17 UTC on the first day of every other month. This produces a
     # replacement build well before TestFlight's 90-day build expiry.
