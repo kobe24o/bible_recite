@@ -10,6 +10,15 @@ void main() {
     expect(plist, contains('<key>NSMicrophoneUsageDescription</key>'));
   });
 
+  test('iOS backup export channel is compiled into the Runner target', () {
+    final project = File(
+      'ios/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+
+    expect(project, contains('BackupFileExportChannel.swift'));
+    expect(project, contains('BackupFileExportChannel.swift in Sources'));
+  });
+
   test('Android manifest allows routing audio through bluetooth headsets', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
