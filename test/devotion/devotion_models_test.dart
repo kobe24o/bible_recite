@@ -34,11 +34,39 @@ void main() {
     },
   );
 
-  test('rejects an OSIS book without complete verse-count data', () {
+  test('parses Genesis even when it is absent from the 2026 schedule', () {
+    final manifest = DevotionManifest.parse(
+      _jsonForDays({
+        DateTime(2026, 1, 1): [_passage('GEN', 1, 1, 1, 31)],
+      }),
+    );
+
+    expect(manifest.years.single.days.first.passages.single.bookId, 'GEN');
+  });
+
+  test('uses Lamentations exact chapter bounds', () {
     expect(
       () => DevotionManifest.parse(
         _jsonForDays({
-          DateTime(2026, 1, 1): [_passage('GEN', 1, 1, 1, 31)],
+          DateTime(2026, 1, 1): [_passage('LAM', 3, 1, 3, 67)],
+        }),
+      ),
+      throwsFormatException,
+    );
+
+    final manifest = DevotionManifest.parse(
+      _jsonForDays({
+        DateTime(2026, 1, 1): [_passage('LAM', 3, 1, 3, 66)],
+      }),
+    );
+    expect(manifest.years.single.days.first.passages.single.endVerse, 66);
+  });
+
+  test('rejects an unsupported OSIS book', () {
+    expect(
+      () => DevotionManifest.parse(
+        _jsonForDays({
+          DateTime(2026, 1, 1): [_passage('XXX', 1, 1, 1, 1)],
         }),
       ),
       throwsFormatException,
