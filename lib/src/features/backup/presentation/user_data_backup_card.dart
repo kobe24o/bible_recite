@@ -28,17 +28,19 @@ class UserDataBackupFiles {
       mimeTypes: ['application/json'],
     ),
   ];
-  static const _channel = MethodChannel('app.biblerecite/plan_json_store');
+  static const _mobileExportChannel = MethodChannel(
+    'app.biblerecite/backup_file',
+  );
 
   Future<XFile?> choose() => openFile(acceptedTypeGroups: _types);
 
   Future<String?> save(Uint8List bytes, String name) async {
-    if (platform == AppRuntimePlatform.android) {
-      await _channel.invokeMethod<String>('saveJson', {
+    if (platform == AppRuntimePlatform.android ||
+        platform == AppRuntimePlatform.ios) {
+      return _mobileExportChannel.invokeMethod<String>('exportJson', {
         'bytes': bytes,
         'displayName': name,
       });
-      return 'Download/BibleRecite/$name';
     }
     final location = await getSaveLocation(
       suggestedName: name,

@@ -413,6 +413,11 @@ final class SqlitePlanRepository {
         'ALTER TABLE recitation_result ADD COLUMN chapter_verse_count INTEGER NOT NULL DEFAULT 0',
       );
     }
+    if (!resultColumns.contains('character_count')) {
+      _database.execute(
+        'ALTER TABLE recitation_result ADD COLUMN character_count INTEGER NOT NULL DEFAULT 0',
+      );
+    }
     if (!resultColumns.contains('phonetic_correct_count')) {
       _database.execute(
         'ALTER TABLE recitation_result ADD COLUMN phonetic_correct_count INTEGER NOT NULL DEFAULT 0',

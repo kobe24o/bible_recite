@@ -287,34 +287,38 @@ void main() {
     expect(backup.settings.containsKey('quiz_model_api_key'), isFalse);
   });
 
-  test(
-    'Android backup saves through the existing JSON download channel',
-    () async {
-      TestWidgetsFlutterBinding.ensureInitialized();
-      const channel = MethodChannel('app.biblerecite/plan_json_store');
-      MethodCall? received;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            received = call;
-            return 'content://downloads/backup';
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null),
-      );
-      final path = await UserDataBackupFiles(AppRuntimePlatform.android).save(
+  test('mobile backups use the native document export channel', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('app.biblerecite/backup_file');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return 'content://documents/${calls.length}';
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    for (final platform in [
+      AppRuntimePlatform.android,
+      AppRuntimePlatform.ios,
+    ]) {
+      final path = await UserDataBackupFiles(platform).save(
         Uint8List.fromList([123, 125]),
-        'BibleRecite-backup-20260917.json',
+        'BibleRecite-backup-20260918.json',
       );
-      expect(received!.method, 'saveJson');
-      expect(received!.arguments['bytes'], [123, 125]);
-      expect(
-        received!.arguments['displayName'],
-        'BibleRecite-backup-20260917.json',
-      );
-      expect(path, contains('Download/BibleRecite/'));
-    },
-  );
+      expect(path, startsWith('content://documents/'));
+    }
+
+    expect(calls, hasLength(2));
+    for (final call in calls) {
+      expect(call.method, 'exportJson');
+      expect(call.arguments['bytes'], [123, 125]);
+      expect(call.arguments['displayName'], 'BibleRecite-backup-20260918.json');
+    }
+  });
 
   testWidgets('shows only TestFlight on iOS when a public link is configured', (
     tester,

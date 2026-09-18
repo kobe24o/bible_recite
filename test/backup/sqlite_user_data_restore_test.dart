@@ -18,6 +18,37 @@ void main() {
   tearDown(() => repository.close());
 
   test(
+    'migrates legacy recitation records before exporting a backup',
+    () async {
+      final legacy = sqlite3.openInMemory();
+      legacy.execute('''
+      CREATE TABLE recitation_result (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        translation_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter INTEGER NOT NULL,
+        start_verse INTEGER NOT NULL,
+        end_verse INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        duration_seconds INTEGER NOT NULL,
+        correct_count INTEGER NOT NULL,
+        incorrect_count INTEGER NOT NULL,
+        omitted_count INTEGER NOT NULL,
+        reordered_count INTEGER NOT NULL,
+        accuracy REAL NOT NULL,
+        completed_at TEXT NOT NULL
+      )
+    ''');
+      final legacyRepository = SqlitePlanRepository(legacy);
+      addTearDown(legacyRepository.close);
+
+      final backup = await legacyRepository.exportUserData();
+
+      expect(backup.records['recitation_result'], isEmpty);
+    },
+  );
+
+  test(
     'snapshot-detached quiz history round trips without collisions',
     () async {
       final questions = [
