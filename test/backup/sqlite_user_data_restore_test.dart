@@ -49,6 +49,30 @@ void main() {
   );
 
   test(
+    'exports legacy results after their deleted plan references are cleared',
+    () async {
+      seedRecords(database);
+      database.execute('PRAGMA foreign_keys = OFF');
+      database.execute('UPDATE recitation_result SET plan_id = 999');
+      database.execute('UPDATE recitation_verse_metric SET plan_id = 999');
+      database.execute('UPDATE ebbinghaus_cycle SET source_plan_id = 999');
+      database.execute('PRAGMA foreign_keys = ON');
+
+      final backup = await repository.exportUserData();
+
+      expect(backup.records['recitation_result']!.single['plan_ref'], isNull);
+      expect(
+        backup.records['recitation_verse_metric']!.single['plan_ref'],
+        isNull,
+      );
+      expect(
+        backup.records['ebbinghaus_cycle']!.single['source_plan_ref'],
+        isNull,
+      );
+    },
+  );
+
+  test(
     'snapshot-detached quiz history round trips without collisions',
     () async {
       final questions = [

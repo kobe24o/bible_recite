@@ -493,12 +493,31 @@ final class SqlitePlanRepository {
   Future<UserDataBackup> exportUserData() async {
     _database.execute('BEGIN');
     try {
+      _clearDanglingOptionalPlanReferences();
       final backup = UserDataBackup.fromRecords(_userDataRows());
       _database.execute('COMMIT');
       return backup;
     } catch (_) {
       _database.execute('ROLLBACK');
       rethrow;
+    }
+  }
+
+  /// Old installations could retain a plan ID on historical results after
+  /// the plan had already been removed. These references are optional and
+  /// must not prevent users from exporting their completed study history.
+  void _clearDanglingOptionalPlanReferences() {
+    for (final tableAndColumn in [
+      ('recitation_result', 'plan_id'),
+      ('recitation_verse_metric', 'plan_id'),
+      ('ebbinghaus_cycle', 'source_plan_id'),
+    ]) {
+      final (table, column) = tableAndColumn;
+      _database.execute('''UPDATE $table SET $column = NULL
+        WHERE $column IS NOT NULL AND NOT EXISTS (
+          SELECT 1 FROM memorization_plan
+          WHERE memorization_plan.id = $table.$column
+        )''');
     }
   }
 
