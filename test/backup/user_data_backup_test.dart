@@ -237,14 +237,17 @@ void main() {
     expect(() => UserDataBackup.fromRecords(rows), throwsFormatException);
   });
 
-  test('limits UTF-8 input to 20 MB', () {
+  test('exports and restores a Chinese text backup larger than 20 MB', () {
+    final rows = backupRecords();
+    final content = '灵' * (7 * 1024 * 1024);
+    rows['devotion_note']!.single['content'] = content;
+
+    final backup = UserDataBackup.fromRecords(rows);
+
+    expect(backup.devotionNotes.single.content, content);
     expect(
-      () => UserDataBackup.decode(' ' * (20 * 1024 * 1024 + 1)),
-      throwsFormatException,
-    );
-    expect(
-      () => UserDataBackup.decode('中' * (7 * 1024 * 1024)),
-      throwsFormatException,
+      UserDataBackup.decode(backup.encode()).devotionNotes.single.content,
+      content,
     );
   });
 

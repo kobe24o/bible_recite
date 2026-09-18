@@ -128,7 +128,7 @@ class _UserDataBackupCardState extends ConsumerState<UserDataBackupCard> {
       final file = await ref.read(userDataBackupFilesProvider).choose();
       if (file == null) return;
       if (await file.length() > UserDataBackup.maxBytes) {
-        throw const FormatException('备份文件超过 20 MB');
+        throw const FormatException('备份文件超过 100 MB');
       }
       final backup = UserDataBackup.decode(
         utf8.decode(await file.readAsBytes()),

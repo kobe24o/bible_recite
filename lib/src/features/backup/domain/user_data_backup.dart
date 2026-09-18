@@ -62,7 +62,9 @@ final class UserDataBackup {
           ),
       });
 
-  static const maxBytes = 20 * 1024 * 1024;
+  /// Large personal history, particularly devotional notes, must round-trip
+  /// without treating a normal export as an unsafe import payload.
+  static const maxBytes = 100 * 1024 * 1024;
   final DateTime exportedAt;
   final Map<String, List<Map<String, Object?>>> records;
 
@@ -134,7 +136,7 @@ final class UserDataBackup {
 
   static UserDataBackup decode(String source) {
     if (source.length > maxBytes || utf8.encode(source).length > maxBytes) {
-      throw const FormatException('备份文件超过 20 MB');
+      throw const FormatException('备份文件超过 100 MB');
     }
     final root = _map(jsonDecode(source));
     if (root['format'] != 'bible-recite-user-backup' || root['version'] != 1) {
