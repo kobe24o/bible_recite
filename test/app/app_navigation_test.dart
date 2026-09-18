@@ -94,6 +94,35 @@ void main() {
     expect(find.text('今日任务'), findsOneWidget);
   });
 
+  testWidgets('Plans exposes annual devotion', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.cacheDevotionManifest(complete2026Json);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => DateTime(2026, 1, 1)),
+        ],
+        child: const BibleReciteApp(locale: Locale('zh')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('计划'));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('open-devotion-schedule'));
+    expect(entry, findsOneWidget);
+
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '年度灵修'), findsOneWidget);
+    expect(find.byKey(const Key('devotion-day-2026-01-01')), findsOneWidget);
+  });
+
   testWidgets(
     'refreshes devotion date at rollover and resume in one app container',
     (tester) async {
