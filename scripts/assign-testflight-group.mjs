@@ -118,7 +118,8 @@ async function main() {
   const bundleId = required('IOS_BUNDLE_ID');
   const buildNumber = required('TESTFLIGHT_BUILD_NUMBER');
   const groupName = required('TESTFLIGHT_GROUP_NAME');
-  const submitBetaReview = process.env.AUTO_SUBMIT_BETA_REVIEW === 'true';
+  const shouldSubmitBetaReview =
+      process.env.AUTO_SUBMIT_BETA_REVIEW === 'true';
   const credentials = {
     issuerId: required('APPSTORE_ISSUER_ID'),
     keyId: required('APPSTORE_API_KEY_ID'),
@@ -192,7 +193,7 @@ async function main() {
     console.log(`Assigned build ${buildNumber} to TestFlight group ${groupName}.`);
   }
 
-  if (!submitBetaReview) {
+  if (!shouldSubmitBetaReview) {
     return;
   }
 

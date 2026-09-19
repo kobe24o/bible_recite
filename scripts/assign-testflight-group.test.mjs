@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -6,6 +7,18 @@ import {
   submitBetaReview,
   waitForProcessedBuild,
 } from './assign-testflight-group.mjs';
+
+test('does not shadow the Beta App Review submission helper', () => {
+  const source = readFileSync(
+    new URL('./assign-testflight-group.mjs', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(
+    source,
+    /const submitBetaReview = process\.env\.AUTO_SUBMIT_BETA_REVIEW/,
+  );
+});
 
 test('records that the uploaded build uses no non-exempt encryption', async () => {
   const requests = [];
