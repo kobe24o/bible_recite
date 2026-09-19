@@ -14,6 +14,7 @@ import '../../quiz/domain/quiz_scope.dart';
 import '../../statistics/domain/achievement.dart';
 import '../../statistics/domain/achievement_engine.dart';
 import '../../statistics/domain/recitation_result.dart';
+import '../../scripture/domain/canonical_verse_limits.dart';
 import '../domain/plan_models.dart';
 
 const devotionCachedManifestSettingKey = 'devotion_cached_manifest';
@@ -493,6 +494,7 @@ final class SqlitePlanRepository {
   Future<UserDataBackup> exportUserData() async {
     _database.execute('BEGIN');
     try {
+      _clearInvalidLegacyScriptureRows();
       _clearDanglingOptionalPlanReferences();
       final backup = UserDataBackup.fromRecords(_userDataRows());
       _database.execute('COMMIT');
@@ -501,6 +503,109 @@ final class SqlitePlanRepository {
       _database.execute('ROLLBACK');
       rethrow;
     }
+  }
+
+  /// Older app versions only enforced positive chapter and verse numbers.
+  /// Remove records that cannot represent a real passage before producing a
+  /// portable backup. Deleting a parent lets SQLite cascade only its dependent
+  /// history, while every valid record remains available for export.
+  void _clearInvalidLegacyScriptureRows() {
+    for (final range in [
+      (
+        table: 'memorization_plan',
+        query: '''
+          SELECT id, book_id, start_chapter, 1 AS start_verse,
+            end_chapter, 1 AS end_verse
+          FROM memorization_plan
+        ''',
+      ),
+      (
+        table: 'plan_task',
+        query: '''
+          SELECT id, book_id, start_chapter, start_verse, end_chapter, end_verse
+          FROM plan_task
+        ''',
+      ),
+      (
+        table: 'plan_task_block',
+        query: '''
+          SELECT id, book_id, start_chapter, start_verse, end_chapter, end_verse
+          FROM plan_task_block
+        ''',
+      ),
+      (
+        table: 'recitation_result',
+        query: '''
+          SELECT id, book_id, chapter AS start_chapter, start_verse,
+            chapter AS end_chapter, end_verse
+          FROM recitation_result
+        ''',
+      ),
+      (
+        table: 'recitation_verse_metric',
+        query: '''
+          SELECT id, book_id, chapter AS start_chapter, verse AS start_verse,
+            chapter AS end_chapter, verse AS end_verse
+          FROM recitation_verse_metric
+        ''',
+      ),
+      (
+        table: 'quiz_question',
+        query: '''
+          SELECT id, book_id, chapter AS start_chapter, verse AS start_verse,
+            chapter AS end_chapter, verse AS end_verse
+          FROM quiz_question
+        ''',
+      ),
+      (
+        table: 'quiz_result',
+        query: '''
+          SELECT id, book_id, chapter AS start_chapter, verse AS start_verse,
+            chapter AS end_chapter, verse AS end_verse
+          FROM quiz_result
+        ''',
+      ),
+      (
+        table: 'ebbinghaus_cycle',
+        query: '''
+          SELECT id, book_id, start_chapter, start_verse, end_chapter, end_verse
+          FROM ebbinghaus_cycle
+        ''',
+      ),
+    ]) {
+      for (final row in _database.select(range.query)) {
+        if (_isCanonicalScriptureRange(row)) continue;
+        _database.execute('DELETE FROM ${range.table} WHERE id = ?', [
+          row['id'],
+        ]);
+      }
+    }
+  }
+
+  bool _isCanonicalScriptureRange(Row row) {
+    final bookId = row['book_id'];
+    final startChapter = row['start_chapter'];
+    final startVerse = row['start_verse'];
+    final endChapter = row['end_chapter'];
+    final endVerse = row['end_verse'];
+    if (bookId is! String ||
+        startChapter is! int ||
+        startVerse is! int ||
+        endChapter is! int ||
+        endVerse is! int) {
+      return false;
+    }
+
+    final limits = canonicalProtestant66VerseLimits[bookId];
+    return limits != null &&
+        startChapter >= 1 &&
+        endChapter >= startChapter &&
+        endChapter <= limits.length &&
+        startVerse >= 1 &&
+        endVerse >= 1 &&
+        startVerse <= limits[startChapter - 1] &&
+        endVerse <= limits[endChapter - 1] &&
+        (startChapter != endChapter || endVerse >= startVerse);
   }
 
   /// Old installations could retain a plan ID on historical results after

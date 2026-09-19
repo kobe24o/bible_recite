@@ -73,6 +73,22 @@ void main() {
   );
 
   test(
+    'exports valid history after removing an invalid legacy scripture range',
+    () async {
+      seedRecords(database);
+      database.execute('UPDATE recitation_result SET end_verse = 37');
+
+      final backup = await repository.exportUserData();
+
+      expect(backup.records['memorization_plan'], hasLength(1));
+      expect(backup.records['recitation_result'], isEmpty);
+      expect(backup.records['recitation_verse_metric'], isEmpty);
+      expect(backup.records['ebbinghaus_cycle'], isEmpty);
+      expect(backup.records['ebbinghaus_review'], isEmpty);
+    },
+  );
+
+  test(
     'snapshot-detached quiz history round trips without collisions',
     () async {
       final questions = [
