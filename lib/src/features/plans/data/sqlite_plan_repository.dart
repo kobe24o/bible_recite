@@ -496,6 +496,7 @@ final class SqlitePlanRepository {
     try {
       _clearInvalidLegacyScriptureRows();
       _clearDanglingOptionalPlanReferences();
+      _repairLegacyBackupGraph();
       final backup = UserDataBackup.fromRecords(_userDataRows());
       _database.execute('COMMIT');
       return backup;
@@ -606,6 +607,117 @@ final class SqlitePlanRepository {
         startVerse <= limits[startChapter - 1] &&
         endVerse <= limits[endChapter - 1] &&
         (startChapter != endChapter || endVerse >= startVerse);
+  }
+
+  /// Reconciles the legacy relationships enforced by portable backups. Older
+  /// database versions could retain rows that passed SQLite's basic column
+  /// checks but contradicted their parent result or schedule. Parent records
+  /// remain authoritative; dependent rows are normalized where unambiguous
+  /// and removed only when there is no safe way to restore them.
+  void _repairLegacyBackupGraph() {
+    _database.execute('''DELETE FROM plan_schedule_span
+      WHERE NOT EXISTS (
+        SELECT 1 FROM memorization_plan
+        WHERE memorization_plan.id = plan_schedule_span.plan_id
+      ) OR DATE(end_date) != DATE(
+        (SELECT start_date FROM memorization_plan
+          WHERE memorization_plan.id = plan_schedule_span.plan_id),
+        printf('+%d days', days - 1)
+      )''');
+
+    _database.execute('''DELETE FROM plan_task
+      WHERE NOT EXISTS (
+        SELECT 1 FROM memorization_plan
+        WHERE memorization_plan.id = plan_task.plan_id
+      ) OR day_index >= COALESCE(
+        (SELECT days FROM plan_schedule_span
+          WHERE plan_schedule_span.plan_id = plan_task.plan_id),
+        (SELECT days FROM memorization_plan
+          WHERE memorization_plan.id = plan_task.plan_id)
+      )''');
+    _database.execute('''DELETE FROM plan_task_block
+      WHERE NOT EXISTS (
+        SELECT 1 FROM plan_task
+        WHERE plan_task.id = plan_task_block.plan_task_id
+      )''');
+
+    _database.execute('''DELETE FROM recitation_verse_metric
+      WHERE NOT EXISTS (
+        SELECT 1 FROM recitation_result
+        WHERE recitation_result.id = recitation_verse_metric.recitation_result_id
+          AND recitation_result.translation_id = recitation_verse_metric.translation_id
+          AND recitation_result.book_id = recitation_verse_metric.book_id
+          AND recitation_result.chapter = recitation_verse_metric.chapter
+          AND recitation_verse_metric.verse
+            BETWEEN recitation_result.start_verse AND recitation_result.end_verse
+      )''');
+    _database.execute('''UPDATE recitation_verse_metric SET plan_id = (
+      SELECT plan_id FROM recitation_result
+      WHERE recitation_result.id = recitation_verse_metric.recitation_result_id
+    )''');
+
+    _database.execute('''DELETE FROM quiz_result
+      WHERE question_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM quiz_question
+        WHERE quiz_question.id = quiz_result.question_id
+      )''');
+    _database.execute('''UPDATE quiz_result SET
+      translation_id = (SELECT translation_id FROM quiz_question
+        WHERE quiz_question.id = quiz_result.question_id),
+      book_id = (SELECT book_id FROM quiz_question
+        WHERE quiz_question.id = quiz_result.question_id),
+      chapter = (SELECT chapter FROM quiz_question
+        WHERE quiz_question.id = quiz_result.question_id),
+      verse = (SELECT verse FROM quiz_question
+        WHERE quiz_question.id = quiz_result.question_id)
+      WHERE question_id IS NOT NULL''');
+
+    _database.execute('''DELETE FROM ebbinghaus_cycle
+      WHERE NOT EXISTS (
+        SELECT 1 FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id
+      )''');
+    _database.execute('''UPDATE ebbinghaus_cycle SET
+      translation_id = (SELECT translation_id FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      book_id = (SELECT book_id FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      chapter = (SELECT chapter FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      start_chapter = (SELECT chapter FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      start_verse = (SELECT start_verse FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      end_chapter = (SELECT chapter FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      end_verse = (SELECT end_verse FROM recitation_result
+        WHERE recitation_result.id = ebbinghaus_cycle.source_result_id),
+      source_plan_id = CASE
+        WHEN (SELECT plan_id FROM recitation_result
+          WHERE recitation_result.id = ebbinghaus_cycle.source_result_id)
+          IS NOT NULL
+        THEN (SELECT plan_id FROM recitation_result
+          WHERE recitation_result.id = ebbinghaus_cycle.source_result_id)
+        ELSE source_plan_id
+      END''');
+
+    _database.execute('''DELETE FROM ebbinghaus_review
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ebbinghaus_cycle
+        WHERE ebbinghaus_cycle.id = ebbinghaus_review.cycle_id
+      )''');
+    _database.execute('''UPDATE ebbinghaus_review SET result_id = NULL
+      WHERE result_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM ebbinghaus_cycle
+        JOIN recitation_result
+          ON recitation_result.id = ebbinghaus_review.result_id
+        WHERE ebbinghaus_cycle.id = ebbinghaus_review.cycle_id
+          AND ebbinghaus_cycle.translation_id = recitation_result.translation_id
+          AND ebbinghaus_cycle.book_id = recitation_result.book_id
+          AND ebbinghaus_cycle.chapter = recitation_result.chapter
+          AND ebbinghaus_cycle.start_verse = recitation_result.start_verse
+          AND ebbinghaus_cycle.end_verse = recitation_result.end_verse
+      )''');
   }
 
   /// Old installations could retain a plan ID on historical results after

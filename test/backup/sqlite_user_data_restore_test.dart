@@ -88,6 +88,32 @@ void main() {
     },
   );
 
+  test('repairs legacy backup graph conflicts before exporting', () async {
+    seedRecords(database);
+    database.execute('UPDATE plan_schedule_span SET end_date = \'2027-02-05\'');
+    database.execute('UPDATE plan_task SET day_index = 365');
+    database.execute('UPDATE recitation_verse_metric SET verse = 18');
+    database.execute('UPDATE quiz_result SET verse = 17');
+    database.execute('''UPDATE ebbinghaus_cycle SET
+      source_plan_id = NULL, start_verse = 18, end_verse = 18''');
+
+    final backup = await repository.exportUserData();
+
+    expect(backup.records['memorization_plan'], hasLength(1));
+    expect(backup.records['plan_schedule_span'], isEmpty);
+    expect(backup.records['plan_task'], isEmpty);
+    expect(backup.records['plan_task_block'], isEmpty);
+    expect(backup.records['recitation_result'], hasLength(1));
+    expect(backup.records['recitation_verse_metric'], isEmpty);
+    expect(backup.records['quiz_result']!.single['verse'], 16);
+    expect(
+      backup.records['ebbinghaus_cycle']!.single['source_plan_ref'],
+      isNotNull,
+    );
+    expect(backup.records['ebbinghaus_cycle']!.single['start_verse'], 16);
+    expect(backup.records['ebbinghaus_cycle']!.single['end_verse'], 17);
+  });
+
   test(
     'snapshot-detached quiz history round trips without collisions',
     () async {
