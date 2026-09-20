@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../features/dashboard/presentation/today_screen.dart';
 import '../features/devotion/presentation/devotion_schedule_screen.dart';
 import '../features/devotion/presentation/devotion_detail_screen.dart';
+import '../features/devotion/presentation/devotion_notes_screen.dart';
 import '../features/update/presentation/about_screen.dart';
 import '../features/plans/presentation/plans_screen.dart';
 import '../features/quiz/presentation/quiz_practice_request.dart';
@@ -96,6 +97,11 @@ final appRouter = GoRouter(
       builder: (context, state) => const ResponsiveShell(
         child: StatisticsScreen(view: StatisticsScreenView.achievements),
       ),
+    ),
+    GoRoute(
+      path: '/statistics/devotion-notes',
+      builder: (context, state) =>
+          const ResponsiveShell(child: DevotionNotesScreen()),
     ),
     GoRoute(
       path: '/statistics/map',

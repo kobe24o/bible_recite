@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:sqlite3/sqlite3.dart';
@@ -20,10 +21,30 @@ import '../domain/plan_models.dart';
 const devotionCachedManifestSettingKey = 'devotion_cached_manifest';
 
 final class DevotionNote {
-  const DevotionNote({required this.content, required this.updatedAt});
+  const DevotionNote({
+    required this.content,
+    required this.updatedAt,
+    this.passages = const [],
+  });
 
   final String content;
   final DateTime updatedAt;
+  final List<DevotionPassage> passages;
+}
+
+/// A written devotion note together with the calendar date it belongs to.
+///
+/// Empty notes are deliberately not represented here: the notes calendar is
+/// a history of what the user actually recorded, not a copy of every day in
+/// the annual plan.
+final class DevotionNoteEntry {
+  const DevotionNoteEntry({required this.date, required this.note});
+
+  final DateTime date;
+  final DevotionNote note;
+
+  String get content => note.content;
+  DateTime get updatedAt => note.updatedAt;
 }
 
 final class SqlitePlanRepository {
@@ -167,9 +188,19 @@ final class SqlitePlanRepository {
       CREATE TABLE IF NOT EXISTS devotion_note (
         date TEXT PRIMARY KEY,
         content TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        passages_json TEXT NOT NULL DEFAULT '[]'
       )
     ''');
+    final devotionNoteColumns = _database
+        .select('PRAGMA table_info(devotion_note)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!devotionNoteColumns.contains('passages_json')) {
+      _database.execute(
+        "ALTER TABLE devotion_note ADD COLUMN passages_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    }
     _database.execute('''
       CREATE TABLE IF NOT EXISTS quiz_question (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -471,7 +502,7 @@ final class SqlitePlanRepository {
       end_verse = (SELECT end_verse FROM recitation_result WHERE id = source_result_id)''',
     );
     _migratePerPlanEbbinghausConsent();
-    _database.execute('PRAGMA user_version = 9');
+    _database.execute('PRAGMA user_version = 10');
   }
 
   final Database _database;
@@ -855,6 +886,7 @@ final class SqlitePlanRepository {
           return {
             'content': incoming['content'],
             'updated_at': incoming['updated_at'],
+            'passages_json': incoming['passages_json'],
           };
         }
       case 'plan_task':
@@ -1149,7 +1181,7 @@ final class SqlitePlanRepository {
 
   Future<DevotionNote?> devotionNoteFor(DateTime day) async {
     final rows = _database.select(
-      'SELECT content, updated_at FROM devotion_note WHERE date = ?',
+      'SELECT content, updated_at, passages_json FROM devotion_note WHERE date = ?',
       [_date(day)],
     );
     if (rows.isEmpty) return null;
@@ -1157,25 +1189,106 @@ final class SqlitePlanRepository {
     return DevotionNote(
       content: row['content'] as String,
       updatedAt: DateTime.parse(row['updated_at'] as String).toUtc(),
+      passages: _decodeDevotionPassages(row['passages_json'] as String),
     );
   }
 
-  /// A note remains present even when its content is empty: clearing a note is
-  /// itself a user edit that must take part in later backup conflict handling.
+  /// Lists the written-note history in calendar order for the notes view.
+  /// The trim guard also keeps pre-existing blank legacy rows out of it.
+  Future<List<DevotionNoteEntry>> listDevotionNotes() async {
+    final rows = _database.select(
+      '''SELECT date, content, updated_at, passages_json FROM devotion_note
+      WHERE trim(content) <> '' ORDER BY date ASC''',
+    );
+    return List.unmodifiable([
+      for (final row in rows)
+        DevotionNoteEntry(
+          date: DateTime.parse(row['date'] as String),
+          note: DevotionNote(
+            content: row['content'] as String,
+            updatedAt: DateTime.parse(row['updated_at'] as String).toUtc(),
+            passages: _decodeDevotionPassages(row['passages_json'] as String),
+          ),
+        ),
+    ]);
+  }
+
+  /// Clearing a note removes it: the calendar only contains notes a person
+  /// actually wrote.
   Future<void> saveDevotionNote(
     DateTime day,
     String content, {
     DateTime? updatedAt,
+    List<DevotionPassage> passages = const [],
   }) async {
+    if (content.trim().isEmpty) {
+      _database.execute('DELETE FROM devotion_note WHERE date = ?', [
+        _date(day),
+      ]);
+      return;
+    }
     final timestamp = (updatedAt ?? DateTime.now()).toUtc().toIso8601String();
     _database.execute(
       '''
-      INSERT INTO devotion_note(date, content, updated_at) VALUES (?, ?, ?)
+      INSERT INTO devotion_note(date, content, updated_at, passages_json)
+      VALUES (?, ?, ?, ?)
       ON CONFLICT(date) DO UPDATE SET
         content = excluded.content,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        passages_json = excluded.passages_json
       ''',
-      [_date(day), content, timestamp],
+      [_date(day), content, timestamp, _encodeDevotionPassages(passages)],
+    );
+  }
+
+  String _encodeDevotionPassages(List<DevotionPassage> passages) =>
+      jsonEncode([for (final passage in passages) passage.toJson()]);
+
+  List<DevotionPassage> _decodeDevotionPassages(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! List) return const [];
+      return List.unmodifiable([
+        for (final raw in decoded) ?_devotionPassageFromJson(raw),
+      ]);
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  DevotionPassage? _devotionPassageFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final value = Map<String, Object?>.from(raw);
+    final bookId = value['bookId'];
+    final startChapter = value['startChapter'];
+    final startVerse = value['startVerse'];
+    final endChapter = value['endChapter'];
+    final endVerse = value['endVerse'];
+    if (bookId is! String ||
+        startChapter is! int ||
+        startVerse is! int ||
+        endChapter is! int ||
+        endVerse is! int) {
+      return null;
+    }
+    final limits = canonicalProtestant66VerseLimits[bookId];
+    if (limits == null ||
+        startChapter < 1 ||
+        endChapter < startChapter ||
+        endChapter > limits.length ||
+        startVerse < 1 ||
+        endVerse < 1 ||
+        startVerse > limits[startChapter - 1] ||
+        endVerse > limits[endChapter - 1] ||
+        (startChapter == endChapter && endVerse < startVerse)) {
+      return null;
+    }
+    return DevotionPassage(
+      bookId: bookId,
+      startChapter: startChapter,
+      startVerse: startVerse,
+      endChapter: endChapter,
+      endVerse: endVerse,
     );
   }
 

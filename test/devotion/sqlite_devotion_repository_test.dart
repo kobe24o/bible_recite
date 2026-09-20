@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/devotion/data/devotion_feed_client.dart';
+import 'package:bible_recite/src/features/devotion/domain/devotion_models.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,7 +60,7 @@ void main() {
     expect(await repository.loadCachedDevotionManifest(), isNull);
   });
 
-  test('upserts a note by normalized calendar day', () async {
+  test('keeps only non-empty notes by normalized calendar day', () async {
     final day = DateTime(2026, 9, 17, 18, 45);
     final firstUpdatedAt = DateTime.utc(2026, 9, 17, 8);
     final secondUpdatedAt = DateTime.utc(2026, 9, 17, 9, 30);
@@ -71,9 +72,49 @@ void main() {
       updatedAt: secondUpdatedAt,
     );
 
-    final note = (await repository.devotionNoteFor(day))!;
-    expect(note.content, isEmpty);
-    expect(note.updatedAt, secondUpdatedAt);
+    expect(await repository.devotionNoteFor(day), isNull);
+    expect(await repository.listDevotionNotes(), isEmpty);
+  });
+
+  test(
+    'lists written notes by calendar date and excludes blank rows',
+    () async {
+      await repository.saveDevotionNote(DateTime(2026, 9, 19), '后来写的');
+      await repository.saveDevotionNote(DateTime(2026, 9, 17), '较早写的');
+      await repository.saveDevotionNote(DateTime(2026, 9, 18), '   ');
+
+      final notes = await repository.listDevotionNotes();
+
+      expect(notes.map((note) => note.date), [
+        DateTime(2026, 9, 17),
+        DateTime(2026, 9, 19),
+      ]);
+      expect(notes.map((note) => note.content), ['较早写的', '后来写的']);
+    },
+  );
+
+  test('stores a snapshot of a written notes scripture references', () async {
+    const passages = [
+      DevotionPassage(
+        bookId: 'JHN',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 4,
+        endVerse: 3,
+      ),
+    ];
+    await repository.saveDevotionNote(
+      DateTime(2026, 9, 17),
+      '神爱世人',
+      passages: passages,
+    );
+
+    final note = (await repository.devotionNoteFor(DateTime(2026, 9, 17)))!;
+
+    expect(note.passages.single.bookId, 'JHN');
+    expect(note.passages.single.startChapter, 3);
+    expect(note.passages.single.endChapter, 4);
+    expect(note.passages.single.endVerse, 3);
   });
 
   test(

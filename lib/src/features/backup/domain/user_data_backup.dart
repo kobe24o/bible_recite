@@ -121,6 +121,11 @@ final class UserDataBackup {
     final result = <String, Object?>{
       for (final field in table.fields.keys) field: row[field],
     };
+    // Backups written before a note captured its scripture references do not
+    // have this additive field. Keep those existing exports restorable.
+    if (table.name == 'devotion_note' && result['passages_json'] == null) {
+      result['passages_json'] = '[]';
+    }
     for (final ref in table.references) {
       final id = row[ref.column];
       final key = id == null ? null : keys[ref.table]?[id];
@@ -160,6 +165,12 @@ final class UserDataBackup {
       rows[table.name] = [];
       for (final value in raw) {
         final row = Map<String, Object?>.from(_map(value));
+        // Version 1 notes did not initially include their reference snapshot.
+        // Supply the empty snapshot before validation for backward compatibility.
+        if (table.name == 'devotion_note' &&
+            !row.containsKey('passages_json')) {
+          row['passages_json'] = '[]';
+        }
         table.validate(row);
         for (final field in table.fields.entries) {
           if (field.value.replaceAll('?', '') == 'time' &&
@@ -327,6 +338,8 @@ final class BackupTable {
           row['setting_key'] as String,
           row['setting_value'] as String,
         );
+      case 'devotion_note':
+        _validateDevotionPassagesJson(row['passages_json'] as String);
     }
     if (row['started_at'] != null &&
         row['completed_at'] != null &&
@@ -589,7 +602,12 @@ const backupTables = <BackupTable>[
   ),
   BackupTable(
     'devotion_note',
-    {'date': 'day', 'content': 'text', 'updated_at': 'time'},
+    {
+      'date': 'day',
+      'content': 'text',
+      'updated_at': 'time',
+      'passages_json': 'text',
+    },
     ['date'],
     primaryKey: 'date',
   ),
@@ -708,6 +726,54 @@ void _validatePassage(Map<String, Object?> row) {
       endVerse > limits[end - 1] ||
       (start == end && endVerse < startVerse)) {
     throw const FormatException('Invalid scripture range');
+  }
+}
+
+void _validateDevotionPassagesJson(String source) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(source);
+  } on FormatException {
+    throw const FormatException('Invalid devotion scripture references');
+  }
+  if (decoded is! List) {
+    throw const FormatException('Invalid devotion scripture references');
+  }
+  for (final rawPassage in decoded) {
+    if (rawPassage is! Map) {
+      throw const FormatException('Invalid devotion scripture references');
+    }
+    final passage = Map<String, Object?>.from(rawPassage);
+    const fields = {
+      'bookId',
+      'startChapter',
+      'startVerse',
+      'endChapter',
+      'endVerse',
+    };
+    if (passage.length != fields.length || !fields.every(passage.containsKey)) {
+      throw const FormatException('Invalid devotion scripture references');
+    }
+    final bookId = passage['bookId'];
+    final startChapter = passage['startChapter'];
+    final startVerse = passage['startVerse'];
+    final endChapter = passage['endChapter'];
+    final endVerse = passage['endVerse'];
+    if (bookId is! String ||
+        bookId.isEmpty ||
+        startChapter is! int ||
+        startVerse is! int ||
+        endChapter is! int ||
+        endVerse is! int) {
+      throw const FormatException('Invalid devotion scripture references');
+    }
+    _validatePassage({
+      'book_id': bookId,
+      'start_chapter': startChapter,
+      'start_verse': startVerse,
+      'end_chapter': endChapter,
+      'end_verse': endVerse,
+    });
   }
 }
 

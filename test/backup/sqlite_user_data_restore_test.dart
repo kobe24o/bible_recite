@@ -1,4 +1,5 @@
 import 'package:bible_recite/src/features/backup/domain/user_data_backup.dart';
+import 'package:bible_recite/src/features/devotion/domain/devotion_models.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/quiz/domain/quiz_models.dart';
@@ -413,9 +414,39 @@ void main() {
         updatedAt: DateTime.utc(2026, 1, 2),
       );
       await repository.restoreUserData(backup, mode: RestoreMode.merge);
-      expect((await repository.devotionNoteFor(day))!.content, '');
+      expect((await repository.devotionNoteFor(day))!.content, '今天的领受');
     },
   );
+
+  test('restores the scripture snapshot saved with a devotion note', () async {
+    final source = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(source.close);
+    final day = DateTime(2026, 1, 1);
+    await source.saveDevotionNote(
+      day,
+      '神爱世人。',
+      passages: const [
+        DevotionPassage(
+          bookId: 'JHN',
+          startChapter: 3,
+          startVerse: 16,
+          endChapter: 4,
+          endVerse: 3,
+        ),
+      ],
+    );
+
+    await repository.restoreUserData(
+      await source.exportUserData(),
+      mode: RestoreMode.replace,
+    );
+
+    final note = await repository.devotionNoteFor(day);
+    expect(note!.passages, hasLength(1));
+    expect(note.passages.single.bookId, 'JHN');
+    expect(note.passages.single.startChapter, 3);
+    expect(note.passages.single.endChapter, 4);
+  });
 
   test(
     'merge preserves local settings, task progress and achievements',

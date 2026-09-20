@@ -37,6 +37,22 @@ void main() {
     },
   );
 
+  test('round trips a devotion notes saved scripture references', () {
+    final rows = backupRecords();
+    const references =
+        '[{"bookId":"JHN","startChapter":3,"startVerse":16,"endChapter":4,"endVerse":3}]';
+    rows['devotion_note']!.single['passages_json'] = references;
+
+    final restored = UserDataBackup.decode(
+      UserDataBackup.fromRecords(rows).encode(),
+    );
+
+    expect(
+      restored.records['devotion_note']!.single['passages_json'],
+      references,
+    );
+  });
+
   test('identities are independent of local SQLite row IDs', () {
     final records = backupRecords();
     final first = UserDataBackup.fromRecords(records);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
@@ -246,6 +247,39 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
     });
   }
 
+  List<VerseUnit> _selectedUnits(List<VerseUnit> units) => [
+    for (var index = 0; index < units.length; index++)
+      if (_selectedVerseIndexes.contains(index)) units[index],
+  ];
+
+  Future<void> _copySelectedVerses(List<VerseUnit> units) async {
+    final selected = _selectedUnits(units);
+    if (selected.isEmpty) return;
+    final locale = Localizations.localeOf(context);
+    final catalog = ref.read(bookNameCatalogProvider);
+    final text = selected
+        .map((unit) {
+          final verseLabel = unit.start.verse == unit.end.verse
+              ? '${unit.start.verse}'
+              : '${unit.start.verse}–${unit.end.verse}';
+          final reference =
+              '${catalog.nameFor(unit.start.osisBookId, locale)} '
+              '${unit.start.chapter}:$verseLabel';
+          final verseText = unit.status == SourceTextStatus.omitted
+              ? AppLocalizations.of(context)?.omittedVerse ??
+                    'This verse is omitted in this translation.'
+              : unit.text;
+          return '（$reference）  $verseText';
+        })
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已复制经文')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final repository = ref.watch(scriptureRepositoryProvider);
@@ -363,27 +397,29 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                       ],
                     ),
                   ),
-                if (!_isPlanTaskReading)
+                if (!_isPlanTaskReading || _selectingVerses)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            key: const Key('start-recitation-button'),
-                            onPressed: data.units.isEmpty
-                                ? null
-                                : () => _chooseRecitationMode(
-                                    context,
-                                    data.units,
-                                  ),
-                            icon: const Icon(Icons.mic_rounded),
-                            label: Text(
-                              AppLocalizations.of(context)!.startRecitation,
+                        if (!_isPlanTaskReading) ...[
+                          Expanded(
+                            child: FilledButton.icon(
+                              key: const Key('start-recitation-button'),
+                              onPressed: data.units.isEmpty
+                                  ? null
+                                  : () => _chooseRecitationMode(
+                                      context,
+                                      data.units,
+                                    ),
+                              icon: const Icon(Icons.mic_rounded),
+                              label: Text(
+                                AppLocalizations.of(context)!.startRecitation,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
+                          const SizedBox(width: 12),
+                        ],
                         Expanded(
                           child: OutlinedButton.icon(
                             key: const Key('add-to-plan-button'),
@@ -401,6 +437,19 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
                             ),
                           ),
                         ),
+                        if (_selectingVerses) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              key: const Key('copy-selected-verses'),
+                              onPressed: _selectedVerseIndexes.isEmpty
+                                  ? null
+                                  : () => _copySelectedVerses(data.units),
+                              icon: const Icon(Icons.copy_outlined),
+                              label: const Text('复制'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

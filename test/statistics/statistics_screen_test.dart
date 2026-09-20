@@ -64,6 +64,15 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  testWidgets('My exposes the devotion notes entry', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+
+    await _pumpScreen(tester, repository);
+
+    expect(find.byKey(const Key('devotion-notes-open')), findsOneWidget);
+  });
+
   for (final enabled in [false, true]) {
     testWidgets(
       'restore reconciles scheduled alarms when reminders are ${enabled ? 'retimed' : 'disabled'}',

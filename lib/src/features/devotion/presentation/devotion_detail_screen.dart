@@ -25,6 +25,7 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
   Timer? _saveTimer;
   Future<bool>? _saveOperation;
   DevotionDay? _day;
+  List<DevotionPassage> _notePassages = const [];
   String _savedText = '';
   String _saveStatus = '';
   bool _loading = true;
@@ -49,6 +50,7 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
       }
       setState(() {
         _day = manifest?.dayFor(widget.date);
+        _notePassages = note?.passages ?? const [];
         _savedText = note?.content ?? '';
         _noteController.text = _savedText;
         _loading = false;
@@ -90,9 +92,17 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
       // Serialize writes and include edits made while an earlier write was pending.
       while (mounted && _dirty) {
         final text = _noteController.text;
-        await repository.saveDevotionNote(widget.date, text);
+        final passages = _day?.passages ?? _notePassages;
+        await repository.saveDevotionNote(
+          widget.date,
+          text,
+          passages: passages,
+        );
         if (!mounted) return true;
-        setState(() => _savedText = text);
+        setState(() {
+          _savedText = text;
+          _notePassages = passages;
+        });
       }
       if (mounted) setState(() => _saveStatus = '已保存');
       return true;

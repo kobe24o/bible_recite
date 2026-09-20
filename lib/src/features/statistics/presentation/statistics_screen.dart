@@ -237,6 +237,16 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('devotion-notes-open'),
+                        leading: const Icon(Icons.edit_note_outlined),
+                        title: const Text('灵修笔记'),
+                        subtitle: const Text('按年月日回顾写下的领受'),
+                        onTap: () => context.push('/statistics/devotion-notes'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                   ],
                   if (learningData && hasStatistics) ...[
                     Wrap(

@@ -6,6 +6,7 @@ import 'package:bible_recite/src/features/scripture/application/scripture_provid
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/presentation/passage_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -167,6 +168,67 @@ void main() {
     expect(find.text('已选择 1 节'), findsOneWidget);
     expect(find.text('加入背诵计划（1）'), findsOneWidget);
   });
+
+  testWidgets(
+    'long pressing a devotion verse offers plan and formatted copy actions',
+    (tester) async {
+      String? copied;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied =
+                  (call.arguments as Map<Object?, Object?>)['text'] as String?;
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      final day = DevotionDay(
+        date: DateTime(2026, 9, 17),
+        passages: const [
+          DevotionPassage(
+            bookId: 'JHN',
+            startChapter: 3,
+            startVerse: 16,
+            endChapter: 3,
+            endVerse: 16,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+              planTaskGroups: day.chapterGroups(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('16'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('add-to-plan-button')), findsOneWidget);
+      expect(find.byKey(const Key('copy-selected-verses')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('copy-selected-verses')));
+
+      expect(copied, '（约翰福音 3:16）  For God so loved the world');
+    },
+  );
 
   testWidgets(
     'search target is centered with a green background and only its keyword bold',
