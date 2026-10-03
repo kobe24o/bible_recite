@@ -32,6 +32,8 @@ jobs:
       APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
       APPSTORE_CERTIFICATES_FILE_BASE64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
       APPSTORE_CERTIFICATES_PASSWORD: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
 
     steps:
       - name: Check out source
@@ -161,9 +163,13 @@ jobs:
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
           version_name="${version%%+*}"
           build_number="$(date -u +%Y%m%d%H%M%S)"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
           flutter build ipa --release \
             --build-name="$version_name" \
             --build-number="$build_number" \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
             --export-options-plist=ios/ExportOptions.plist
           test -s build/ios/ipa/bible_recite.ipa
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
