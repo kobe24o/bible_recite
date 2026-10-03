@@ -501,3 +501,45 @@ flutter build ipa --release \
 离线语音模型不放进普通 Git 历史，因为 `encoder.onnx` 超过 GitHub 的 100 MB 单文件限制。请按 [assets/models/README.md](assets/models/README.md) 下载项目 Release 中的模型包。
 
 更完整的 Android 打包说明见 [docs/RELEASE.md](docs/RELEASE.md)。
+
+## 社区排行榜（可选）
+
+“我的 → 排行榜”提供七项榜单：累计背诵次数、已背诵不同经节、最高连续天数、勋章奖励总数（含重复奖励）、累计时长、当前连续天数、答题正确率。没有答题的用户不参与正确率排名。后端接口 `LeaderboardGateway` 可由 Cloudflare 等实现替换。
+
+### 本地与云同步
+
+SQLite 是数据源。保存背诵、答题、计划完成、获得勋章和修改名字只持久化待同步标记，不立即访问网络。应用启动/恢复和每分钟的轻量检查在数据待同步满 **15 分钟**、距上次成功上传满 **15 分钟** 后提交一次完整汇总；后台暂停时等待下次恢复。跨日会重新计算当前连续天数。失败保留待同步数据，上传中的新修改不会被清除。
+
+每项榜单缓存 **5 分钟**，页面先显示缓存，再刷新过期数据。主动下拉或点击刷新可跳过读缓存和上传节流。每次查询只调用一个 RPC，返回前 50 名及本人名次。无配置或离线时仍能查看本地统计与已有缓存。
+
+显示名优先使用“我的名字”，否则为 `设备型号 · 随机六位代号`。代号保存在安装本地设置中；不读取硬件唯一标识，不上传经文、笔记、计划或逐次作答数据。匿名身份及会话由 Supabase SDK 本地持久化。卸载重装会产生新身份。
+
+### 接入 Supabase（由项目管理员执行，仓库不含任何密钥）
+
+1. 准备项目 URL 和 **publishable key**（或兼容的 anon key）。在 Auth 设置中启用 **Anonymous Sign-ins**，检查匿名登录速率限制。若启用 CAPTCHA，需先为客户端接入验证码 token 获取；当前无验证码 token 的匿名请求将失败并保留离线体验。
+2. 审阅 `supabase/migrations/*_leaderboard.sql` 后，通过管理员自己的受控部署流程应用 migration。公开 Data API 只暴露 `public`，**不要暴露 `leaderboard_private`**。两张表仅允许认证用户读取自己的行，禁止直接写入；公开 RPC 包装器调用私有、验证 `auth.uid()` 的权限函数，保护累计值不可回退。
+3. 在管理员的测试环境运行 `supabase test db --local` 和 `supabase db advisors`，检查 RLS、RPC 权限与安全建议；无需给移动端 service-role/secret key。
+4. 在自己的构建环境注入配置（下面只列占位符）：
+
+   ```bash
+   flutter run \
+     --dart-define=SUPABASE_URL=<project-url> \
+     --dart-define=SUPABASE_PUBLISHABLE_KEY=<publishable-or-anon-key>
+   ```
+
+5. 在测试项目完成背诵与答题，确认未立即上传；15 分钟后确认一次汇总。打开同一指标两次检查五分钟缓存；断网刷新应保留榜单。修改名字、跨日、零答题、本人在前 50 名之外也应检查。数据库拒绝低于已上传累计值的汇总，因此将本机历史完全恢复成较小的数据集后不会覆盖云端累计值。
+
+这是客户端自报的社区榜，不用于奖励、权限或经济价值；生产环境应配置匿名登录和 RPC 速率限制。
+
+### 开发验证
+
+保留 `test: 1.31.0` 时使用 **Flutter 3.44.9 / Dart 3.12.2**。现有 CI 固定 Flutter 3.47.3，与该分支的 test_api 0.7.11 不兼容；本功能没有改动 CI 或升级原有测试依赖。设备信息依赖使用兼容 `package_info_plus: 9.0.1` 的 `device_info_plus: 12.4.0`。
+
+```bash
+flutter pub get
+TZ=UTC flutter test test/leaderboard test/statistics/statistics_screen_test.dart test/app/app_navigation_test.dart
+TZ=UTC flutter test
+flutter analyze
+```
+
+日期测试使用 UTC 可避免原有本地时间加 24 小时的测试夹具在夏令时切换时产生重复日期。开发环境未关联真实项目时，数据库集成测试、advisors 和真实匿名账户联调必须在项目接入后补跑。排行榜变更详情和验证记录见 `docs/superpowers/plans/2026-10-03-leaderboard-verification.md`。
