@@ -25,6 +25,7 @@ class MemoryGateway implements LeaderboardGateway {
   int uploads = 0, reads = 0;
   bool fail = false;
   Completer<void>? uploadBarrier;
+  void Function()? afterSubmit;
   @override
   Future<void> ensureIdentity(LeaderboardIdentity identity) async {
     if (fail) throw StateError('offline');
@@ -34,6 +35,7 @@ class MemoryGateway implements LeaderboardGateway {
   Future<void> submitSnapshot(LeaderboardSnapshot snapshot) async {
     uploads++;
     await uploadBarrier?.future;
+    afterSubmit?.call();
   }
 
   @override
@@ -137,6 +139,24 @@ void main() {
     gateway.uploadBarrier!.complete();
     await upload;
     expect(await controller.isDirty(), isTrue);
+  });
+  test('mutation between revision read and cleanup is retained', () async {
+    for (var delay = 0; delay < 16; delay++) {
+      final changed = Completer<void>();
+      void queue(int hops) {
+        if (hops > 0) {
+          scheduleMicrotask(() => queue(hops - 1));
+        } else {
+          unawaited(controller.markDirty().then((_) => changed.complete()));
+        }
+      }
+
+      gateway.afterSubmit = () => queue(delay);
+      await controller.markDirty();
+      await controller.syncIfDue(force: true);
+      await changed.future;
+      expect(await controller.isDirty(), isTrue, reason: 'microtasks: $delay');
+    }
   });
   test(
     'resume refreshes day-sensitive streaks after the last successful interval',

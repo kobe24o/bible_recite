@@ -1163,15 +1163,28 @@ final class SqlitePlanRepository {
   /// Durable change marker shared by mutation boundaries and the sync worker.
   /// Each change increments a revision so a slow upload cannot erase new work.
   Future<void> markLeaderboardDirty({DateTime? at}) async {
-    _database.execute("""INSERT INTO app_setting(setting_key, setting_value)
+    _database.execute(
+      """INSERT INTO app_setting(setting_key, setting_value)
       VALUES ('leaderboard_dirty_since', ?)
       ON CONFLICT(setting_key) DO UPDATE SET setting_value =
         CASE WHEN app_setting.setting_value = '' THEN excluded.setting_value ELSE app_setting.setting_value END""",
-      [(at ?? DateTime.now()).toUtc().toIso8601String()]);
+      [(at ?? DateTime.now()).toUtc().toIso8601String()],
+    );
     _database.execute("""INSERT INTO app_setting(setting_key, setting_value)
       VALUES ('leaderboard_dirty_version', '1')
       ON CONFLICT(setting_key) DO UPDATE SET setting_value =
         CAST(CAST(app_setting.setting_value AS INTEGER) + 1 AS TEXT)""");
+  }
+
+  /// Compare and clear in one statement so concurrent changes stay pending.
+  void clearLeaderboardDirtyIfVersion(String version) {
+    _database.execute(
+      """UPDATE app_setting SET setting_value = ''
+      WHERE setting_key = 'leaderboard_dirty_since'
+      AND COALESCE((SELECT setting_value FROM app_setting
+        WHERE setting_key = 'leaderboard_dirty_version'), '0') = ?""",
+      [version],
+    );
   }
 
   /// Returns the last fully validated devotion manifest, if one is available.
@@ -3420,7 +3433,12 @@ final class SqlitePlanRepository {
 
   /// Includes awards whose external plan/coverage definition is no longer loaded.
   Future<int> getLeaderboardAwardCount() async =>
-      _database.select('SELECT COALESCE(SUM(award_count),0) AS count FROM achievement_unlock').single['count'] as int;
+      _database
+              .select(
+                'SELECT COALESCE(SUM(award_count),0) AS count FROM achievement_unlock',
+              )
+              .single['count']
+          as int;
 
   Future<List<AchievementProgress>> listAchievementProgress() async {
     final evaluated = const AchievementEngine().evaluate(

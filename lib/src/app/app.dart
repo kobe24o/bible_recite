@@ -92,6 +92,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       await (await ref.read(
         leaderboardSyncControllerProvider.future,
       )).onResume();
+      if (mounted) ref.invalidate(leaderboardLastSyncProvider);
     } catch (_) {
       // Optional cloud access must never block local learning or startup.
     }

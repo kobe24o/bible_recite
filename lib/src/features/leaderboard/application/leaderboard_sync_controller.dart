@@ -79,10 +79,7 @@ final class LeaderboardSyncController {
         'leaderboard_last_success',
         clock().toUtc().toIso8601String(),
       );
-      if (revision ==
-          await repository.getSetting('leaderboard_dirty_version', '0')) {
-        await repository.setSetting('leaderboard_dirty_since', '');
-      }
+      repository.clearLeaderboardDirtyIfVersion(revision);
       _syncFailed = false;
       return true;
     } catch (_) {
