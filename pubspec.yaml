@@ -28,6 +28,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  supabase_flutter: 2.18.0
+  device_info_plus: 12.4.0
   flutter:
     sdk: flutter
 
