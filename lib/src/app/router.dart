@@ -16,6 +16,7 @@ import '../features/scripture/presentation/scripture_sources_screen.dart';
 import '../features/statistics/presentation/statistics_screen.dart';
 import '../features/statistics/presentation/recitation_map_screen.dart';
 import '../features/statistics/presentation/recitation_timeline_screen.dart';
+import '../features/leaderboard/presentation/leaderboard_screen.dart';
 import 'responsive_shell.dart';
 
 final appRouter = GoRouter(
@@ -85,6 +86,11 @@ final appRouter = GoRouter(
       path: '/statistics',
       builder: (context, state) =>
           const ResponsiveShell(child: StatisticsScreen()),
+    ),
+    GoRoute(
+      path: '/statistics/leaderboard',
+      builder: (context, state) =>
+          const ResponsiveShell(child: LeaderboardScreen()),
     ),
     GoRoute(
       path: '/statistics/data',

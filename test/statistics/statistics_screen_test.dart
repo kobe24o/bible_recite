@@ -64,6 +64,13 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  testWidgets('My exposes the leaderboard entry', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await _pumpScreen(tester, repository);
+    expect(find.byKey(const Key('leaderboard-open')), findsOneWidget);
+  });
+
   testWidgets('My exposes the devotion notes entry', (tester) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);

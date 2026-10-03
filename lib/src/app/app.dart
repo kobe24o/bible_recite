@@ -15,6 +15,7 @@ import '../features/quiz/application/quiz_bank_sync.dart';
 import '../features/quiz/application/quiz_providers.dart';
 import '../features/scripture/application/scripture_providers.dart';
 import '../features/reminder/reminder_providers.dart';
+import '../features/leaderboard/application/leaderboard_providers.dart';
 import 'router.dart';
 import 'runtime_platform.dart';
 
@@ -31,6 +32,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     with WidgetsBindingObserver {
   Timer? _devotionDateTimer;
   Timer? _updateTimer;
+  Timer? _leaderboardTimer;
 
   @override
   void initState() {
@@ -40,8 +42,12 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       unawaited(_refreshDailyReminders());
       unawaited(_syncPresetPlansAtLaunch());
       unawaited(_syncQuizBankAtLaunch());
+      unawaited(_maintainLeaderboard());
     });
     _scheduleDevotionDateRefresh();
+    _leaderboardTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      unawaited(_maintainLeaderboard());
+    });
     if (_usesAndroidUpdater) {
       _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
         unawaited(_checkUpdateAtLaunch());
@@ -54,6 +60,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
   void dispose() {
     _devotionDateTimer?.cancel();
     _updateTimer?.cancel();
+    _leaderboardTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -63,6 +70,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshDailyReminders());
       _refreshDevotionToday();
+      unawaited(_maintainLeaderboard());
       if (_usesAndroidUpdater) unawaited(_checkUpdateAtLaunch());
     }
   }
@@ -77,6 +85,16 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
     final now = ref.read(devotionClockProvider)();
     final nextDay = DateTime(now.year, now.month, now.day + 1);
     _devotionDateTimer = Timer(nextDay.difference(now), _refreshDevotionToday);
+  }
+
+  Future<void> _maintainLeaderboard() async {
+    try {
+      await (await ref.read(
+        leaderboardSyncControllerProvider.future,
+      )).onResume();
+    } catch (_) {
+      // Optional cloud access must never block local learning or startup.
+    }
   }
 
   Future<void> _refreshDailyReminders() async {

@@ -32,6 +32,7 @@ import '../../quiz/presentation/quiz_model_settings_card.dart';
 import '../../quiz/presentation/quiz_practice_request.dart';
 import '../../quiz/presentation/quiz_practice_screen.dart';
 import 'random_quiz_options_dialog.dart';
+import '../../leaderboard/application/leaderboard_providers.dart';
 import '../../reminder/daily_task_reminder.dart';
 import '../../reminder/reminder_providers.dart';
 import '../../review/domain/ebbinghaus_models.dart';
@@ -208,6 +209,16 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        key: const Key('leaderboard-open'),
+                        leading: const Icon(Icons.leaderboard_outlined),
+                        title: const Text('排行榜'),
+                        subtitle: Text('累计背诵 ${data.summary.totalSessions} 次 · 最高连续 ${data.learning.maxDayStreak} 天\n${ref.watch(leaderboardLastSyncProvider).asData?.value == null ? '尚未同步' : '最近同步：${ref.watch(leaderboardLastSyncProvider).asData!.value!.toLocal().toString().split('.').first}'}'),
+                        onTap: () => context.push('/statistics/leaderboard'),
                       ),
                     ),
                     const SizedBox(height: 12),

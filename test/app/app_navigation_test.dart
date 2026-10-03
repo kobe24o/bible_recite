@@ -16,6 +16,10 @@ import 'package:sqlite3/sqlite3.dart';
 import '../devotion/devotion_models_test.dart' show complete2026Json;
 
 void main() {
+  test('router resolves the My leaderboard path', () {
+    expect(appRouter.configuration.findMatch(Uri.parse('/statistics/leaderboard')).isError, isFalse);
+  });
+
   testWidgets('opens About when the update notification is selected', (
     tester,
   ) async {
