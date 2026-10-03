@@ -17,3 +17,8 @@ abstract interface class LeaderboardGateway {
 
   Future<LeaderboardViewData> loadLeaderboard(LeaderboardMetric metric);
 }
+
+/// Optional backend capability; application code need not know backend classes.
+abstract interface class LeaderboardAvailability {
+  bool get isAvailable;
+}

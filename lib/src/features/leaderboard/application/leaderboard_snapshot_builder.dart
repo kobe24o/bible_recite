@@ -8,6 +8,7 @@ LeaderboardSnapshot buildLeaderboardSnapshot({
   required LearningStats learning,
   required QuizSummary quiz,
   required Iterable<AchievementProgress> achievements,
+  int? totalBadgeAwards,
 }) {
   final badgeAwards = achievements.fold<int>(
     0,
@@ -18,7 +19,7 @@ LeaderboardSnapshot buildLeaderboardSnapshot({
     totalSessions: recitation.totalSessions,
     uniqueVerses: recitation.totalVerses,
     maxDayStreak: learning.maxDayStreak,
-    badgeAwards: badgeAwards,
+    badgeAwards: totalBadgeAwards ?? badgeAwards,
     totalRecitationSeconds: recitation.totalSeconds,
     currentDayStreak: learning.currentDayStreak,
     quizAnswered: quiz.totalAnswered,

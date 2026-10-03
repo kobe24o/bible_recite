@@ -74,6 +74,7 @@ final class LeaderboardViewData {
     required this.updatedAt,
     this.currentUser,
     this.isFromCache = false,
+    this.isUnavailable = false,
   });
 
   final LeaderboardMetric metric;
@@ -81,4 +82,5 @@ final class LeaderboardViewData {
   final DateTime updatedAt;
   final LeaderboardEntry? currentUser;
   final bool isFromCache;
+  final bool isUnavailable;
 }

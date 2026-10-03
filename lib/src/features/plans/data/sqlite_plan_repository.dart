@@ -1157,6 +1157,21 @@ final class SqlitePlanRepository {
     ''',
       [key, value],
     );
+    if (key == 'profile_name') await markLeaderboardDirty();
+  }
+
+  /// Durable change marker shared by mutation boundaries and the sync worker.
+  /// Each change increments a revision so a slow upload cannot erase new work.
+  Future<void> markLeaderboardDirty({DateTime? at}) async {
+    _database.execute("""INSERT INTO app_setting(setting_key, setting_value)
+      VALUES ('leaderboard_dirty_since', ?)
+      ON CONFLICT(setting_key) DO UPDATE SET setting_value =
+        CASE WHEN app_setting.setting_value = '' THEN excluded.setting_value ELSE app_setting.setting_value END""",
+      [(at ?? DateTime.now()).toUtc().toIso8601String()]);
+    _database.execute("""INSERT INTO app_setting(setting_key, setting_value)
+      VALUES ('leaderboard_dirty_version', '1')
+      ON CONFLICT(setting_key) DO UPDATE SET setting_value =
+        CAST(CAST(app_setting.setting_value AS INTEGER) + 1 AS TEXT)""");
   }
 
   /// Returns the last fully validated devotion manifest, if one is available.
@@ -2005,6 +2020,7 @@ final class SqlitePlanRepository {
       final nextMax = max > nextCurrent ? max : nextCurrent;
       await _setSettingRaw('current_quiz_correct_streak', '$nextCurrent');
       await _setSettingRaw('max_quiz_correct_streak', '$nextMax');
+      await markLeaderboardDirty();
       _database.execute('COMMIT');
       return QuizCompletion(
         totalAnswered: (await _quizTotalAnswered()),
@@ -2604,6 +2620,7 @@ final class SqlitePlanRepository {
       unlocked.addAll(await _unlockCompletedPresetPlan(taskId));
     }
     unlocked.addAll(await evaluateAndUnlockAchievements(source: 'plan'));
+    if (completed != wasCompleted) await markLeaderboardDirty();
     return unlocked;
   }
 
@@ -3044,6 +3061,7 @@ final class SqlitePlanRepository {
         ],
       );
     }
+    await markLeaderboardDirty();
     return resultId;
   }
 
@@ -3396,8 +3414,13 @@ final class SqlitePlanRepository {
         ),
       );
     }
+    if (unlocked.isNotEmpty) await markLeaderboardDirty();
     return unlocked;
   }
+
+  /// Includes awards whose external plan/coverage definition is no longer loaded.
+  Future<int> getLeaderboardAwardCount() async =>
+      _database.select('SELECT COALESCE(SUM(award_count),0) AS count FROM achievement_unlock').single['count'] as int;
 
   Future<List<AchievementProgress>> listAchievementProgress() async {
     final evaluated = const AchievementEngine().evaluate(
@@ -3521,6 +3544,7 @@ final class SqlitePlanRepository {
           );
         }(),
     ];
+    if (unlocked.isNotEmpty) await markLeaderboardDirty();
     return ExternalAchievementSyncResult(
       progress: progress,
       unlocked: unlocked,
