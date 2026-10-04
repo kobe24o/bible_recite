@@ -103,6 +103,9 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
           _savedText = text;
           _notePassages = passages;
         });
+        if (_isToday && text.trim().isNotEmpty) {
+          ref.read(devotionRevisionProvider.notifier).refresh();
+        }
       }
       if (mounted) setState(() => _saveStatus = '已保存');
       return true;
@@ -127,6 +130,7 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
         return;
       }
       final groups = _day!.chapterGroups();
+      final activityDay = _isToday ? widget.date : null;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PassageScreen(
@@ -134,9 +138,13 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
             bookId: groups.first.bookId,
             chapter: groups.first.chapter,
             planTaskGroups: groups,
+            devotionActivityDay: activityDay,
           ),
         ),
       );
+      if (mounted && activityDay != null) {
+        ref.read(devotionRevisionProvider.notifier).refresh();
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -147,6 +155,13 @@ class _DevotionDetailScreenState extends ConsumerState<DevotionDetailScreen> {
       if (mounted) setState(() => _openingPassage = false);
     }
   }
+
+  bool get _isToday => _isSameDay(widget.date, ref.read(devotionTodayProvider));
+
+  static bool _isSameDay(DateTime first, DateTime second) =>
+      first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
 
   @override
   void dispose() {

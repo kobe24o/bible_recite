@@ -1,5 +1,8 @@
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/devotion/domain/devotion_models.dart';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
+import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
+import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/plans/domain/plan_task_chapter_groups.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
@@ -11,10 +14,59 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 import 'scripture_browser_screen_test.dart' show FakeRepositoryForPassage;
 
 void main() {
+  testWidgets(
+    'devotion activity records only foreground seconds across lifecycle and disposal',
+    (tester) async {
+      final database = sqlite3.openInMemory();
+      final repository = SqlitePlanRepository(database);
+      addTearDown(repository.close);
+      final day = DateTime(2026, 10, 4);
+      var now = DateTime(2026, 10, 4, 9);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWith((ref) async => repository),
+            devotionClockProvider.overrideWithValue(() => now),
+            scriptureRepositoryProvider.overrideWith(
+              (ref) async => FakeRepositoryForPassage(),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: PassageScreen(
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              chapter: 3,
+              devotionActivityDay: day,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      now = now.add(const Duration(seconds: 40));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      now = now.add(const Duration(hours: 2));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      now = now.add(const Duration(seconds: 21));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pump();
+
+      expect((await repository.getDevotionStats(now)).totalSeconds, 61);
+    },
+  );
+
   testWidgets('cross chapter devotion highlights exact endpoints only', (
     tester,
   ) async {

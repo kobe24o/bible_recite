@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
+import '../../devotion/application/devotion_providers.dart';
+import '../../devotion/application/devotion_reading_session.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/domain/plan_draft_builder.dart';
 import '../../plans/domain/plan_models.dart';
@@ -30,6 +34,7 @@ class PassageScreen extends ConsumerStatefulWidget {
     this.searchQuery,
     this.reviewId,
     this.planTaskGroups = const [],
+    this.devotionActivityDay,
     super.key,
   });
 
@@ -42,17 +47,20 @@ class PassageScreen extends ConsumerStatefulWidget {
   final String? searchQuery;
   final int? reviewId;
   final List<PlanTaskChapterGroup> planTaskGroups;
+  final DateTime? devotionActivityDay;
 
   @override
   ConsumerState<PassageScreen> createState() => _PassageScreenState();
 }
 
-class _PassageScreenState extends ConsumerState<PassageScreen> {
+class _PassageScreenState extends ConsumerState<PassageScreen>
+    with WidgetsBindingObserver {
   String? _parallelTranslationId;
   final Set<int> _selectedVerseIndexes = <int>{};
   bool _selectingVerses = false;
   QuizPreparationController? _quizPreparation;
   late int _planTaskGroupIndex;
+  DevotionReadingSession? _devotionReadingSession;
 
   bool get _isPlanTaskReading => widget.planTaskGroups.isNotEmpty;
 
@@ -71,6 +79,7 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
           group.bookId == widget.bookId && group.chapter == widget.chapter,
     );
     if (_planTaskGroupIndex < 0) _planTaskGroupIndex = 0;
+    _startDevotionReadingSession();
   }
 
   @override
@@ -97,8 +106,46 @@ class _PassageScreenState extends ConsumerState<PassageScreen> {
 
   @override
   void dispose() {
+    final session = _devotionReadingSession;
+    if (session != null) {
+      unawaited(session.dispose());
+      WidgetsBinding.instance.removeObserver(this);
+    }
     _disposeQuizPreparation();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final session = _devotionReadingSession;
+    if (session == null) return;
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        unawaited(session.pause());
+        break;
+      case AppLifecycleState.resumed:
+        session.resume();
+        break;
+    }
+  }
+
+  void _startDevotionReadingSession() {
+    final day = widget.devotionActivityDay;
+    if (day == null) return;
+    final repository = ref.read(planRepositoryProvider.future);
+    _devotionReadingSession = ref.read(devotionReadingSessionFactoryProvider)(
+      day: day,
+      onElapsed: (day, seconds) async {
+        await (await repository).recordDevotionReading(day, seconds);
+      },
+    );
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _devotionReadingSession?.start();
+    });
   }
 
   void _resetQuiz() {

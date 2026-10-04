@@ -1,9 +1,10 @@
 import 'dart:convert';
 
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
-import 'package:bible_recite/src/app/router.dart';
+import 'package:bible_recite/src/features/devotion/presentation/devotion_detail_screen.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
 import 'package:bible_recite/src/features/scripture/presentation/passage_screen.dart';
 import 'package:flutter/material.dart';
@@ -54,20 +55,20 @@ void main() {
   tearDown(() => repository.close());
 
   Future<void> pumpDetail(WidgetTester tester) async {
-    appRouter.go('/devotion/2026-09-17');
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => date),
           scriptureRepositoryProvider.overrideWith(
             (ref) async => FakeRepositoryForPassage(),
           ),
         ],
-        child: MaterialApp.router(
+        child: MaterialApp(
           locale: const Locale('zh'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          routerConfig: appRouter,
+          home: DevotionDetailScreen(date: date),
         ),
       ),
     );
@@ -139,4 +140,16 @@ void main() {
       expect(passage.planTaskGroups[1].includesVerse(8), isTrue);
     },
   );
+
+  testWidgets('today detail marks its reader as devotion activity', (
+    tester,
+  ) async {
+    await pumpDetail(tester);
+
+    await tester.tap(find.text('约翰福音 3:16–4:3'));
+    await tester.pumpAndSettle();
+
+    final passage = tester.widget<PassageScreen>(find.byType(PassageScreen));
+    expect(passage.devotionActivityDay, date);
+  });
 }
