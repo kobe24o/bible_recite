@@ -159,7 +159,7 @@ void main() {
   test('every master publish starts an automatic TestFlight upload', () {
     final workflow = File(
       '.github/workflows/testflight-renewal.yml',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(workflow, contains('push:\n    branches:\n      - master'));
     expect(workflow, contains('apple-actions/upload-testflight-build@v5'));
