@@ -4,6 +4,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('one unfinished devotion counts as a learning reminder', () {
+    expect(
+      pendingLearningItemCount(tasks: 0, reviews: 0, devotionPending: true),
+      1,
+    );
+  });
+
   test('uses Darwin notification initialization on iOS', () {
     final settings = dailyTaskReminderInitializationSettings(
       AppRuntimePlatform.ios,

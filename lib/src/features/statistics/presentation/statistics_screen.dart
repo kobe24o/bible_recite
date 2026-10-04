@@ -16,6 +16,7 @@ import '../../../app/runtime_platform.dart';
 import '../../../app/empty_state_page.dart';
 import '../../backup/presentation/user_data_backup_card.dart';
 import '../../distribution/application/distribution_providers.dart';
+import '../../devotion/domain/devotion_activity.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/application/preset_plan_sync.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
@@ -99,7 +100,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             }
             final data = snapshot.data!;
             final hasStatistics =
-                data.results.isNotEmpty || data.achievements.isNotEmpty;
+                data.results.isNotEmpty ||
+                data.achievements.isNotEmpty ||
+                data.devotion.devotionDays > 0 ||
+                data.devotion.totalSeconds > 0;
             final summary = data.summary;
             final overview = widget.view == StatisticsScreenView.overview;
             final learningData =
@@ -217,7 +221,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         key: const Key('leaderboard-open'),
                         leading: const Icon(Icons.leaderboard_outlined),
                         title: const Text('排行榜'),
-                        subtitle: Text('累计背诵 ${data.summary.totalSessions} 次 · 最高连续 ${data.learning.maxDayStreak} 天\n${ref.watch(leaderboardLastSyncProvider).asData?.value == null ? '尚未同步' : '最近同步：${ref.watch(leaderboardLastSyncProvider).asData!.value!.toLocal().toString().split('.').first}'}'),
+                        subtitle: Text(
+                          '累计背诵 ${data.summary.totalSessions} 次 · 最高连续 ${data.learning.maxDayStreak} 天\n${ref.watch(leaderboardLastSyncProvider).asData?.value == null ? '尚未同步' : '最近同步：${ref.watch(leaderboardLastSyncProvider).asData!.value!.toLocal().toString().split('.').first}'}',
+                        ),
                         onTap: () => context.push('/statistics/leaderboard'),
                       ),
                     ),
@@ -299,6 +305,24 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                           text: chinese
                               ? '目前连续背诵 ${data.learning.currentVerseStreak} 节 · 最高连续背诵 ${data.learning.maxVerseStreak} 节'
                               : 'Current ${data.learning.currentVerseStreak} verses · Best ${data.learning.maxVerseStreak} verses',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.auto_stories_rounded,
+                          text: chinese
+                              ? '灵修 ${data.devotion.devotionDays} 天'
+                              : '${data.devotion.devotionDays} devotion days',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.timer_outlined,
+                          text: chinese
+                              ? '灵修总时长 ${_formatDuration(Duration(seconds: data.devotion.totalSeconds))}'
+                              : 'Devotion ${_formatDuration(Duration(seconds: data.devotion.totalSeconds))}',
+                        ),
+                        _SummaryCard(
+                          icon: Icons.local_fire_department_rounded,
+                          text: chinese
+                              ? '目前连续灵修 ${data.devotion.currentDayStreak} 天 · 最高连续灵修 ${data.devotion.maxDayStreak} 天'
+                              : 'Current devotion ${data.devotion.currentDayStreak} days · Best ${data.devotion.maxDayStreak} days',
                         ),
                       ],
                     ),
@@ -556,6 +580,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       summary: await repository.getRecitationSummary(),
       quiz: await repository.getQuizSummary(),
       learning: await repository.getLearningStats(),
+      devotion: await repository.getDevotionStats(DateTime.now()),
       results: await repository.listRecitationResults(),
       achievements: [
         ...await repository.listAchievementProgress(),
@@ -1676,6 +1701,7 @@ final class _StatisticsData {
     required this.summary,
     required this.quiz,
     required this.learning,
+    required this.devotion,
     required this.results,
     required this.achievements,
     required this.settings,
@@ -1686,6 +1712,7 @@ final class _StatisticsData {
   final RecitationSummary summary;
   final QuizSummary quiz;
   final LearningStats learning;
+  final DevotionStats devotion;
   final List<RecitationResult> results;
   final List<AchievementProgress> achievements;
   final EbbinghausSettings settings;

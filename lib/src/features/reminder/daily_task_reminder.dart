@@ -5,6 +5,12 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../app/runtime_platform.dart';
 import '../plans/data/sqlite_plan_repository.dart';
 
+int pendingLearningItemCount({
+  required int tasks,
+  required int reviews,
+  required bool devotionPending,
+}) => tasks + reviews + (devotionPending ? 1 : 0);
+
 InitializationSettings dailyTaskReminderInitializationSettings(
   AppRuntimePlatform platform,
 ) => switch (platform) {
@@ -99,7 +105,17 @@ final class DailyTaskReminderScheduler {
     final now = DateTime.now();
     final pendingTasks = await repository.dueTasks(now);
     final pendingReviews = await repository.dueEbbinghausReviews(now);
-    final pendingCount = pendingTasks.length + pendingReviews.length;
+    final devotion = (await repository.loadCachedDevotionManifest())?.dayFor(
+      now,
+    );
+    final devotionPending =
+        devotion != null &&
+        !await repository.isDevotionCompleted(devotion.date);
+    final pendingCount = pendingLearningItemCount(
+      tasks: pendingTasks.length,
+      reviews: pendingReviews.length,
+      devotionPending: devotionPending,
+    );
     if (pendingCount == 0) return;
     if (_platform == AppRuntimePlatform.android) {
       // Inexact alarms can be deferred while Android is idle. Ask only when a

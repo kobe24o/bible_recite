@@ -64,6 +64,24 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  testWidgets('learning data includes devotion activity and streaks', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    await repository.recordDevotionReading(DateTime.now(), 61);
+
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.learningData,
+    );
+
+    expect(find.text('灵修 1 天'), findsOneWidget);
+    expect(find.text('灵修总时长 1 分 1 秒'), findsOneWidget);
+    expect(find.text('目前连续灵修 1 天 · 最高连续灵修 1 天'), findsOneWidget);
+  });
+
   testWidgets('My exposes the leaderboard entry', (tester) async {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
