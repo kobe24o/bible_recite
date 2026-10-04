@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'devotion_reading_session.dart';
 import '../data/devotion_feed_client.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
 import '../../plans/application/plan_providers.dart';
@@ -42,9 +43,22 @@ final devotionFeedClientProvider = Provider<DevotionFeedClient>(
 );
 
 typedef DevotionClock = DateTime Function();
+typedef DevotionReadingSessionFactory =
+    DevotionReadingSession Function({
+      required DateTime day,
+      required Future<void> Function(DateTime day, int seconds) onElapsed,
+    });
 
 /// An injectable clock keeps calendar-day behavior deterministic in tests.
 final devotionClockProvider = Provider<DevotionClock>((ref) => DateTime.now);
+
+/// Creates a tracker with the same injectable clock used by devotion dates.
+final devotionReadingSessionFactoryProvider =
+    Provider<DevotionReadingSessionFactory>((ref) {
+      final clock = ref.watch(devotionClockProvider);
+      return ({required DateTime day, required onElapsed}) =>
+          DevotionReadingSession(day: day, clock: clock, onElapsed: onElapsed);
+    });
 
 /// The current local calendar day for devotion lookup.
 ///
