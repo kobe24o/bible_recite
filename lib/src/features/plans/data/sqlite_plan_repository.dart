@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../backup/domain/user_data_backup.dart';
+import '../../devotion/domain/devotion_activity.dart';
 import '../../devotion/domain/devotion_models.dart';
 import '../../review/domain/ebbinghaus_models.dart';
 import '../../review/domain/ebbinghaus_scheduler.dart';
@@ -201,6 +202,14 @@ final class SqlitePlanRepository {
         "ALTER TABLE devotion_note ADD COLUMN passages_json TEXT NOT NULL DEFAULT '[]'",
       );
     }
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS devotion_activity (
+        date TEXT PRIMARY KEY,
+        active_seconds INTEGER NOT NULL DEFAULT 0 CHECK(active_seconds >= 0),
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      )
+    ''');
     _database.execute('''
       CREATE TABLE IF NOT EXISTS quiz_question (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1266,6 +1275,120 @@ final class SqlitePlanRepository {
         passages_json = excluded.passages_json
       ''',
       [_date(day), content, timestamp, _encodeDevotionPassages(passages)],
+    );
+    if (_date(day) == _date(DateTime.now())) {
+      await completeDevotionFromNote(day, completedAt: updatedAt);
+    }
+  }
+
+  Future<void> recordDevotionReading(
+    DateTime day,
+    int activeSeconds, {
+    DateTime? recordedAt,
+  }) async {
+    if (activeSeconds <= 0) return;
+    final date = _date(day);
+    final timestamp = (recordedAt ?? DateTime.now()).toUtc().toIso8601String();
+    _database.execute('BEGIN');
+    try {
+      final rows = _database.select(
+        '''SELECT active_seconds, completed_at FROM devotion_activity
+        WHERE date = ?''',
+        [date],
+      );
+      final previousSeconds = rows.isEmpty
+          ? 0
+          : (rows.single['active_seconds'] as num).toInt();
+      final completedAt = rows.isEmpty
+          ? null
+          : rows.single['completed_at'] as String?;
+      final nextSeconds = previousSeconds + activeSeconds;
+      final nextCompletedAt =
+          completedAt ?? (nextSeconds > 60 ? timestamp : null);
+      _database.execute(
+        '''INSERT INTO devotion_activity(
+          date, active_seconds, completed_at, updated_at
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(date) DO UPDATE SET
+          active_seconds = excluded.active_seconds,
+          completed_at = COALESCE(devotion_activity.completed_at, excluded.completed_at),
+          updated_at = excluded.updated_at''',
+        [date, nextSeconds, nextCompletedAt, timestamp],
+      );
+      _database.execute('COMMIT');
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+    await markLeaderboardDirty();
+  }
+
+  Future<void> completeDevotionFromNote(
+    DateTime day, {
+    DateTime? completedAt,
+  }) async {
+    final date = _date(day);
+    final timestamp = (completedAt ?? DateTime.now()).toUtc().toIso8601String();
+    final rows = _database.select(
+      'SELECT completed_at FROM devotion_activity WHERE date = ?',
+      [date],
+    );
+    if (rows.isNotEmpty && rows.single['completed_at'] != null) return;
+    _database.execute(
+      '''INSERT INTO devotion_activity(date, active_seconds, completed_at, updated_at)
+      VALUES (?, 0, ?, ?)
+      ON CONFLICT(date) DO UPDATE SET
+        completed_at = COALESCE(devotion_activity.completed_at, excluded.completed_at),
+        updated_at = excluded.updated_at''',
+      [date, timestamp, timestamp],
+    );
+    await markLeaderboardDirty();
+  }
+
+  Future<bool> isDevotionCompleted(DateTime day) async => _database.select(
+    'SELECT 1 FROM devotion_activity WHERE date = ? AND completed_at IS NOT NULL',
+    [_date(day)],
+  ).isNotEmpty;
+
+  Future<DevotionStats> getDevotionStats(DateTime now) async {
+    final rows = _database.select(
+      '''
+      SELECT date, active_seconds FROM devotion_activity
+      WHERE completed_at IS NOT NULL AND date <= ?
+      ORDER BY date ASC
+    ''',
+      [_date(now)],
+    );
+    final totalSeconds =
+        _database
+                .select(
+                  'SELECT COALESCE(SUM(active_seconds), 0) AS total_seconds FROM devotion_activity',
+                )
+                .single['total_seconds']
+            as num;
+    var run = 0;
+    var maxRun = 0;
+    DateTime? previous;
+    for (final row in rows) {
+      final day = DateTime.parse(row['date'] as String);
+      if (previous != null && _calendarDayDistance(previous, day) == 1) {
+        run++;
+      } else {
+        run = 1;
+      }
+      if (run > maxRun) maxRun = run;
+      previous = day;
+    }
+    final today = DateTime(now.year, now.month, now.day);
+    final currentRun =
+        previous != null && _calendarDayDistance(previous, today) == 0
+        ? run
+        : 0;
+    return DevotionStats(
+      devotionDays: rows.length,
+      totalSeconds: totalSeconds.toInt(),
+      currentDayStreak: currentRun,
+      maxDayStreak: maxRun,
     );
   }
 
@@ -3948,6 +4071,12 @@ final class SqlitePlanRepository {
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
+
+  int _calendarDayDistance(DateTime from, DateTime to) => DateTime.utc(
+    to.year,
+    to.month,
+    to.day,
+  ).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
   void close() => _database.close();
 }

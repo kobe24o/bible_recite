@@ -118,6 +118,58 @@ void main() {
   });
 
   test(
+    '61 active seconds completes one devotion day while 60 does not',
+    () async {
+      final day = DateTime(2026, 9, 17);
+      final now = DateTime(2026, 9, 17, 20);
+
+      await repository.recordDevotionReading(day, 60, recordedAt: now);
+
+      expect(await repository.isDevotionCompleted(day), isFalse);
+      expect((await repository.getDevotionStats(now)).totalSeconds, 60);
+
+      await repository.recordDevotionReading(day, 1, recordedAt: now);
+      await repository.recordDevotionReading(day, 30, recordedAt: now);
+
+      final stats = await repository.getDevotionStats(now);
+      expect(await repository.isDevotionCompleted(day), isTrue);
+      expect(stats.devotionDays, 1);
+      expect(stats.totalSeconds, 91);
+    },
+  );
+
+  test('a saved same-day note completes devotion permanently', () async {
+    final today = DateTime.now();
+
+    await repository.saveDevotionNote(today, '今天的领受');
+    await repository.saveDevotionNote(today, '');
+
+    expect(await repository.devotionNoteFor(today), isNull);
+    expect(await repository.isDevotionCompleted(today), isTrue);
+    expect((await repository.getDevotionStats(today)).devotionDays, 1);
+  });
+
+  test(
+    'derives current and maximum devotion streaks from completed dates',
+    () async {
+      for (final day in [
+        DateTime(2026, 9, 14),
+        DateTime(2026, 9, 15),
+        DateTime(2026, 9, 16),
+        DateTime(2026, 9, 18),
+      ]) {
+        await repository.completeDevotionFromNote(day, completedAt: day);
+      }
+
+      final stats = await repository.getDevotionStats(DateTime(2026, 9, 18));
+
+      expect(stats.devotionDays, 4);
+      expect(stats.currentDayStreak, 1);
+      expect(stats.maxDayStreak, 3);
+    },
+  );
+
+  test(
     'sync caches the exact validated feed before notifying the UI',
     () async {
       var callbackSawCachedManifest = false;
