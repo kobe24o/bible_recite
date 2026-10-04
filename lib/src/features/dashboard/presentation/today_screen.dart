@@ -328,7 +328,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final devotionCompleted =
         devotionDay != null &&
         await repository.isDevotionCompleted(devotionDay);
-    final devotionNote = devotionCompleted && devotionDay != null
+    final devotionNote = devotionCompleted
         ? await repository.devotionNoteFor(devotionDay)
         : null;
     return _TodayData(

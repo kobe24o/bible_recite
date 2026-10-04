@@ -6,14 +6,13 @@
 final class DevotionReadingSession {
   DevotionReadingSession({
     required this.day,
-    required DateTime Function() clock,
-    required Future<void> Function(DateTime day, int seconds) onElapsed,
-  }) : _clock = clock,
-       _onElapsed = onElapsed;
+    required this.clock,
+    required this.onElapsed,
+  });
 
   final DateTime day;
-  final DateTime Function() _clock;
-  final Future<void> Function(DateTime day, int seconds) _onElapsed;
+  final DateTime Function() clock;
+  final Future<void> Function(DateTime day, int seconds) onElapsed;
 
   DateTime? _activeSince;
   int _activeSeconds = 0;
@@ -22,7 +21,7 @@ final class DevotionReadingSession {
 
   void start() {
     if (_stopped || _activeSince != null) return;
-    final now = _clock();
+    final now = clock();
     if (!_isSameDay(now, day)) {
       _stopped = true;
       return;
@@ -32,7 +31,7 @@ final class DevotionReadingSession {
 
   Future<void> pause() {
     if (_stopped || _activeSince == null) return _pendingFlush;
-    final now = _clock();
+    final now = clock();
     if (!_isSameDay(now, day)) {
       _activeSince = null;
       _stopped = true;
@@ -44,7 +43,7 @@ final class DevotionReadingSession {
 
   void resume() {
     if (_stopped || _activeSince != null) return;
-    final now = _clock();
+    final now = clock();
     if (!_isSameDay(now, day)) {
       _stopped = true;
       return;
@@ -55,7 +54,7 @@ final class DevotionReadingSession {
   Future<void> stop() {
     if (_stopped) return _pendingFlush;
     _stopped = true;
-    final now = _clock();
+    final now = clock();
     if (_activeSince != null && _isSameDay(now, day)) {
       _accumulateUntil(now);
     } else {
@@ -78,7 +77,7 @@ final class DevotionReadingSession {
     final seconds = _activeSeconds;
     _activeSeconds = 0;
     if (seconds <= 0) return _pendingFlush;
-    _pendingFlush = _pendingFlush.then((_) => _onElapsed(day, seconds));
+    _pendingFlush = _pendingFlush.then((_) => onElapsed(day, seconds));
     return _pendingFlush;
   }
 

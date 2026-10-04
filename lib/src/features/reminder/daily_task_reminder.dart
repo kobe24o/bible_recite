@@ -131,7 +131,7 @@ final class DailyTaskReminderScheduler {
       await _notifications.zonedSchedule(
         id: _notificationBaseId + index,
         title: '背诵助手',
-        body: '今天还有 $pendingCount 项背诵任务未完成',
+        body: '今天还有 $pendingCount 项学习任务未完成',
         scheduledDate: tz.TZDateTime.from(slots[index], tz.local),
         notificationDetails: _notificationDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
