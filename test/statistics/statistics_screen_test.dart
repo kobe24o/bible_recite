@@ -77,7 +77,7 @@ void main() {
       view: StatisticsScreenView.learningData,
     );
 
-    expect(find.text('灵修 1 天'), findsOneWidget);
+    expect(find.text('灵修 1 次'), findsOneWidget);
     expect(find.text('灵修总时长 1 分 1 秒'), findsOneWidget);
     expect(find.text('目前连续灵修 1 天 · 最高连续灵修 1 天'), findsOneWidget);
   });

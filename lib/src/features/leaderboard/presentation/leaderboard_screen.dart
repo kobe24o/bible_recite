@@ -10,7 +10,7 @@ extension LeaderboardMetricLabel on LeaderboardMetric {
     LeaderboardMetric.totalRecitationSeconds => '累计背诵时长',
     LeaderboardMetric.maxDayStreak => '最高连续背诵天数',
     LeaderboardMetric.currentDayStreak => '当前连续背诵天数',
-    LeaderboardMetric.devotionDays => '累计灵修天数',
+    LeaderboardMetric.devotionDays => '累计灵修次数',
     LeaderboardMetric.totalDevotionSeconds => '累计灵修时长',
     LeaderboardMetric.maxDevotionDayStreak => '最高连续灵修天数',
     LeaderboardMetric.currentDevotionDayStreak => '当前连续灵修天数',

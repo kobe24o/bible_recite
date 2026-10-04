@@ -309,8 +309,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         _SummaryCard(
                           icon: Icons.auto_stories_rounded,
                           text: chinese
-                              ? '灵修 ${data.devotion.devotionDays} 天'
-                              : '${data.devotion.devotionDays} devotion days',
+                              ? '灵修 ${data.devotion.devotionDays} 次'
+                              : '${data.devotion.devotionDays} devotions',
                         ),
                         _SummaryCard(
                           icon: Icons.timer_outlined,
