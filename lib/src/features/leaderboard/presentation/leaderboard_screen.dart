@@ -7,15 +7,21 @@ extension LeaderboardMetricLabel on LeaderboardMetric {
   String get label => switch (this) {
     LeaderboardMetric.totalSessions => '累计背诵次数',
     LeaderboardMetric.uniqueVerses => '已背诵不同经节',
-    LeaderboardMetric.maxDayStreak => '最高连续天数',
-    LeaderboardMetric.badgeAwards => '勋章数量',
     LeaderboardMetric.totalRecitationSeconds => '累计背诵时长',
-    LeaderboardMetric.currentDayStreak => '当前连续天数',
+    LeaderboardMetric.maxDayStreak => '最高连续背诵天数',
+    LeaderboardMetric.currentDayStreak => '当前连续背诵天数',
+    LeaderboardMetric.devotionDays => '累计灵修天数',
+    LeaderboardMetric.totalDevotionSeconds => '累计灵修时长',
+    LeaderboardMetric.maxDevotionDayStreak => '最高连续灵修天数',
+    LeaderboardMetric.currentDevotionDayStreak => '当前连续灵修天数',
+    LeaderboardMetric.badgeAwards => '勋章数量',
     LeaderboardMetric.quizAccuracy => '答题正确率',
   };
   String format(num value) => switch (this) {
     LeaderboardMetric.quizAccuracy => '${(value * 100).toStringAsFixed(1)}%',
     LeaderboardMetric.totalRecitationSeconds =>
+      '${value.toInt() ~/ 3600} 小时 ${value.toInt() % 3600 ~/ 60} 分钟',
+    LeaderboardMetric.totalDevotionSeconds =>
       '${value.toInt() ~/ 3600} 小时 ${value.toInt() % 3600 ~/ 60} 分钟',
     _ => '${value.toInt()}',
   };

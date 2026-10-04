@@ -1,19 +1,27 @@
 enum LeaderboardMetric {
   totalSessions,
   uniqueVerses,
-  maxDayStreak,
-  badgeAwards,
   totalRecitationSeconds,
+  maxDayStreak,
   currentDayStreak,
+  devotionDays,
+  totalDevotionSeconds,
+  maxDevotionDayStreak,
+  currentDevotionDayStreak,
+  badgeAwards,
   quizAccuracy;
 
   String get wireName => switch (this) {
     LeaderboardMetric.totalSessions => 'total_sessions',
     LeaderboardMetric.uniqueVerses => 'unique_verses',
-    LeaderboardMetric.maxDayStreak => 'max_day_streak',
-    LeaderboardMetric.badgeAwards => 'badge_awards',
     LeaderboardMetric.totalRecitationSeconds => 'total_recitation_seconds',
+    LeaderboardMetric.maxDayStreak => 'max_day_streak',
     LeaderboardMetric.currentDayStreak => 'current_day_streak',
+    LeaderboardMetric.devotionDays => 'devotion_days',
+    LeaderboardMetric.totalDevotionSeconds => 'total_devotion_seconds',
+    LeaderboardMetric.maxDevotionDayStreak => 'max_devotion_day_streak',
+    LeaderboardMetric.currentDevotionDayStreak => 'current_devotion_day_streak',
+    LeaderboardMetric.badgeAwards => 'badge_awards',
     LeaderboardMetric.quizAccuracy => 'quiz_accuracy',
   };
 }
@@ -22,20 +30,28 @@ final class LeaderboardSnapshot {
   const LeaderboardSnapshot({
     required this.totalSessions,
     required this.uniqueVerses,
-    required this.maxDayStreak,
-    required this.badgeAwards,
     required this.totalRecitationSeconds,
+    required this.maxDayStreak,
     required this.currentDayStreak,
+    required this.devotionDays,
+    required this.totalDevotionSeconds,
+    required this.maxDevotionDayStreak,
+    required this.currentDevotionDayStreak,
+    required this.badgeAwards,
     required this.quizAnswered,
     required this.quizCorrect,
   });
 
   final int totalSessions;
   final int uniqueVerses;
-  final int maxDayStreak;
-  final int badgeAwards;
   final int totalRecitationSeconds;
+  final int maxDayStreak;
   final int currentDayStreak;
+  final int devotionDays;
+  final int totalDevotionSeconds;
+  final int maxDevotionDayStreak;
+  final int currentDevotionDayStreak;
+  final int badgeAwards;
   final int quizAnswered;
   final int quizCorrect;
 
@@ -45,10 +61,14 @@ final class LeaderboardSnapshot {
   num valueFor(LeaderboardMetric metric) => switch (metric) {
     LeaderboardMetric.totalSessions => totalSessions,
     LeaderboardMetric.uniqueVerses => uniqueVerses,
-    LeaderboardMetric.maxDayStreak => maxDayStreak,
-    LeaderboardMetric.badgeAwards => badgeAwards,
     LeaderboardMetric.totalRecitationSeconds => totalRecitationSeconds,
+    LeaderboardMetric.maxDayStreak => maxDayStreak,
     LeaderboardMetric.currentDayStreak => currentDayStreak,
+    LeaderboardMetric.devotionDays => devotionDays,
+    LeaderboardMetric.totalDevotionSeconds => totalDevotionSeconds,
+    LeaderboardMetric.maxDevotionDayStreak => maxDevotionDayStreak,
+    LeaderboardMetric.currentDevotionDayStreak => currentDevotionDayStreak,
+    LeaderboardMetric.badgeAwards => badgeAwards,
     LeaderboardMetric.quizAccuracy => quizAccuracy,
   };
 }

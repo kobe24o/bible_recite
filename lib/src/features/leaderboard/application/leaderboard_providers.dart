@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
+import '../../devotion/application/devotion_providers.dart';
 import '../data/device_alias_source.dart';
 import '../data/leaderboard_config.dart';
 import '../data/offline_leaderboard_gateway.dart';
@@ -35,6 +36,7 @@ Future<LeaderboardSnapshot> loadLeaderboardSnapshot(
   return buildLeaderboardSnapshot(
     recitation: await repository.getRecitationSummary(),
     learning: await repository.getLearningStats(),
+    devotion: await repository.getDevotionStats(DateTime.now()),
     quiz: await repository.getQuizSummary(),
     achievements: await repository.listAchievementProgress(),
     totalBadgeAwards: await repository.getLeaderboardAwardCount(),
@@ -46,6 +48,7 @@ final leaderboardSnapshotProvider = FutureProvider<LeaderboardSnapshot>((
 ) async {
   ref.watch(recitationDataRevisionProvider);
   ref.watch(presetPlanRevisionProvider);
+  ref.watch(devotionRevisionProvider);
   return loadLeaderboardSnapshot(
     await ref.watch(planRepositoryProvider.future),
   );

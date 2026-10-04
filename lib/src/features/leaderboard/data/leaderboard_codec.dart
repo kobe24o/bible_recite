@@ -45,10 +45,14 @@ Map<String, dynamic> encodeLeaderboard(LeaderboardViewData data) {
 Map<String, dynamic> encodeSnapshot(LeaderboardSnapshot value) => {
   'total_sessions': value.totalSessions,
   'unique_verses': value.uniqueVerses,
-  'max_day_streak': value.maxDayStreak,
-  'badge_awards': value.badgeAwards,
   'total_recitation_seconds': value.totalRecitationSeconds,
+  'max_day_streak': value.maxDayStreak,
   'current_day_streak': value.currentDayStreak,
+  'devotion_days': value.devotionDays,
+  'total_devotion_seconds': value.totalDevotionSeconds,
+  'max_devotion_day_streak': value.maxDevotionDayStreak,
+  'current_devotion_day_streak': value.currentDevotionDayStreak,
+  'badge_awards': value.badgeAwards,
   'quiz_answered': value.quizAnswered,
   'quiz_correct': value.quizCorrect,
 };

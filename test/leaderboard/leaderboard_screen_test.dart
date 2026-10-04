@@ -66,7 +66,7 @@ void main() {
   }
 
   testWidgets(
-    'seven metrics switch and highlight caller with percentage values',
+    'eleven ordered metrics distinguish recitation and devotion streaks',
     (tester) async {
       await pump(tester);
       expect(find.byKey(const Key('leaderboard-current-user')), findsOneWidget);
@@ -78,7 +78,25 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('50.0%'), findsWidgets);
-      expect(find.byType(ChoiceChip), findsNWidgets(7));
+      expect(find.byType(ChoiceChip), findsNWidgets(11));
+      expect(
+        tester
+            .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+            .map((chip) => (chip.label as Text).data),
+        [
+          '累计背诵次数',
+          '已背诵不同经节',
+          '累计背诵时长',
+          '最高连续背诵天数',
+          '当前连续背诵天数',
+          '累计灵修天数',
+          '累计灵修时长',
+          '最高连续灵修天数',
+          '当前连续灵修天数',
+          '勋章数量',
+          '答题正确率',
+        ],
+      );
     },
   );
   testWidgets('cached rows survive explicit refresh failure', (tester) async {

@@ -13,6 +13,10 @@ const snapshot = LeaderboardSnapshot(
   badgeAwards: 4,
   totalRecitationSeconds: 120,
   currentDayStreak: 1,
+  devotionDays: 5,
+  totalDevotionSeconds: 300,
+  maxDevotionDayStreak: 4,
+  currentDevotionDayStreak: 2,
   quizAnswered: 2,
   quizCorrect: 1,
 );

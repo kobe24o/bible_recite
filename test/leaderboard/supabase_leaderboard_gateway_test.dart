@@ -58,6 +58,10 @@ void main() {
         'badge_awards': 4,
         'total_recitation_seconds': 120,
         'current_day_streak': 1,
+        'devotion_days': 5,
+        'total_devotion_seconds': 300,
+        'max_devotion_day_streak': 4,
+        'current_devotion_day_streak': 2,
         'quiz_answered': 2,
         'quiz_correct': 1,
       });
