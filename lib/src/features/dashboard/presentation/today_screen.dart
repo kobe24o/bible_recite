@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../l10n/generated/app_localizations.dart';
 import '../../devotion/application/devotion_providers.dart';
+import '../../devotion/domain/devotion_models.dart';
 import '../../devotion/presentation/devotion_schedule_screen.dart';
 import '../../plans/application/plan_providers.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
@@ -49,7 +50,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             error: (error, stack) => _EmptyToday(localizations: localizations),
             data: (repository) => FutureBuilder<_TodayData>(
               key: ValueKey(_revision),
-              future: _load(repository),
+              future: _load(repository, devotionDay: devotion?.date),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -80,44 +81,24 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    if (devotion != null)
-                      Card(
-                        child: ListTile(
-                          key: Key(
-                            'today-devotion-${devotionDateLabel(devotion.date)}',
-                          ),
-                          leading: const Icon(Icons.auto_stories_outlined),
-                          title: const Text('今日灵修'),
-                          subtitle: Text(
-                            devotion.passages
-                                .map(
-                                  (passage) => devotionPassageLabel(
-                                    passage,
-                                    bookNames.nameFor(
-                                      passage.bookId,
-                                      Localizations.localeOf(context),
-                                    ),
-                                  ),
-                                )
-                                .join('；'),
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => context.push(
-                            '/devotion/${devotionDateLabel(devotion.date)}',
-                          ),
-                        ),
-                      ),
-                    if (data.tasks.isEmpty && data.reviews.isEmpty)
-                      _EmptyToday(
-                        localizations: localizations,
-                        showStartJourney: !data.hasActivePlan,
-                      ),
-                    if (pending.isNotEmpty || pendingReviews.isNotEmpty) ...[
+                    if (pending.isNotEmpty ||
+                        pendingReviews.isNotEmpty ||
+                        data.devotionPending) ...[
                       Text(
                         chinese ? '待完成' : 'To do',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
+                      if (devotion != null && data.devotionPending)
+                        _DevotionCard(
+                          devotion: devotion,
+                          bookNameFor: (bookId) => bookNames.nameFor(
+                            bookId,
+                            Localizations.localeOf(context),
+                          ),
+                          completed: false,
+                          onOpen: () => _openDevotion(devotion.date),
+                        ),
                       for (final review in pendingReviews)
                         _ReviewCard(
                           review: review,
@@ -125,7 +106,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                             review.bookId,
                             Localizations.localeOf(context),
                           ),
-                          onStart: () => _startReview(review),
+                          onStart: () => _startReview(
+                            review,
+                            hasTodayDevotion: devotion != null,
+                          ),
                         ),
                       for (final task in pending)
                         _TaskCard(
@@ -138,7 +122,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           completed: false,
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
-                            if (await _allTodayCompleted(repository)) {
+                            if (await _allTodayCompleted(
+                              repository,
+                              hasTodayDevotion: devotion != null,
+                            )) {
                               await _celebrate();
                             }
                           },
@@ -151,13 +138,25 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         ),
                     ],
                     if (completed.isNotEmpty ||
-                        completedReviews.isNotEmpty) ...[
+                        completedReviews.isNotEmpty ||
+                        data.devotionCompleted) ...[
                       const SizedBox(height: 16),
                       Text(
                         chinese ? '今日已完成' : 'Completed today',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
+                      if (devotion != null && data.devotionCompleted)
+                        _DevotionCard(
+                          devotion: devotion,
+                          bookNameFor: (bookId) => bookNames.nameFor(
+                            bookId,
+                            Localizations.localeOf(context),
+                          ),
+                          completed: true,
+                          completionReason: data.devotionCompletionReason,
+                          onOpen: () => _openDevotion(devotion.date),
+                        ),
                       for (final review in completedReviews)
                         _ReviewCard(
                           review: review,
@@ -165,7 +164,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                             review.bookId,
                             Localizations.localeOf(context),
                           ),
-                          onStart: () => _startReview(review),
+                          onStart: () => _startReview(
+                            review,
+                            hasTodayDevotion: devotion != null,
+                          ),
                         ),
                       for (final task in completed)
                         _TaskCard(
@@ -178,7 +180,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           completed: true,
                           onChanged: () => setState(() => _revision++),
                           onAllTodayCompleted: () async {
-                            if (await _allTodayCompleted(repository)) {
+                            if (await _allTodayCompleted(
+                              repository,
+                              hasTodayDevotion: devotion != null,
+                            )) {
                               await _celebrate();
                             }
                           },
@@ -233,7 +238,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (mounted) setState(() => _revision++);
   }
 
-  Future<void> _startReview(EbbinghausReview review) async {
+  Future<void> _startReview(
+    EbbinghausReview review, {
+    required bool hasTodayDevotion,
+  }) async {
     final scripture = await ref.read(scriptureRepositoryProvider.future);
     final passage = await scripture.getPassage(
       review.translationId,
@@ -282,16 +290,32 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (mounted) setState(() => _revision++);
     if (await _allTodayCompleted(
       await ref.read(planRepositoryProvider.future),
+      hasTodayDevotion: hasTodayDevotion,
     )) {
       _celebrate();
     }
   }
 
-  Future<bool> _allTodayCompleted(SqlitePlanRepository repository) async =>
+  Future<bool> _allTodayCompleted(
+    SqlitePlanRepository repository, {
+    required bool hasTodayDevotion,
+  }) async =>
       (await repository.dueTasks(DateTime.now())).isEmpty &&
-      (await repository.dueEbbinghausReviews(DateTime.now())).isEmpty;
+      (await repository.dueEbbinghausReviews(DateTime.now())).isEmpty &&
+      (!hasTodayDevotion ||
+          await repository.isDevotionCompleted(
+            ref.read(devotionTodayProvider),
+          ));
 
-  Future<_TodayData> _load(SqlitePlanRepository repository) async {
+  Future<void> _openDevotion(DateTime date) async {
+    await context.push('/devotion/${devotionDateLabel(date)}');
+    if (mounted) setState(() => _revision++);
+  }
+
+  Future<_TodayData> _load(
+    SqlitePlanRepository repository, {
+    required DateTime? devotionDay,
+  }) async {
     final plans = await repository.listPlans();
     final tasks = await repository.dueTasks(
       DateTime.now(),
@@ -301,10 +325,22 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       DateTime.now(),
       includeCompleted: true,
     );
+    final devotionCompleted =
+        devotionDay != null &&
+        await repository.isDevotionCompleted(devotionDay);
+    final devotionNote = devotionCompleted && devotionDay != null
+        ? await repository.devotionNoteFor(devotionDay)
+        : null;
     return _TodayData(
       plans: {for (final plan in plans) plan.id: plan},
       tasks: tasks,
       reviews: reviews,
+      devotionCompleted: devotionCompleted,
+      devotionCompletionReason: devotionCompleted
+          ? devotionNote == null
+                ? '已完成灵修阅读'
+                : '已记录灵修笔记'
+          : null,
       hasActivePlan: plans.any(
         (plan) =>
             !plan.paused &&
@@ -313,6 +349,51 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       ),
     );
   }
+}
+
+class _DevotionCard extends StatelessWidget {
+  const _DevotionCard({
+    required this.devotion,
+    required this.bookNameFor,
+    required this.completed,
+    required this.onOpen,
+    this.completionReason,
+  });
+
+  final DevotionDay devotion;
+  final String Function(String bookId) bookNameFor;
+  final bool completed;
+  final String? completionReason;
+  final Future<void> Function() onOpen;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      key: Key('today-devotion-${devotionDateLabel(devotion.date)}'),
+      onTap: onOpen,
+      leading: CircleAvatar(
+        child: Icon(
+          completed ? Icons.check_rounded : Icons.auto_stories_outlined,
+        ),
+      ),
+      title: const Text('今日灵修'),
+      subtitle: Text(
+        completed
+            ? completionReason ?? '已完成灵修'
+            : devotion.passages
+                  .map(
+                    (passage) => devotionPassageLabel(
+                      passage,
+                      bookNameFor(passage.bookId),
+                    ),
+                  )
+                  .join('；'),
+      ),
+      trailing: completed
+          ? const Icon(Icons.check_circle_rounded, color: Colors.green)
+          : const Icon(Icons.chevron_right_rounded),
+    ),
+  );
 }
 
 class _ReviewCard extends StatelessWidget {
@@ -467,11 +548,16 @@ final class _TodayData {
     required this.plans,
     required this.tasks,
     required this.reviews,
+    required this.devotionCompleted,
+    required this.devotionCompletionReason,
     required this.hasActivePlan,
   });
 
   final Map<int, MemorizationPlan> plans;
   final List<PlanTask> tasks;
   final List<EbbinghausReview> reviews;
+  final bool devotionCompleted;
+  final String? devotionCompletionReason;
   final bool hasActivePlan;
+  bool get devotionPending => !devotionCompleted;
 }

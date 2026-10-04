@@ -15,7 +15,7 @@ import '../devotion/devotion_models_test.dart' show complete2026Json;
 
 void main() {
   testWidgets(
-    'Today shows only todays devotion without completion or hiding onboarding',
+    'an unfinished scheduled devotion is the only pending today task',
     (tester) async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
@@ -53,15 +53,52 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('today-devotion-2026-09-18')), findsNothing);
-      expect(find.byKey(const Key('complete-devotion')), findsNothing);
+      expect(find.text('待完成'), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
       expect(find.byKey(const Key('completion-confetti')), findsNothing);
-      expect(find.text('开始背诵之旅'), findsOneWidget);
+      expect(find.text('开始背诵之旅'), findsNothing);
       expect(await repository.listPlans(), isEmpty);
       await tester.tap(find.byKey(const Key('today-devotion-2026-09-17')));
       await tester.pumpAndSettle();
       expect(find.text('灵修详情:2026-09-17'), findsOneWidget);
     },
   );
+
+  testWidgets('a completed devotion appears in todays completed section', (
+    tester,
+  ) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    addTearDown(repository.close);
+    final day = DateTime(2026, 9, 17);
+    await repository.cacheDevotionManifest(complete2026Json);
+    await repository.recordDevotionReading(day, 61);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => day),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: TodayScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('today-devotion-2026-09-17')), findsOneWidget);
+    expect(find.text('今日已完成'), findsOneWidget);
+    expect(find.text('已完成灵修阅读'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+  });
   testWidgets('shows a due Ebbinghaus review as a direct recitation task', (
     tester,
   ) async {
@@ -214,6 +251,7 @@ void main() {
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await repository.cacheDevotionManifest(complete2026Json);
+    await repository.recordDevotionReading(DateTime(2026, 9, 17), 61);
     final today = DateTime.now();
     final planId = await repository.createPlan(
       NewMemorizationPlan(
