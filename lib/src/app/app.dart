@@ -41,6 +41,7 @@ class _BibleReciteAppState extends ConsumerState<BibleReciteApp>
       if (_usesAndroidUpdater) unawaited(_checkUpdateAtLaunch());
       unawaited(_refreshDailyReminders());
       unawaited(_syncPresetPlansAtLaunch());
+      unawaited(ref.read(devotionSyncProvider.notifier).sync());
       unawaited(_syncQuizBankAtLaunch());
       unawaited(_maintainLeaderboard());
     });

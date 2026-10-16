@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../domain/plan_entry_splitter.dart';
+import '../domain/plan_reading_schedule.dart';
+import '../domain/plan_draft_builder.dart';
+import '../domain/plan_models.dart';
+import '../../scripture/domain/scripture_repository.dart';
 import '../../scripture/domain/scripture_models.dart';
 
 final class PlanEditorDraft {
@@ -15,8 +19,12 @@ final class PlanEditorDraft {
     this.passages = const [],
     this.splitStrategy = const PlanEntrySplitStrategy.none(),
     this.ebbinghausEnabled = false,
+    this.scheduleMode,
+    this.scheduleAmount = 1,
   });
 
+  final ReadingScheduleMode? scheduleMode;
+  final int scheduleAmount;
   final String title;
   final String translationId;
   final String bookId;
@@ -63,9 +71,13 @@ class PlanEditorDialog extends StatefulWidget {
     this.contentLocked = false,
     this.minimumDays = 1,
     this.onAddPassages,
+    this.scripture,
+    this.completedTasks = const [],
     super.key,
   });
 
+  final List<PlanTask> completedTasks;
+  final ScriptureRepository? scripture;
   final List<BibleBook> books;
   final PlanEditorDraft initial;
   final bool allowDelete;
@@ -84,8 +96,10 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   late bool _ebbinghausEnabled;
-  late PlanEntrySplitKind _splitKind;
-  late final TextEditingController _everyVerseCount;
+  late ReadingScheduleMode _scheduleMode;
+  int _calculationRevision = 0;
+  bool _calculating = false;
+  late final TextEditingController _scheduleAmount;
   late final ScrollController _passageListController;
   var _showPassageJumpToTop = false;
   var _showPassageJumpToBottom = false;
@@ -100,15 +114,19 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     _startDate = widget.initial.startDate;
     _endDate = widget.initial.endDate;
     _ebbinghausEnabled = widget.initial.ebbinghausEnabled;
-    _splitKind = widget.initial.splitStrategy.kind;
-    _everyVerseCount = TextEditingController(
-      text: '${widget.initial.splitStrategy.verseCount ?? 5}',
+    _scheduleMode =
+        widget.initial.scheduleMode ?? ReadingScheduleMode.daysByVerses;
+    _scheduleAmount = TextEditingController(
+      text:
+          '${widget.initial.scheduleMode == null ? widget.initial.days : widget.initial.scheduleAmount}',
     );
+    _scheduleAmount.addListener(_recalculate);
     _passageListController = ScrollController()
       ..addListener(_updatePassageJumpActions);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _updatePassageJumpActions(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updatePassageJumpActions();
+      _recalculate();
+    });
   }
 
   @override
@@ -148,7 +166,10 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                   DropdownMenuItem(value: 'eng-web', child: Text('English')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _translationId = value);
+                  if (value != null) {
+                    setState(() => _translationId = value);
+                    _recalculate();
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -193,72 +214,74 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                   label: Text(chinese ? '添加经文' : 'Add passage'),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<PlanEntrySplitKind>(
+                DropdownButtonFormField<ReadingScheduleMode>(
                   key: const Key('plan-entry-split-strategy'),
-                  initialValue: _splitKind,
+                  initialValue: _scheduleMode,
                   decoration: InputDecoration(
-                    labelText: chinese ? '拆分为背诵条目' : 'Split into entries',
+                    labelText: chinese ? '切分方式' : 'Schedule',
                     border: const OutlineInputBorder(),
                   ),
                   items: [
                     DropdownMenuItem(
-                      value: PlanEntrySplitKind.none,
-                      child: Text(chinese ? '不拆分（默认）' : 'Do not split'),
-                    ),
-                    DropdownMenuItem(
-                      value: PlanEntrySplitKind.book,
-                      child: Text(chinese ? '按卷，每卷一个条目' : 'One entry per book'),
-                    ),
-                    DropdownMenuItem(
-                      value: PlanEntrySplitKind.chapter,
+                      value: ReadingScheduleMode.dailyChapters,
                       child: Text(
-                        chinese ? '按章，每章一个条目' : 'One entry per chapter',
+                        chinese ? '每天 x 章，自动计算天数' : 'Chapters per day',
                       ),
                     ),
                     DropdownMenuItem(
-                      value: PlanEntrySplitKind.verse,
+                      value: ReadingScheduleMode.dailyVerses,
+                      child: Text(chinese ? '每天 x 节，自动计算天数' : 'Verses per day'),
+                    ),
+                    DropdownMenuItem(
+                      value: ReadingScheduleMode.daysByChapters,
                       child: Text(
-                        chinese ? '按节，每节一个条目' : 'One entry per verse',
+                        chinese ? 'x 天读完，按章平均分配' : 'Finish in days, by chapter',
                       ),
                     ),
                     DropdownMenuItem(
-                      value: PlanEntrySplitKind.everyVerses,
-                      child: Text(chinese ? '按数量，每 N 节一个条目' : 'Every N verses'),
+                      value: ReadingScheduleMode.daysByVerses,
+                      child: Text(
+                        chinese ? 'x 天读完，按节平均分配' : 'Finish in days, by verse',
+                      ),
                     ),
                   ],
                   onChanged: (value) {
-                    if (value != null) setState(() => _splitKind = value);
+                    if (value != null) {
+                      setState(() => _scheduleMode = value);
+                      _recalculate();
+                    }
                   },
                 ),
-                if (_splitKind == PlanEntrySplitKind.everyVerses) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    key: const Key('plan-entry-every-verse-count'),
-                    controller: _everyVerseCount,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: chinese ? '每多少节一个条目' : 'Verses per entry',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ],
               ],
               const SizedBox(height: 8),
+              TextField(
+                key: const Key('plan-schedule-amount'),
+                controller: _scheduleAmount,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText:
+                      widget.contentLocked || !_scheduleMode.usesDailyQuota
+                      ? (chinese ? '完成天数' : 'Days to finish')
+                      : (_scheduleMode.usesChapters
+                            ? (chinese ? '每天章数' : 'Chapters per day')
+                            : (chinese ? '每天节数' : 'Verses per day')),
+                ),
+              ),
               ListTile(
                 key: const Key('plan-start-date'),
                 contentPadding: EdgeInsets.zero,
                 title: Text(chinese ? '开始日期' : 'Start date'),
                 subtitle: Text(_format(_startDate)),
                 trailing: const Icon(Icons.calendar_month_outlined),
-                onTap: () => _pickDate(start: true),
+                onTap: _pickStartDate,
               ),
               ListTile(
                 key: const Key('plan-end-date'),
                 contentPadding: EdgeInsets.zero,
-                title: Text(chinese ? '结束日期' : 'End date'),
+                title: Text(chinese ? '完成日期' : 'Completion date'),
                 subtitle: Text(_format(_endDate)),
                 trailing: const Icon(Icons.event_available_outlined),
-                onTap: () => _pickDate(start: false),
               ),
               Text(chinese ? '共 $_days 天' : '$_days days'),
               SwitchListTile(
@@ -303,7 +326,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
         ),
         FilledButton(
           key: const Key('save-plan-button'),
-          onPressed: _save,
+          onPressed: _calculating || _error == '无法计算计划，请检查经文' ? null : _save,
           child: Text(chinese ? '保存' : 'Save'),
         ),
       ],
@@ -312,8 +335,8 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
 
   int get _days => _endDate.difference(_startDate).inDays + 1;
 
-  Future<void> _pickDate({required bool start}) async {
-    final initial = start ? _startDate : _endDate;
+  Future<void> _pickStartDate() async {
+    final initial = _startDate;
     final selected = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -322,13 +345,9 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
     );
     if (selected == null) return;
     setState(() {
-      if (start) {
-        _startDate = selected;
-        if (_endDate.isBefore(selected)) _endDate = selected;
-      } else {
-        _endDate = selected;
-      }
+      _startDate = selected;
     });
+    _recalculate();
   }
 
   void _save() {
@@ -340,20 +359,24 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       setState(() => _error = '请检查名称和日期（至少 ${widget.minimumDays} 天）');
       return;
     }
-    final splitStrategy = _selectedSplitStrategy();
-    if (splitStrategy == null) {
-      setState(() => _error = '每个背诵条目的节数必须大于 0');
+    final amount = int.tryParse(_scheduleAmount.text.trim());
+    if (amount == null || amount < 1) {
+      setState(() => _error = '章数、节数或天数必须大于 0');
       return;
     }
     final headerPassages = _passages
         .where((passage) => passage.bookId == _passages.first.bookId)
         .toList(growable: false);
-    final startChapter = headerPassages
-        .map((passage) => passage.startChapter)
-        .reduce((minimum, value) => value < minimum ? value : minimum);
-    final endChapter = headerPassages
-        .map((passage) => passage.endChapter)
-        .reduce((maximum, value) => value > maximum ? value : maximum);
+    final startChapter = headerPassages.isEmpty
+        ? widget.initial.startChapter
+        : headerPassages
+              .map((passage) => passage.startChapter)
+              .reduce((minimum, value) => value < minimum ? value : minimum);
+    final endChapter = headerPassages.isEmpty
+        ? widget.initial.endChapter
+        : headerPassages
+              .map((passage) => passage.endChapter)
+              .reduce((maximum, value) => value > maximum ? value : maximum);
     Navigator.pop(
       context,
       PlanEditorResult.saved(
@@ -372,7 +395,8 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           startDate: _startDate,
           endDate: _endDate,
           passages: _passages,
-          splitStrategy: splitStrategy,
+          scheduleMode: widget.contentLocked ? null : _scheduleMode,
+          scheduleAmount: amount,
           ebbinghausEnabled: _ebbinghausEnabled,
         ),
       ),
@@ -383,21 +407,62 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       '${value.year}-${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 
-  PlanEntrySplitStrategy? _selectedSplitStrategy() {
-    switch (_splitKind) {
-      case PlanEntrySplitKind.none:
-        return const PlanEntrySplitStrategy.none();
-      case PlanEntrySplitKind.book:
-        return const PlanEntrySplitStrategy.byBook();
-      case PlanEntrySplitKind.chapter:
-        return const PlanEntrySplitStrategy.byChapter();
-      case PlanEntrySplitKind.verse:
-        return const PlanEntrySplitStrategy.byVerse();
-      case PlanEntrySplitKind.everyVerses:
-        final count = int.tryParse(_everyVerseCount.text.trim());
-        return count != null && count > 0
-            ? PlanEntrySplitStrategy.everyVerses(count)
-            : null;
+  Future<void> _recalculate() async {
+    final revision = ++_calculationRevision;
+    final amount = int.tryParse(_scheduleAmount.text.trim());
+    if (amount == null || amount < 1) {
+      setState(() {
+        _calculating = false;
+        _error = '请输入大于 0 的整数';
+      });
+      return;
+    }
+    if (widget.contentLocked || widget.scripture == null || _passages.isEmpty) {
+      setState(() {
+        _calculating = false;
+        _error = null;
+        _endDate = DateTime(
+          _startDate.year,
+          _startDate.month,
+          _startDate.day + amount - 1,
+        );
+      });
+      return;
+    }
+    setState(() {
+      _calculating = true;
+      _error = null;
+    });
+    try {
+      final plan = await buildPlanFromDraft(
+        widget.scripture!,
+        PlanEditorDraft(
+          title: _title.text,
+          translationId: _translationId,
+          bookId: _passages.first.bookId,
+          startChapter: _passages.first.startChapter,
+          endChapter: _passages.first.endChapter,
+          startDate: _startDate,
+          endDate: _endDate,
+          passages: List.of(_passages),
+          scheduleMode: _scheduleMode,
+          scheduleAmount: amount,
+        ),
+        completedTasks: widget.completedTasks,
+      );
+      if (mounted && revision == _calculationRevision) {
+        setState(() {
+          _endDate = plan.endDate;
+          _calculating = false;
+        });
+      }
+    } catch (_) {
+      if (mounted && revision == _calculationRevision) {
+        setState(() {
+          _error = '无法计算计划，请检查经文';
+          _calculating = false;
+        });
+      }
     }
   }
 
@@ -407,7 +472,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       ..removeListener(_updatePassageJumpActions)
       ..dispose();
     _title.dispose();
-    _everyVerseCount.dispose();
+    _scheduleAmount.dispose();
     super.dispose();
   }
 
@@ -420,6 +485,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
           _endDate = _startDate.add(Duration(days: _passages.length - 1));
         }
       });
+      _recalculate();
       _refreshPassageJumpActions();
     }
   }
@@ -454,6 +520,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () {
                       setState(() => _passages.removeAt(index));
+                      _recalculate();
                       _refreshPassageJumpActions();
                     },
                   ),
@@ -518,6 +585,7 @@ class _PlanEditorDialogState extends State<PlanEditorDialog> {
       final passage = _passages.removeAt(oldIndex);
       _passages.insert(newIndex, passage);
     });
+    _recalculate();
     _refreshPassageJumpActions();
   }
 

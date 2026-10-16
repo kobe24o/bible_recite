@@ -1,4 +1,5 @@
 import 'package:bible_recite/src/app/app.dart';
+import 'package:bible_recite/src/features/devotion/data/devotion_feed_client.dart';
 import 'package:bible_recite/src/app/router.dart';
 import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 import 'package:bible_recite/src/features/update/application/update_providers.dart';
@@ -16,8 +17,31 @@ import 'package:sqlite3/sqlite3.dart';
 import '../devotion/devotion_models_test.dart' show complete2026Json;
 
 void main() {
+  testWidgets('launch automatically starts devotion sync', (tester) async {
+    final repository = SqlitePlanRepository(sqlite3.openInMemory());
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionFeedClientProvider.overrideWithValue(
+            DevotionFeedClient(loader: (_) async => complete2026Json),
+          ),
+        ],
+        child: const BibleReciteApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(await repository.loadCachedDevotionManifest(), isNotNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('router resolves the My leaderboard path', () {
-    expect(appRouter.configuration.findMatch(Uri.parse('/statistics/leaderboard')).isError, isFalse);
+    expect(
+      appRouter.configuration
+          .findMatch(Uri.parse('/statistics/leaderboard'))
+          .isError,
+      isFalse,
+    );
   });
 
   testWidgets('opens About when the update notification is selected', (

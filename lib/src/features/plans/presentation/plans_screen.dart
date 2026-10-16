@@ -1074,6 +1074,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        scripture: data.scripture,
         onAddPassages: () => _pickPassages(data),
         contentLocked: true,
         minimumDays: template.passages.length,
@@ -1158,6 +1159,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        scripture: data.scripture,
         onAddPassages: () => _pickPassages(data),
         initial: PlanEditorDraft(
           title: '我的背诵计划',
@@ -1207,7 +1209,9 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
       context: context,
       builder: (_) => PlanEditorDialog(
         books: data.books,
+        scripture: data.scripture,
         onAddPassages: plan.contentLocked ? null : () => _pickPassages(data),
+        completedTasks: existingTasks.where((task) => task.completed).toList(),
         allowDelete: true,
         contentLocked: plan.contentLocked,
         minimumDays: plan.contentLocked ? plan.totalTasks : 1,
@@ -1537,7 +1541,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
   Future<List<PlanPassageSelection>?> _pickPassages(_EditorData data) =>
       showDialog(
         context: context,
-        builder: (_) => _PassagePickerDialog(
+        builder: (_) => PlanPassagePickerDialog(
           books: data.books,
           scripture: data.scripture,
           translationId: data.translation.id,
@@ -1709,11 +1713,12 @@ final class _EditorData {
   final ScriptureRepository scripture;
 }
 
-class _PassagePickerDialog extends StatefulWidget {
-  const _PassagePickerDialog({
+class PlanPassagePickerDialog extends StatefulWidget {
+  const PlanPassagePickerDialog({
     required this.books,
     required this.scripture,
     required this.translationId,
+    super.key,
   });
 
   final List<BibleBook> books;
@@ -1721,14 +1726,15 @@ class _PassagePickerDialog extends StatefulWidget {
   final String translationId;
 
   @override
-  State<_PassagePickerDialog> createState() => _PassagePickerDialogState();
+  State<PlanPassagePickerDialog> createState() =>
+      _PlanPassagePickerDialogState();
 }
 
-class _PassagePickerDialogState extends State<_PassagePickerDialog> {
+class _PlanPassagePickerDialogState extends State<PlanPassagePickerDialog> {
   late BibleBook _startBook = widget.books.first;
   late BibleBook _endBook = widget.books.first;
   int _startChapter = 1;
-  int _endChapter = 1;
+  late int _endChapter = _endBook.chapterCount;
   int? _startVerse;
   int? _endVerse;
 
@@ -1750,7 +1756,8 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
               (book) => setState(() {
                 _startBook = book;
                 _endBook = book;
-                _startChapter = _endChapter = 1;
+                _startChapter = 1;
+                _endChapter = book.chapterCount;
                 _startVerse = _endVerse = null;
               }),
             ),
@@ -1761,8 +1768,10 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
               (value) => setState(() {
                 _startChapter = value;
                 _startVerse = null;
-                if (_endBook == _startBook && _endChapter < value)
+                if (_endBook == _startBook && _endChapter < value) {
                   _endChapter = value;
+                  _endVerse = null;
+                }
               }),
             ),
             _verseField(true),
@@ -1773,7 +1782,7 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
               endBooks,
               (book) => setState(() {
                 _endBook = book;
-                _endChapter = book == _startBook ? _startChapter : 1;
+                _endChapter = book.chapterCount;
                 _endVerse = null;
               }),
             ),
@@ -1806,7 +1815,8 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
     Iterable<BibleBook> books,
     ValueChanged<BibleBook> onChanged,
   ) => DropdownButtonFormField<String>(
-    value: value.osisId,
+    key: ValueKey('$label:${value.osisId}'),
+    initialValue: value.osisId,
     decoration: InputDecoration(labelText: label),
     items: [
       for (final book in books)
@@ -1821,7 +1831,8 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
     int value,
     ValueChanged<int> onChanged,
   ) => DropdownButtonFormField<int>(
-    value: value,
+    key: ValueKey('$label:${book.osisId}:$value'),
+    initialValue: value,
     decoration: InputDecoration(labelText: label),
     items: [
       for (var chapter = 1; chapter <= book.chapterCount; chapter++)
@@ -1835,8 +1846,8 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
   Widget _verseField(bool start) {
     final book = start ? _startBook : _endBook;
     final chapter = start ? _startChapter : _endChapter;
-    final selected = start ? _startVerse : _endVerse;
     return FutureBuilder<List<VerseUnit>>(
+      key: ValueKey('$start:${widget.translationId}:${book.osisId}:$chapter'),
       future: widget.scripture.getChapter(
         widget.translationId,
         book.osisId,
@@ -1844,19 +1855,35 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
       ),
       builder: (context, snapshot) {
         final verses = snapshot.data ?? const <VerseUnit>[];
-        final usable = verses.map((unit) => unit.start.verse).toList();
+        final usable = [
+          for (final unit in verses)
+            for (var verse = unit.start.verse; verse <= unit.end.verse; verse++)
+              verse,
+        ];
+        if (usable.isNotEmpty) {
+          if (start) {
+            _startVerse ??= usable.first;
+          } else {
+            _endVerse ??= usable.last;
+          }
+        }
+        final selected = start ? _startVerse : _endVerse;
         return DropdownButtonFormField<int>(
-          value: usable.contains(selected) ? selected : null,
+          key: ValueKey(
+            '${start ? "start" : "end"}:${book.osisId}:$chapter:${usable.length}',
+          ),
+          initialValue: usable.contains(selected) ? selected : null,
           decoration: InputDecoration(labelText: start ? '开始节' : '结束节'),
           items: [
             for (final verse in usable)
               DropdownMenuItem(value: verse, child: Text('$verse')),
           ],
           onChanged: (verse) => setState(() {
-            if (start)
+            if (start) {
               _startVerse = verse;
-            else
+            } else {
               _endVerse = verse;
+            }
           }),
         );
       },
@@ -1869,8 +1896,9 @@ class _PassagePickerDialogState extends State<_PassagePickerDialog> {
     final end = (_endBook.ordinal, _endChapter, _endVerse!);
     if (start.$1 > end.$1 ||
         (start.$1 == end.$1 &&
-            (start.$2 > end.$2 || (start.$2 == end.$2 && start.$3 > end.$3))))
+            (start.$2 > end.$2 || (start.$2 == end.$2 && start.$3 > end.$3)))) {
       return;
+    }
     final startIndex = widget.books.indexOf(_startBook);
     final endIndex = widget.books.indexOf(_endBook);
     final selections = <PlanPassageSelection>[];

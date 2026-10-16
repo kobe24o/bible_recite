@@ -5,8 +5,190 @@ import 'package:bible_recite/src/features/plans/domain/plan_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_reading_schedule.dart';
 
 void main() {
+  test('merged source verses stay inside the selected range', () async {
+    final plan = await buildPlanFromDraft(
+      _ScriptureFixture(merged: true),
+      PlanEditorDraft(
+        title: 'merged',
+        translationId: 'eng-web',
+        bookId: 'JHN',
+        startChapter: 1,
+        endChapter: 1,
+        startDate: DateTime(2026, 10, 16),
+        endDate: DateTime(2026, 10, 16),
+        scheduleMode: ReadingScheduleMode.dailyVerses,
+        scheduleAmount: 1,
+        passages: const [
+          PlanPassageSelection(
+            bookId: 'JHN',
+            startChapter: 1,
+            startVerse: 17,
+            endChapter: 1,
+            endVerse: 17,
+          ),
+        ],
+      ),
+    );
+    expect(plan.tasks.length, 1);
+    expect(plan.tasks.single.blocks.single.startVerse, 17);
+    expect(plan.tasks.single.blocks.single.endVerse, 17);
+    expect(plan.endDate, DateTime(2026, 10, 16));
+  });
+
+  test(
+    'historical completed days do not postpone pending daily work',
+    () async {
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: 'edit',
+          translationId: 'eng-web',
+          bookId: 'JHN',
+          startChapter: 1,
+          endChapter: 1,
+          startDate: DateTime(2026, 10, 1),
+          endDate: DateTime(2026, 10, 16),
+          scheduleMode: ReadingScheduleMode.dailyVerses,
+          scheduleAmount: 1,
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 2,
+            ),
+          ],
+        ),
+        now: DateTime(2026, 10, 16),
+        completedTasks: [
+          PlanTask(
+            id: 1,
+            planId: 1,
+            dayIndex: 0,
+            dueDate: DateTime(2026, 10, 1),
+            bookId: 'JHN',
+            startChapter: 1,
+            startVerse: 1,
+            endChapter: 1,
+            endVerse: 1,
+            completed: true,
+          ),
+        ],
+      );
+      expect(plan.tasks.map((task) => task.dayIndex).toList(), [0, 15]);
+      expect(plan.tasks.last.startVerse, 2);
+      expect(plan.endDate, DateTime(2026, 10, 16));
+    },
+  );
+
+  for (final scenario in [
+    (ReadingScheduleMode.dailyChapters, 2, [5, 1], 2),
+    (ReadingScheduleMode.dailyVerses, 4, [4, 2], 2),
+    (ReadingScheduleMode.daysByChapters, 2, [5, 1], 2),
+    (ReadingScheduleMode.daysByVerses, 4, [2, 2, 1, 1], 4),
+  ]) {
+    test('builds and dates a complete plan for ${scenario.$1}', () async {
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: 'schedule',
+          translationId: 'eng-web',
+          bookId: 'JHN',
+          startChapter: 1,
+          endChapter: 3,
+          startDate: DateTime(2026, 10, 16),
+          endDate: DateTime(2026, 10, 16),
+          scheduleMode: scenario.$1,
+          scheduleAmount: scenario.$2,
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 2,
+            ),
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 2,
+              startVerse: 1,
+              endChapter: 2,
+              endVerse: 3,
+            ),
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 3,
+              startVerse: 1,
+              endChapter: 3,
+              endVerse: 1,
+            ),
+          ],
+        ),
+      );
+      expect(
+        plan.tasks
+            .map(
+              (task) => task.blocks.fold<int>(
+                0,
+                (sum, block) => sum + block.endVerse - block.startVerse + 1,
+              ),
+            )
+            .toList(),
+        scenario.$3,
+      );
+      expect(plan.endDate, DateTime(2026, 10, 16 + scenario.$4 - 1));
+      expect(
+        plan.tasks.map((task) => task.dayIndex).toList(),
+        List.generate(scenario.$4, (i) => i),
+      );
+    });
+  }
+
+  test(
+    'daily verse scheduling crosses selections and derives completion date',
+    () async {
+      final plan = await buildPlanFromDraft(
+        _ScriptureFixture(),
+        PlanEditorDraft(
+          title: 'daily',
+          translationId: 'cmn-cu89s',
+          bookId: 'JHN',
+          startChapter: 1,
+          endChapter: 2,
+          startDate: DateTime(2026, 10, 16),
+          endDate: DateTime(2026, 10, 16),
+          scheduleMode: ReadingScheduleMode.dailyVerses,
+          scheduleAmount: 3,
+          passages: const [
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 2,
+            ),
+            PlanPassageSelection(
+              bookId: 'JHN',
+              startChapter: 2,
+              startVerse: 1,
+              endChapter: 2,
+              endVerse: 3,
+            ),
+          ],
+        ),
+      );
+      expect(plan.tasks.length, 2);
+      expect(plan.endDate, DateTime(2026, 10, 17));
+      expect(plan.tasks.first.blocks.length, 2);
+      expect(plan.tasks.last.blocks.single.startVerse, 2);
+      expect(plan.tasks.last.blocks.single.endVerse, 3);
+    },
+  );
+
   test('keeps a user-shortened end date when pending work fits it', () {
     final draft = PlanEditorDraft(
       title: '缩短日期',
@@ -360,13 +542,19 @@ void main() {
 }
 
 final class _ScriptureFixture implements ScriptureRepository {
+  _ScriptureFixture({this.merged = false});
+  final bool merged;
   @override
   Future<Passage> getPassage(String translationId, PassageRange range) async =>
       Passage(
         translationId: translationId,
         range: range,
         units: [
-          for (var verse = range.start.verse; verse <= range.end.verse; verse++)
+          for (
+            var verse = merged ? 16 : range.start.verse;
+            verse <= (merged ? 16 : range.end.verse);
+            verse++
+          )
             VerseUnit(
               translationId: translationId,
               start: (
@@ -379,7 +567,7 @@ final class _ScriptureFixture implements ScriptureRepository {
                 canonId: CanonId.protestant66,
                 osisBookId: range.start.osisBookId,
                 chapter: range.start.chapter,
-                verse: verse,
+                verse: merged ? 17 : verse,
               ),
               text: '经文$verse',
               status: SourceTextStatus.present,

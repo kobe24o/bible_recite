@@ -3,8 +3,133 @@ import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:bible_recite/src/features/plans/domain/plan_reading_schedule.dart';
+import '../scripture/scripture_browser_screen_test.dart'
+    show FakeRepositoryForPassage;
 
 void main() {
+  testWidgets(
+    'daily quota changes update completion preview and saved schedule',
+    (tester) async {
+      PlanEditorResult? result;
+      final scripture = FakeRepositoryForPassage(
+        passageUnits: [
+          for (var verse = 1; verse <= 5; verse++)
+            VerseUnit(
+              translationId: 'eng-web',
+              start: (
+                canonId: CanonId.protestant66,
+                osisBookId: 'JHN',
+                chapter: 1,
+                verse: verse,
+              ),
+              end: (
+                canonId: CanonId.protestant66,
+                osisBookId: 'JHN',
+                chapter: 1,
+                verse: verse,
+              ),
+              text: 'verse',
+              status: SourceTextStatus.present,
+            ),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  result = await showDialog<PlanEditorResult>(
+                    context: context,
+                    builder: (_) => PlanEditorDialog(
+                      books: [],
+                      scripture: scripture,
+                      initial: PlanEditorDraft(
+                        title: 'Plan',
+                        translationId: 'eng-web',
+                        bookId: 'JHN',
+                        startChapter: 1,
+                        endChapter: 1,
+                        startDate: DateTime(2026, 10, 16),
+                        endDate: DateTime(2026, 10, 16),
+                        scheduleMode: ReadingScheduleMode.dailyVerses,
+                        scheduleAmount: 3,
+                        passages: const [
+                          PlanPassageSelection(
+                            bookId: 'JHN',
+                            startChapter: 1,
+                            startVerse: 1,
+                            endChapter: 1,
+                            endVerse: 5,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('plan-end-date')))
+            .subtitle,
+        isA<Text>().having((text) => text.data, 'date', '2026-10-17'),
+      );
+      await tester.enterText(
+        find.byKey(const Key('plan-schedule-amount')),
+        '2',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('plan-end-date')))
+            .subtitle,
+        isA<Text>().having((text) => text.data, 'date', '2026-10-18'),
+      );
+      await tester.tap(find.byKey(const Key('save-plan-button')));
+      await tester.pumpAndSettle();
+      expect(result?.draft?.endDate, DateTime(2026, 10, 18));
+      expect(result?.draft?.scheduleAmount, 2);
+      expect(result?.draft?.scheduleMode, ReadingScheduleMode.dailyVerses);
+    },
+  );
+
+  testWidgets('completion date is read only and duration can be configured', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlanEditorDialog(
+            books: const [],
+            initial: PlanEditorDraft(
+              title: 'Plan',
+              translationId: 'eng-web',
+              bookId: 'JHN',
+              startChapter: 1,
+              endChapter: 1,
+              startDate: DateTime(2026, 10, 16),
+              endDate: DateTime(2026, 10, 20),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ListTile>(find.byKey(const Key('plan-end-date'))).onTap,
+      isNull,
+    );
+    expect(find.byKey(const Key('plan-schedule-amount')), findsOneWidget);
+  });
+
   testWidgets('edits title chapters and inclusive plan dates', (tester) async {
     PlanEditorResult? result;
     await tester.pumpWidget(

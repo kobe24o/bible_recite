@@ -4,6 +4,7 @@ import '../presentation/plan_editor_dialog.dart';
 import 'plan_entry_splitter.dart';
 import 'plan_generator.dart';
 import 'plan_models.dart';
+import 'plan_reading_schedule.dart';
 
 PlanEditorDraft normalizeDraftForPendingWork(
   PlanEditorDraft draft,
@@ -29,6 +30,8 @@ PlanEditorDraft normalizeDraftForPendingWork(
   ].reduce((a, b) => a.isAfter(b) ? a : b);
   if (end == draft.endDate) return draft;
   return PlanEditorDraft(
+    scheduleMode: draft.scheduleMode,
+    scheduleAmount: draft.scheduleAmount,
     title: draft.title,
     translationId: draft.translationId,
     bookId: draft.bookId,
@@ -86,6 +89,161 @@ Future<NewMemorizationPlan> buildPlanFromDraft(
   }
   if (passageUnits.every((units) => units.isEmpty)) {
     throw StateError('所选章节没有可用经文');
+  }
+  if (draft.scheduleMode != null) {
+    // Expand source ranges so the quota counts actual verses, even when a
+    // translation stores several verses in a single source unit.
+    final atoms = <NewPlanTaskBlock>[
+      for (var index = 0; index < passageUnits.length; index++)
+        for (final unit in passageUnits[index])
+          for (var verse = unit.start.verse; verse <= unit.end.verse; verse++)
+            if (draft.passages.isEmpty ||
+                (_compare(
+                          (unit.start.chapter, verse),
+                          (
+                            draft.passages[index].startChapter,
+                            draft.passages[index].startVerse,
+                          ),
+                        ) >=
+                        0 &&
+                    _compare(
+                          (unit.start.chapter, verse),
+                          (
+                            draft.passages[index].endChapter,
+                            draft.passages[index].endVerse,
+                          ),
+                        ) <=
+                        0))
+              NewPlanTaskBlock(
+                bookId: unit.start.osisBookId,
+                startChapter: unit.start.chapter,
+                startVerse: verse,
+                endChapter: unit.start.chapter,
+                endVerse: verse,
+              ),
+    ];
+    final pending = atoms
+        .where(
+          (atom) => !completedTasks.any(
+            (task) => task.effectiveBlocks.any(
+              (block) =>
+                  block.bookId == atom.bookId &&
+                  _compare(
+                        (block.startChapter, block.startVerse),
+                        (atom.startChapter, atom.startVerse),
+                      ) <=
+                      0 &&
+                  _compare(
+                        (atom.endChapter, atom.endVerse),
+                        (block.endChapter, block.endVerse),
+                      ) <=
+                      0,
+            ),
+          ),
+        )
+        .toList();
+    final chapters = <List<NewPlanTaskBlock>>[];
+    for (final atom in pending) {
+      if (chapters.isEmpty ||
+          chapters.last.last.bookId != atom.bookId ||
+          chapters.last.last.startChapter != atom.startChapter) {
+        chapters.add([]);
+      }
+      chapters.last.add(atom);
+    }
+    final mode = draft.scheduleMode!;
+    final groups = mode.usesChapters
+        ? distributeReadingUnits(
+            chapters,
+            mode,
+            draft.scheduleAmount,
+          ).map((day) => [for (final chapter in day) ...chapter]).toList()
+        : distributeReadingUnits(pending, mode, draft.scheduleAmount);
+    final current = now ?? DateTime.now();
+    final today = DateTime(current.year, current.month, current.day);
+    final firstDay = completedTasks.isNotEmpty && today.isAfter(draft.startDate)
+        ? today.difference(draft.startDate).inDays
+        : 0;
+    final unavailable = completedTasks
+        .map((task) => task.dayIndex)
+        .where((day) => day >= firstDay)
+        .toSet();
+    final tasks = <NewPlanTask>[
+      for (final task in completedTasks)
+        NewPlanTask(
+          dayIndex: task.dayIndex,
+          bookId: task.bookId,
+          startChapter: task.startChapter,
+          startVerse: task.startVerse,
+          endChapter: task.endChapter,
+          endVerse: task.endVerse,
+          blocks: [
+            for (final b in task.effectiveBlocks)
+              NewPlanTaskBlock(
+                bookId: b.bookId,
+                startChapter: b.startChapter,
+                startVerse: b.startVerse,
+                endChapter: b.endChapter,
+                endVerse: b.endVerse,
+              ),
+          ],
+        ),
+    ];
+    for (var day = 0; day < groups.length; day++) {
+      if (groups[day].isEmpty) continue;
+      final blocks = <NewPlanTaskBlock>[];
+      for (final atom in groups[day]) {
+        if (blocks.isNotEmpty &&
+            blocks.last.bookId == atom.bookId &&
+            blocks.last.endChapter == atom.startChapter &&
+            blocks.last.endVerse + 1 == atom.startVerse) {
+          final previous = blocks.removeLast();
+          blocks.add(
+            NewPlanTaskBlock(
+              bookId: atom.bookId,
+              startChapter: previous.startChapter,
+              startVerse: previous.startVerse,
+              endChapter: atom.endChapter,
+              endVerse: atom.endVerse,
+            ),
+          );
+        } else {
+          blocks.add(atom);
+        }
+      }
+      tasks.add(
+        NewPlanTask(
+          dayIndex: _availableDayAt(day, firstDay, unavailable),
+          bookId: blocks.first.bookId,
+          startChapter: blocks.first.startChapter,
+          startVerse: blocks.first.startVerse,
+          endChapter: blocks.first.endChapter,
+          endVerse: blocks.first.endVerse,
+          blocks: blocks,
+        ),
+      );
+    }
+    tasks.sort((a, b) => a.dayIndex.compareTo(b.dayIndex));
+    final lastDay = groups.isEmpty
+        ? 0
+        : _availableDayAt(groups.length - 1, firstDay, unavailable);
+    final completedLast = completedTasks.fold<int>(
+      0,
+      (max, task) => task.dayIndex > max ? task.dayIndex : max,
+    );
+    return NewMemorizationPlan(
+      title: draft.title,
+      translationId: draft.translationId,
+      bookId: draft.bookId,
+      startChapter: draft.startChapter,
+      endChapter: draft.endChapter,
+      startDate: draft.startDate,
+      endDate: draft.startDate.add(
+        Duration(days: lastDay > completedLast ? lastDay : completedLast),
+      ),
+      tasks: tasks,
+      ebbinghausEnabled: draft.ebbinghausEnabled,
+    );
   }
   // Keep each original selection as an exact block for the default and
   // per-book modes. Expanding a whole book into one row per verse makes both
