@@ -1603,10 +1603,10 @@ class _AchievementCard extends StatelessWidget {
     final unlocked = progress.unlockedAt != null;
     final colors = Theme.of(context).colorScheme;
     final progressLabel = unlocked && progress.definition.repeatable
-        ? '已获得 X ${progress.awardCount} · ${(progress.fraction * 100).round()}%'
+        ? '已获得 X ${progress.awardCount} · ${progress.percentage}%'
         : unlocked
-        ? '已获得 · ${(progress.fraction * 100).round()}%'
-        : '${(progress.fraction * 100).round()}%';
+        ? '已获得 · ${progress.percentage}%'
+        : '${progress.percentage}%';
     return Card(
       key: Key(
         'achievement-${progress.definition.id}-${unlocked ? 'unlocked' : 'locked'}',
