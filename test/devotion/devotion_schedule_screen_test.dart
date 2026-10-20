@@ -14,8 +14,10 @@ import 'devotion_models_test.dart' show complete2026Json;
 
 void main() {
   testWidgets(
-    'Plans opens the schedule at today and allows browsing earlier days',
+    'Plans opens the calendar at today and preserves the browsed month',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
       await repository.cacheDevotionManifest(complete2026Json);
@@ -39,24 +41,26 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('open-devotion-schedule')));
       await tester.pumpAndSettle();
-      const date = '2026-09-17';
       expect(
-        find.byKey(Key('devotion-day-$date')).hitTestable(),
+        find.byKey(const Key('devotion-note-day-2026-09-17')),
         findsOneWidget,
       );
-      expect(find.text('今天'), findsOneWidget);
-      final list = find.byKey(const Key('devotion-schedule-list'));
-      final controller = tester.widget<SingleChildScrollView>(list).controller!;
-      final initialOffset = controller.offset;
-      await tester.drag(list, const Offset(0, 400));
+      await tester.tap(find.byKey(const Key('previous-devotion-note-month')));
       await tester.pumpAndSettle();
-      final browsedOffset = controller.offset;
-      expect(browsedOffset, lessThan(initialOffset));
+      expect(find.text('2026年8月'), findsOneWidget);
+      final day = find.byKey(const Key('devotion-note-day-2026-08-17'));
+      await tester.ensureVisible(day);
+      await tester.tap(day);
+      await tester.pumpAndSettle();
       ProviderScope.containerOf(
-        tester.element(list),
+        tester.element(day),
       ).read(devotionRevisionProvider.notifier).refresh();
       await tester.pumpAndSettle();
-      expect(controller.offset, browsedOffset);
+      expect(find.text('2026年8月'), findsOneWidget);
+      expect(
+        find.byKey(const Key('devotion-note-day-2026-08-17')),
+        findsOneWidget,
+      );
     },
   );
 
