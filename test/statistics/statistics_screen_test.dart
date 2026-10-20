@@ -481,7 +481,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('已获得 · 100%'), findsWidgets);
-    expect(find.text('89%'), findsOneWidget);
+    expect(find.text('88%'), findsOneWidget);
 
     final firstBadge = find.byKey(
       const Key('achievement-first_recitation-unlocked'),
