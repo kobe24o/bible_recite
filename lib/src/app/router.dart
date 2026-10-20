@@ -23,7 +23,7 @@ final appRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/devotion',
-      builder: (context, state) => const DevotionScheduleScreen(),
+      builder: (context, state) => const DevotionNotesScreen(),
     ),
     GoRoute(
       path: '/devotion/:date',
