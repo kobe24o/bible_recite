@@ -330,7 +330,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "灵修日历默认选中今天，所有日期均可选择，有笔记日期保留圆点；计划页年度灵修与我的页面统一；勋章进度百分比向下取整，避免未完成时显示100%。" \
+              --release-notes "修复出埃及记等合并经文已完成却未获得勋章的问题，已有学习记录自动计入；统一勋章列表与详情的向下取整进度显示。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"

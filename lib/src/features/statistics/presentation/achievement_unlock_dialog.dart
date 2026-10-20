@@ -178,7 +178,7 @@ class _AchievementUnlockDialogState extends State<AchievementUnlockDialog>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
-              Text('当前进度：${(progress.fraction * 100).round()}%'),
+              Text('当前进度：${progress.percentage}%'),
               if (progress.definition.repeatable &&
                   progress.awardCount > 0) ...[
                 const SizedBox(height: 4),

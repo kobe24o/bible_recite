@@ -19,16 +19,16 @@ Future<ExternalAchievementSyncResult> syncScriptureCoverageAchievements({
   }
 
   final books = await scripture.listBooks('cmn-cu89s', CanonId.protestant66);
-  final chapterTotals = scripture is SqliteScriptureRepository
-      ? await scripture.getChapterVerseCounts('cmn-cu89s')
-      : <String, int>{
+  final chapterUnitStarts = scripture is SqliteScriptureRepository
+      ? await scripture.getChapterUnitStartVerses('cmn-cu89s')
+      : <String, List<int>>{
           for (final book in books)
             for (var chapter = 1; chapter <= book.chapterCount; chapter++)
               '${book.osisId}:$chapter': (await scripture.getChapter(
                 'cmn-cu89s',
                 book.osisId,
                 chapter,
-              )).length,
+              )).map((unit) => unit.start.verse).toList(),
         };
   final verseCounts = <String, int>{
     for (final item in metrics)
@@ -57,8 +57,7 @@ Future<ExternalAchievementSyncResult> syncScriptureCoverageAchievements({
     final bookVerseCounts = <int>[];
     for (var chapter = 1; chapter <= book.chapterCount; chapter++) {
       final key = '${book.osisId}:$chapter';
-      final total = chapterTotals[key] ?? 0;
-      for (var verse = 1; verse <= total; verse++) {
+      for (final verse in chapterUnitStarts[key] ?? const <int>[]) {
         bookVerseCounts.add(verseCounts['$key:$verse'] ?? 0);
       }
     }

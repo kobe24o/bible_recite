@@ -116,6 +116,28 @@ final class SqliteScriptureRepository implements ScriptureRepository {
     }
   }
 
+  /// Recitation stores one metric at each text unit's start verse. A merged
+  /// unit such as Exodus 38:14-15 is completed by its verse-14 metric.
+  Future<Map<String, List<int>>> getChapterUnitStartVerses(
+    String translationId,
+  ) async {
+    final database = _open(translationId);
+    try {
+      final result = <String, List<int>>{};
+      for (final row in database.select('''
+        SELECT osis_book_id, chapter, start_verse
+        FROM verse_unit WHERE status = 'present'
+        ORDER BY osis_book_id, chapter, start_verse
+      ''')) {
+        final key = '${row['osis_book_id']}:${row['chapter']}';
+        (result[key] ??= []).add(row['start_verse'] as int);
+      }
+      return result;
+    } finally {
+      database.close();
+    }
+  }
+
   @override
   Future<List<TranslationInfo>> listTranslations() async {
     final translations = registry.entries
