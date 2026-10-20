@@ -3,6 +3,29 @@ import 'package:bible_recite/src/features/statistics/domain/achievement_engine.d
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('incomplete Exodus does not round up to 100 percent', () {
+    final counts = List.filled(1213, 1)..[1212] = 0;
+    final coverage = calculateRepeatedAchievementProgress(counts);
+    const definition = AchievementDefinition(
+      id: 'book_complete_EXO',
+      title: '出埃及记勋章',
+      description: '',
+      metric: AchievementMetric.sessions,
+      target: 1,
+      repeatable: true,
+    );
+    final progress = AchievementProgress(
+      definition: definition,
+      current: coverage.progress,
+      satisfied: false,
+    );
+    expect(progress.percentage, 99);
+    expect(coverage.awardCount, 0);
+    final complete = calculateRepeatedAchievementProgress(List.filled(1213, 1));
+    expect(complete.awardCount, 1);
+    expect(complete.progress, 1);
+  });
+
   test(
     'an unlocked achievement keeps 100 percent when its metric decreases',
     () {
