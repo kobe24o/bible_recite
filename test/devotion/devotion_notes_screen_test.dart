@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
 
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/devotion/presentation/devotion_notes_screen.dart';
@@ -31,6 +32,7 @@ void main() {
       ProviderScope(
         overrides: [
           planRepositoryProvider.overrideWith((ref) async => repository),
+          devotionClockProvider.overrideWithValue(() => DateTime(2026, 9, 20)),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -44,6 +46,16 @@ void main() {
 
     expect(find.text('灵修笔记'), findsOneWidget);
     expect(find.text('2026年9月'), findsOneWidget);
+    expect(find.text('当天还没有灵修笔记'), findsOneWidget);
+    final today = find.byKey(const Key('devotion-note-day-2026-09-20'));
+    expect(tester.widget<InkWell>(today).onTap, isNotNull);
+    final material = tester.widget<Material>(
+      find.ancestor(of: today, matching: find.byType(Material)).first,
+    );
+    expect(
+      material.color,
+      Theme.of(tester.element(today)).colorScheme.primaryContainer,
+    );
     expect(
       find.byKey(const Key('devotion-note-dot-2026-09-17')),
       findsOneWidget,
@@ -63,5 +75,15 @@ void main() {
 
     expect(find.text('较早的领受'), findsOneWidget);
     expect(find.text('以斯拉记 1:1–11'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('devotion-note-day-2026-09-18')),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('devotion-note-day-2026-09-18')));
+    await tester.pumpAndSettle();
+    expect(find.text('当天还没有灵修笔记'), findsOneWidget);
+    expect(find.text('较早的领受'), findsNothing);
+    expect(find.byKey(const Key('open-selected-devotion')), findsOneWidget);
   });
 }
