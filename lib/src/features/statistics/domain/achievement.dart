@@ -219,6 +219,9 @@ final class AchievementProgress {
   final DateTime? unlockedAt;
   final int awardCount;
 
+  /// Do not display a completed round until every required verse is covered.
+  int get percentage => (fraction * 100).floor();
+
   /// Achievement unlocks are permanent. Metrics such as current streak or
   /// completed plans may later decrease, but an earned badge must not regress
   /// to "已获得 · 0%".
