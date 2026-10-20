@@ -147,13 +147,18 @@ void main() {
     await tester.ensureVisible(entry);
     await tester.tap(entry);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, '年度灵修'), findsOneWidget);
-    expect(find.byKey(const Key('devotion-day-2026-01-01')), findsOneWidget);
+    expect(find.widgetWithText(AppBar, '灵修笔记'), findsOneWidget);
+    expect(
+      find.byKey(const Key('devotion-note-day-2026-01-01')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
     'refreshes devotion date at rollover and resume in one app container',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
       await repository.cacheDevotionManifest(complete2026Json);
