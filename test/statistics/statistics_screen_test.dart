@@ -70,10 +70,12 @@ void main() {
   testWidgets(
     'opening achievements awards completed Exodus from existing merged-unit records',
     (tester) async {
-      final registry = await ScripturePackRegistry.fromDirectories({
-        for (final id in ['cmn-cu89s', 'cmn-cu89t', 'eng-web'])
-          id: Directory('assets/scripture/$id'),
-      });
+      final registry = (await tester.runAsync(
+        () => ScripturePackRegistry.fromDirectories({
+          for (final id in ['cmn-cu89s', 'cmn-cu89t', 'eng-web'])
+            id: Directory('assets/scripture/$id'),
+        }),
+      ))!;
       final scripture = SqliteScriptureRepository(registry: registry);
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
