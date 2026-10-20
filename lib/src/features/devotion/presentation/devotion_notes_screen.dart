@@ -47,10 +47,7 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
     setState(() => _displayedMonth = DateTime(month.year, month.month));
   }
 
-  Future<void> _chooseMonth(
-    DateTime month,
-    Map<DateTime, DevotionNoteEntry> notes,
-  ) async {
+  Future<void> _chooseMonth(DateTime month) async {
     final picked = await showDatePicker(
       context: context,
       initialDate: month,
@@ -62,7 +59,7 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
     final date = _calendarDay(picked);
     setState(() {
       _displayedMonth = DateTime(date.year, date.month);
-      if (notes.containsKey(date)) _selectedDate = date;
+      _selectedDate = date;
     });
   }
 
@@ -111,20 +108,17 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final data = snapshot.data!;
-          if (data.notes.isEmpty) {
-            return const Center(child: Text('还没有写过灵修笔记'));
-          }
           final notesByDate = {
             for (final note in data.notes) _calendarDay(note.date): note,
           };
-          final fallback = data.notes.last.date;
+          final fallback = ref.watch(devotionTodayProvider);
           final month =
               _displayedMonth ?? DateTime(fallback.year, fallback.month);
           final selectedDate = _selectedDate ?? _calendarDay(fallback);
-          final selected = notesByDate[selectedDate] ?? data.notes.last;
-          final passages = selected.note.passages.isNotEmpty
+          final selected = notesByDate[selectedDate];
+          final passages = selected != null && selected.note.passages.isNotEmpty
               ? selected.note.passages
-              : data.manifest?.dayFor(selected.date)?.passages ??
+              : data.manifest?.dayFor(selectedDate)?.passages ??
                     const <DevotionPassage>[];
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -137,20 +131,32 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
                     _changeMonth(DateTime(month.year, month.month - 1)),
                 onNext: () =>
                     _changeMonth(DateTime(month.year, month.month + 1)),
-                onChooseMonth: () => _chooseMonth(month, notesByDate),
+                onChooseMonth: () => _chooseMonth(month),
                 onSelect: (date) => setState(() => _selectedDate = date),
               ),
               const SizedBox(height: 20),
               Text(
-                devotionDateLabel(selected.date),
+                devotionDateLabel(selectedDate),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(selected.content),
+                  child: Text(selected?.content ?? '当天还没有灵修笔记'),
                 ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                key: const Key('open-selected-devotion'),
+                onPressed: () async {
+                  await context.push(
+                    '/devotion/${devotionDateLabel(selectedDate)}',
+                  );
+                  if (mounted) setState(() => _notes = _loadNotes());
+                },
+                icon: const Icon(Icons.edit_note),
+                label: const Text('阅读经文与写笔记'),
               ),
               const SizedBox(height: 12),
               Text('参考经文', style: Theme.of(context).textTheme.titleMedium),
@@ -279,7 +285,7 @@ class _NotesMonthCalendar extends StatelessWidget {
                     child: InkWell(
                       key: Key('devotion-note-day-${devotionDateLabel(date)}'),
                       borderRadius: BorderRadius.circular(8),
-                      onTap: written ? () => onSelect(date) : null,
+                      onTap: () => onSelect(date),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
