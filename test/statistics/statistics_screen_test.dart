@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/backup/domain/user_data_backup.dart';
@@ -20,6 +21,8 @@ import 'package:bible_recite/src/features/statistics/domain/recitation_result.da
 import 'package:bible_recite/src/features/statistics/presentation/statistics_screen.dart';
 import 'package:bible_recite/src/features/statistics/presentation/random_quiz_options_dialog.dart';
 import 'package:bible_recite/src/features/scripture/application/scripture_providers.dart';
+import 'package:bible_recite/src/features/scripture/data/sqlite_scripture_repository.dart';
+import 'package:bible_recite/src/features/scripture/domain/scripture_repository.dart';
 import 'package:bible_recite/src/features/scripture/domain/scripture_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -64,6 +67,63 @@ const _bundledManifest = CloudPlanManifest(
 );
 
 void main() {
+  testWidgets(
+    'opening achievements awards completed Exodus from existing merged-unit records',
+    (tester) async {
+      final registry = await ScripturePackRegistry.fromDirectories({
+        for (final id in ['cmn-cu89s', 'cmn-cu89t', 'eng-web'])
+          id: Directory('assets/scripture/$id'),
+      });
+      final scripture = SqliteScriptureRepository(registry: registry);
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final units = <VerseUnit>[];
+      for (var chapter = 1; chapter <= 40; chapter++) {
+        units.addAll(await scripture.getChapter('cmn-cu89s', 'EXO', chapter));
+      }
+      await repository.saveRecitationResult(
+        NewRecitationResult(
+          translationId: 'cmn-cu89s',
+          bookId: 'EXO',
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 22,
+          mode: 'continuous',
+          durationSeconds: 0,
+          correctCount: 1,
+          incorrectCount: 0,
+          omittedCount: 0,
+          reorderedCount: 0,
+          accuracy: 1,
+          completedAt: DateTime(2026, 10, 21),
+          verseMetrics: [
+            for (final unit in units)
+              NewRecitationVerseMetric(
+                bookId: 'EXO',
+                chapter: unit.start.chapter,
+                verse: unit.start.verse,
+                accuracy: 1,
+                durationSeconds: 0,
+              ),
+          ],
+        ),
+      );
+      await _pumpScreen(
+        tester,
+        repository,
+        scripture: scripture,
+        view: StatisticsScreenView.achievements,
+      );
+      expect(
+        find.byKey(const Key('achievement-book_complete_EXO-unlocked')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('achievement-book_complete_EXO-locked')),
+        findsNothing,
+      );
+    },
+  );
   testWidgets('learning data includes devotion activity and streaks', (
     tester,
   ) async {
@@ -832,7 +892,7 @@ void main() {
 Future<void> _pumpScreen(
   WidgetTester tester,
   SqlitePlanRepository repository, {
-  FakeRepositoryForPassage? scripture,
+  ScriptureRepository? scripture,
   StatisticsScreenView view = StatisticsScreenView.overview,
   AppRuntimePlatform? platform,
   TestFlightLink? testFlightLink,
