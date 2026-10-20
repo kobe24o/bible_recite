@@ -190,15 +190,21 @@ void main() {
 
       appRouter.go('/devotion');
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('devotion-day-2026-09-18')), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
+      expect(
+        find.byKey(const Key('devotion-note-day-2026-09-18')),
+        findsOneWidget,
+      );
+      expect(find.text('2026-09-18'), findsOneWidget);
 
       now = DateTime(2026, 9, 19, 8);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(container.read(devotionTodayProvider), DateTime(2026, 9, 19));
-      expect(find.byKey(const Key('devotion-day-2026-09-19')), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
+      expect(
+        find.byKey(const Key('devotion-note-day-2026-09-19')),
+        findsOneWidget,
+      );
+      expect(find.text('2026-09-19'), findsOneWidget);
     },
   );
 
