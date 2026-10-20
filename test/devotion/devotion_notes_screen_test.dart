@@ -28,6 +28,8 @@ void main() {
   testWidgets('calendar marks written notes and opens their date content', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
