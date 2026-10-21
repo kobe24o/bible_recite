@@ -32,15 +32,19 @@ void main() {
     final font = FontLoader('DuoSystemFont');
     font.addFont(
       File(
-        '/System/Library/Fonts/STHeiti Medium.ttc',
+        '/System/Library/Fonts/STHeiti Light.ttc',
       ).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
     );
     await font.load();
+    final icons = FontLoader('MaterialIcons');
+    icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await icons.load();
   });
 
   testWidgets('capture production screens at iPhone Duo portrait size', (
     tester,
   ) async {
+    debugDisableShadows = false;
     tester.view.physicalSize = const Size(1398, 2034);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
