@@ -45,6 +45,7 @@ void main() {
     tester,
   ) async {
     debugDisableShadows = false;
+    addTearDown(() => debugDisableShadows = true);
     tester.view.physicalSize = const Size(1398, 2034);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
