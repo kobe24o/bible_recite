@@ -113,17 +113,17 @@ void main() {
       final boundary =
           captureKey.currentContext!.findRenderObject()!
               as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
-      expect(image.width, 1398);
-      expect(image.height, 2034);
-      final png = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 3);
+        expect(image.width, 1398);
+        expect(image.height, 2034);
+        final png = (await image.toByteData(format: ui.ImageByteFormat.png))!;
         final dir = Directory('build/iphone_duo')..createSync(recursive: true);
         await File(
           '${dir.path}/${page.$2}',
         ).writeAsBytes(png.buffer.asUint8List());
+        image.dispose();
       });
-      image.dispose();
     }
     await tester.pumpWidget(const SizedBox());
   });
