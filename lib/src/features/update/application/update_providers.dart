@@ -93,6 +93,8 @@ final updateRuntimePlatformProvider = Provider<UpdateRuntimePlatform>(
   (ref) => switch (ref.watch(appRuntimePlatformProvider)) {
     AppRuntimePlatform.android => UpdateRuntimePlatform.android,
     AppRuntimePlatform.ios => UpdateRuntimePlatform.ios,
+    AppRuntimePlatform.macos ||
+    AppRuntimePlatform.windows ||
     AppRuntimePlatform.other => UpdateRuntimePlatform.other,
   },
 );

@@ -20,6 +20,20 @@ final class AudioInputRouting {
     return null;
   }
 
+  /// Desktops follow the user's system input, including USB/Bluetooth mics.
+  static RecordConfig recordConfig(
+    Iterable<InputDevice> devices, {
+    required int sampleRate,
+    required bool desktop,
+  }) => desktop
+      ? RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: sampleRate,
+          numChannels: 1,
+          autoGain: true,
+        )
+      : phoneRecordConfig(devices, sampleRate: sampleRate);
+
   static RecordConfig phoneRecordConfig(
     Iterable<InputDevice> devices, {
     required int sampleRate,

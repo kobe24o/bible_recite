@@ -1,3 +1,4 @@
+import '../support/native_reminder_override.dart';
 import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/app/responsive_shell.dart';
 import 'package:bible_recite/src/app/router.dart';
@@ -31,7 +32,12 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     appRouter.go('/about');
-    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [noNativeReminders],
+        child: const BibleReciteApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(

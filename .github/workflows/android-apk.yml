@@ -1,7 +1,12 @@
-name: Mobile releases
+name: App releases
 
 on:
   workflow_dispatch:
+    inputs:
+      desktop_only:
+        description: Build and publish only desktop preview installers
+        type: boolean
+        default: false
   push:
     branches:
       - master
@@ -10,11 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: mobile-release-${{ github.ref }}
+  group: app-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
+    if: ${{ !inputs.desktop_only }}
     name: Build signed Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -152,6 +158,7 @@ jobs:
           retention-days: 30
 
   ios:
+    if: ${{ !inputs.desktop_only }}
     name: Build iOS simulator app
     runs-on: macos-latest
     timeout-minutes: 45
@@ -252,11 +259,209 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  windows:
+    name: Test and build Windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+
+      - name: Download offline speech models
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-models" assets/models
+          gh release download offline-models-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip \
+            --dir "$RUNNER_TEMP/offline-models"
+          python - <<'PYMODELS'
+          import os, pathlib, zipfile
+          root = pathlib.Path('assets/models').resolve()
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP']) / 'offline-models/sherpa-models.zip') as archive:
+              for entry in archive.infolist():
+                  name = entry.filename.replace('\\', '/')
+                  target = (root / name).resolve()
+                  if not target.is_relative_to(root):
+                      raise ValueError('Invalid archive entry')
+                  if entry.is_dir() or name.endswith('/'):
+                      target.mkdir(parents=True, exist_ok=True)
+                  else:
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      target.write_bytes(archive.read(entry))
+          for name in ('encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'):
+              assert (root / 'sherpa' / name).stat().st_size > 0, name
+          PYMODELS
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run unit and widget tests
+        env:
+          TZ: UTC
+        run: flutter test
+
+      - name: Test native Windows services and desktop UI
+        run: flutter test integration_test/desktop_smoke_test.dart -d windows
+
+      - name: Build Windows release
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          flutter build windows --release --target-platform windows-x64 `
+            --dart-define=SUPABASE_URL="$env:SUPABASE_URL" `
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$env:SUPABASE_PUBLISHABLE_KEY"
+
+      - name: Package and verify Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -replace '^version:\s*', '').Trim()
+          $versionName, $buildNumber = $version.Split('+')
+          $bundle = (Resolve-Path 'build/windows/x64/runner/Release').Path
+          foreach ($required in @('bible_recite.exe', 'flutter_windows.dll', 'msvcp140.dll', 'vcruntime140.dll', 'data/flutter_assets/assets/models/sherpa/encoder.onnx')) {
+            if (!(Test-Path (Join-Path $bundle $required))) { throw "Missing runtime file: $required" }
+          }
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $dist = (Resolve-Path dist).Path
+          & $compiler "/DAppVersion=$versionName" "/DBuildNumber=$buildNumber" "/DSourceDir=$bundle" "/DOutputDir=$dist" tool/desktop/windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+          $installer = Get-Item "dist/BibleRecite-Windows-$versionName-build-$buildNumber-x64-setup.exe"
+          $installPath = Join-Path $env:RUNNER_TEMP 'BibleRecite-install-test'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installPath") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          if (!(Test-Path "$installPath/bible_recite.exe")) { throw 'Installed executable missing' }
+          $app = Start-Process -FilePath "$installPath/bible_recite.exe" -WorkingDirectory $installPath -PassThru
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) { throw "Installed application exited unexpectedly: $($app.ExitCode)" }
+          Stop-Process -Id $app.Id -Force
+          $uninstall = Start-Process -FilePath "$installPath/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Installer uninstall test failed' }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($installer.Name)" | Out-File "$($installer.FullName).sha256" -Encoding ascii
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/*.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  macos:
+    name: Test and build macOS universal DMG
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+
+      - name: Download offline speech models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-models" assets/models
+          gh release download offline-models-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip \
+            --dir "$RUNNER_TEMP/offline-models"
+          unzip -oq "$RUNNER_TEMP/offline-models/sherpa-models.zip" \
+            -d assets/models || {
+              status=$?
+              test "$status" -eq 1 || exit "$status"
+            }
+
+      - name: Verify offline speech models
+        run: |
+          for file in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do
+            test -s "assets/models/sherpa/$file" || {
+              echo "Missing assets/models/sherpa/$file" >&2
+              exit 1
+            }
+          done
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run unit and widget tests
+        env:
+          TZ: UTC
+        run: flutter test
+
+      - name: Test native macOS services and desktop UI
+        run: flutter test integration_test/desktop_smoke_test.dart -d macos
+
+      - name: Build macOS release
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          flutter build macos --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+
+      - name: Verify and package macOS app
+        run: |
+          set -euo pipefail
+          app="build/macos/Build/Products/Release/bible_recite.app"
+          test -d "$app"
+          lipo "$app/Contents/MacOS/bible_recite" -verify_arch arm64
+          lipo "$app/Contents/MacOS/bible_recite" -verify_arch x86_64
+          test -s "$app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/models/sherpa/encoder.onnx"
+          codesign --verify --deep --strict "$app"
+          bash tool/desktop/package-macos.sh
+          hdiutil verify dist/*.dmg
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-dmg
+          path: |
+            dist/*.dmg
+            dist/*.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
+
   release:
-    name: Publish validated mobile release
+    if: ${{ !inputs.desktop_only }}
+    name: Publish validated app release
     needs:
       - android
       - ios
+      - windows
+      - macos
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -303,7 +508,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-            --notes "灵修年月选择弹窗为有笔记的日期显示绿色小点；日历为今天的日期显示圆圈，切换选中日期后仍保留今天标记。"
+            --notes "灵修年月选择弹窗为有笔记的日期显示绿色小点；日历为今天的日期显示圆圈，切换选中日期后仍保留今天标记。新增 Windows x64 安装程序和 macOS 通用 DMG 测试包（未经发布证书签名/公证），支持桌面离线背诵和提醒。"
 
       - name: Publish signed update feed
         env:
@@ -344,3 +549,30 @@ jobs:
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m "publish: update feed $version"
           git push --force origin HEAD:update-feed
+
+  desktop-preview-release:
+    name: Publish desktop preview installers
+    if: ${{ inputs.desktop_only }}
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Verify and publish desktop preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c BibleRecite-*.sha256)
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)"
+          tag="desktop-preview-${version}-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" dist/* \
+            --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "BibleRecite ${version} desktop preview" \
+            --notes "Windows x64 安装程序和 macOS 15.5+ 通用 DMG 测试包。包含离线语音识别和桌面提醒。安装包未经发布证书签名/公证，系统可能提示未知发布者。Windows/macOS 单元测试、原生集成测试及打包校验通过后发布；不更新 Android APK 或正式版更新源。"

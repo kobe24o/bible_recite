@@ -111,9 +111,11 @@ final class SherpaStreamingRecognizer implements OfflineSpeechRecognizer {
       // Some Android vendors do not expose input enumeration. The Android
       // config still disables Bluetooth routing and requests the phone mic.
     }
-    final config = AudioInputRouting.phoneRecordConfig(
+    final desktop = Platform.isMacOS || Platform.isWindows;
+    final config = AudioInputRouting.recordConfig(
       devices,
       sampleRate: sampleRate,
+      desktop: desktop,
     );
     final audio = await _recorder.startStream(config);
     _audioSubscription = audio.listen(
@@ -124,7 +126,7 @@ final class SherpaStreamingRecognizer implements OfflineSpeechRecognizer {
     );
     _events.add(
       RecognitionInputChanged(
-        label: config.device?.label ?? '手机麦克风',
+        label: config.device?.label ?? (desktop ? '系统默认麦克风' : '手机麦克风'),
         bluetooth: false,
       ),
     );

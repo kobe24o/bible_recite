@@ -15,4 +15,33 @@ void main() {
       AppRuntimePlatform.android,
     );
   });
+  test('detects macOS and Windows as supported desktop platforms', () {
+    expect(
+      detectRuntimePlatform(
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: true,
+        isWindows: false,
+      ),
+      AppRuntimePlatform.macos,
+    );
+    expect(
+      detectRuntimePlatform(
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: true,
+      ),
+      AppRuntimePlatform.windows,
+    );
+    expect(
+      detectRuntimePlatform(
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+      ),
+      AppRuntimePlatform.other,
+    );
+  });
 }
