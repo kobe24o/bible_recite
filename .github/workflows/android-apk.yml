@@ -322,7 +322,7 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          flutter build windows --release --target-platform windows-x64 `
+          flutter build windows --release `
             --dart-define=SUPABASE_URL="$env:SUPABASE_URL" `
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$env:SUPABASE_PUBLISHABLE_KEY"
 

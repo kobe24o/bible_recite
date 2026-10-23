@@ -39,7 +39,7 @@ Windows 需要 Visual Studio 的 Desktop development with C++ 工作负载、Win
 ```powershell
 flutter test
 flutter test integration_test/desktop_smoke_test.dart -d windows
-flutter build windows --release --target-platform windows-x64
+flutter build windows --release
 # 安装程序参数和调用示例见 GitHub workflow 的 Package and verify Windows installer 步骤。
 ```
 
