@@ -47,13 +47,19 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
     setState(() => _displayedMonth = DateTime(month.year, month.month));
   }
 
-  Future<void> _chooseMonth(DateTime month) async {
-    final picked = await showDatePicker(
+  Future<void> _chooseMonth(
+    DateTime month,
+    DateTime selectedDate,
+    Set<DateTime> writtenDates,
+  ) async {
+    final picked = await showDialog<DateTime>(
       context: context,
-      initialDate: month,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100, 12, 31),
-      helpText: '选择年月日',
+      builder: (context) => _NotesDatePickerDialog(
+        month: month,
+        selectedDate: selectedDate,
+        today: _calendarDay(ref.read(devotionTodayProvider)),
+        writtenDates: writtenDates,
+      ),
     );
     if (picked == null || !mounted) return;
     final date = _calendarDay(picked);
@@ -125,13 +131,15 @@ class _DevotionNotesScreenState extends ConsumerState<DevotionNotesScreen> {
             children: [
               _NotesMonthCalendar(
                 month: month,
+                today: _calendarDay(fallback),
                 writtenDates: notesByDate.keys.toSet(),
                 selectedDate: selectedDate,
                 onPrevious: () =>
                     _changeMonth(DateTime(month.year, month.month - 1)),
                 onNext: () =>
                     _changeMonth(DateTime(month.year, month.month + 1)),
-                onChooseMonth: () => _chooseMonth(month),
+                onChooseMonth: () =>
+                    _chooseMonth(month, selectedDate, notesByDate.keys.toSet()),
                 onSelect: (date) => setState(() => _selectedDate = date),
               ),
               const SizedBox(height: 20),
@@ -199,9 +207,99 @@ class _DevotionNotesData {
   final DevotionManifest? manifest;
 }
 
+class _NotesDatePickerDialog extends StatefulWidget {
+  const _NotesDatePickerDialog({
+    required this.month,
+    required this.selectedDate,
+    required this.today,
+    required this.writtenDates,
+  });
+
+  final DateTime month;
+  final DateTime selectedDate;
+  final DateTime today;
+  final Set<DateTime> writtenDates;
+
+  @override
+  State<_NotesDatePickerDialog> createState() => _NotesDatePickerDialogState();
+}
+
+class _NotesDatePickerDialogState extends State<_NotesDatePickerDialog> {
+  late DateTime _month = widget.month;
+  late DateTime _selectedDate = widget.selectedDate;
+  bool _choosingYear = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('选择年月日', style: Theme.of(context).textTheme.titleLarge),
+                if (_choosingYear)
+                  SizedBox(
+                    height: 300,
+                    child: YearPicker(
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100, 12, 31),
+                      currentDate: widget.today,
+                      selectedDate: _month,
+                      onChanged: (date) => setState(() {
+                        _month = DateTime(date.year, _month.month);
+                        _choosingYear = false;
+                      }),
+                    ),
+                  )
+                else
+                  _NotesMonthCalendar(
+                    month: _month,
+                    today: widget.today,
+                    writtenDates: widget.writtenDates,
+                    selectedDate: _selectedDate,
+                    onPrevious: _month.year == 2000 && _month.month == 1
+                        ? null
+                        : () => setState(() {
+                            _month = DateTime(_month.year, _month.month - 1);
+                          }),
+                    onNext: _month.year == 2100 && _month.month == 12
+                        ? null
+                        : () => setState(() {
+                            _month = DateTime(_month.year, _month.month + 1);
+                          }),
+                    onChooseMonth: () => setState(() => _choosingYear = true),
+                    onSelect: (date) => setState(() => _selectedDate = date),
+                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, _selectedDate),
+                      child: const Text('确定'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NotesMonthCalendar extends StatefulWidget {
   const _NotesMonthCalendar({
     required this.month,
+    required this.today,
     required this.writtenDates,
     required this.selectedDate,
     required this.onPrevious,
@@ -211,10 +309,11 @@ class _NotesMonthCalendar extends StatefulWidget {
   });
 
   final DateTime month;
+  final DateTime today;
   final Set<DateTime> writtenDates;
   final DateTime selectedDate;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
   final VoidCallback onChooseMonth;
   final ValueChanged<DateTime> onSelect;
 
@@ -228,8 +327,8 @@ class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
   DateTime get month => widget.month;
   Set<DateTime> get writtenDates => widget.writtenDates;
   DateTime get selectedDate => widget.selectedDate;
-  VoidCallback get onPrevious => widget.onPrevious;
-  VoidCallback get onNext => widget.onNext;
+  VoidCallback? get onPrevious => widget.onPrevious;
+  VoidCallback? get onNext => widget.onNext;
   VoidCallback get onChooseMonth => widget.onChooseMonth;
   ValueChanged<DateTime> get onSelect => widget.onSelect;
 
@@ -244,8 +343,8 @@ class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
       onHorizontalDragStart: (_) => _swipeDistance = 0,
       onHorizontalDragUpdate: (details) => _swipeDistance += details.delta.dx,
       onHorizontalDragEnd: (_) {
-        if (_swipeDistance <= -48) onNext();
-        if (_swipeDistance >= 48) onPrevious();
+        if (_swipeDistance <= -48) onNext?.call();
+        if (_swipeDistance >= 48) onPrevious?.call();
       },
       child: Card(
         child: Padding(
@@ -288,7 +387,7 @@ class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
                 itemCount: leadingEmptyCells + dayCount,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 7,
-                  childAspectRatio: 0.9,
+                  mainAxisExtent: 48,
                 ),
                 itemBuilder: (context, index) {
                   if (index < leadingEmptyCells) return const SizedBox.shrink();
@@ -315,7 +414,27 @@ class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('${date.day}'),
+                            Container(
+                              key: date == widget.today
+                                  ? Key(
+                                      'devotion-note-today-${devotionDateLabel(date)}',
+                                    )
+                                  : null,
+                              width: 30,
+                              height: 30,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: date == widget.today
+                                    ? Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      )
+                                    : null,
+                              ),
+                              child: Text('${date.day}'),
+                            ),
                             SizedBox(
                               height: 7,
                               child: written
@@ -326,9 +445,7 @@ class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
                                       width: 6,
                                       height: 6,
                                       decoration: BoxDecoration(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Colors.green,
                                         shape: BoxShape.circle,
                                       ),
                                     )

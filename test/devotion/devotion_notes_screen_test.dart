@@ -84,6 +84,71 @@ void main() {
       findsOneWidget,
     );
 
+    final todayCircle = find.byKey(const Key('devotion-note-today-2026-09-20'));
+    expect(todayCircle, findsOneWidget);
+    final decoration =
+        tester.widget<Container>(todayCircle).decoration! as BoxDecoration;
+    expect(decoration.shape, BoxShape.circle);
+    expect(decoration.border, isNotNull);
+
+    await tester.tap(find.byKey(const Key('choose-devotion-note-month')));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(Dialog);
+    expect(dialog, findsOneWidget);
+    for (final date in ['2026-09-17', '2026-09-19']) {
+      final dot = find.descendant(
+        of: dialog,
+        matching: find.byKey(Key('devotion-note-dot-$date')),
+      );
+      expect(dot, findsOneWidget);
+      expect(
+        (tester.widget<Container>(dot).decoration! as BoxDecoration).color,
+        Colors.green,
+      );
+    }
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.byKey(const Key('devotion-note-dot-2026-09-18')),
+      ),
+      findsNothing,
+    );
+    await tester.tap(
+      find.descendant(
+        of: dialog,
+        matching: find.byKey(const Key('next-devotion-note-month')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2026年10月'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: dialog,
+        matching: find.byKey(const Key('choose-devotion-note-month')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2027年'));
+    await tester.pumpAndSettle();
+    expect(find.text('2027年10月'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('2026年9月'), findsOneWidget);
+    expect(find.text('当天还没有灵修笔记'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('choose-devotion-note-month')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: dialog,
+        matching: find.byKey(const Key('devotion-note-day-2026-09-19')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+    expect(find.text('后来写下的领受'), findsOneWidget);
+    expect(todayCircle, findsOneWidget);
+
     await tester.tap(find.byKey(const Key('devotion-note-day-2026-09-17')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(

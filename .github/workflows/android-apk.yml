@@ -303,7 +303,7 @@ jobs:
             --latest \
             --target "$GITHUB_SHA" \
             --title "BibleRecite ${version_name} build ${build_number}" \
-            --notes "灵修日历支持左右滑动切换月份；排行榜支持左右滑动切换指标，并自动完整显示选中的指标名称。"
+            --notes "灵修年月选择弹窗为有笔记的日期显示绿色小点；日历为今天的日期显示圆圈，切换选中日期后仍保留今天标记。"
 
       - name: Publish signed update feed
         env:
@@ -330,7 +330,7 @@ jobs:
             --release-page-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" \
             --download-url "https://ghfast.top/$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
             --fallback-download-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$apk_name" \
-              --release-notes "灵修日历支持左右滑动切换月份；排行榜支持左右滑动切换指标，并自动完整显示选中的指标名称。" \
+              --release-notes "灵修年月选择弹窗为有笔记的日期显示绿色小点；日历为今天的日期显示圆圈，切换选中日期后仍保留今天标记。" \
             --output "$RUNNER_TEMP/latest.json"
           feed_dir="$RUNNER_TEMP/update-feed"
           git worktree add --detach "$feed_dir"
