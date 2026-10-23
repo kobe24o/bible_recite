@@ -199,7 +199,7 @@ class _DevotionNotesData {
   final DevotionManifest? manifest;
 }
 
-class _NotesMonthCalendar extends StatelessWidget {
+class _NotesMonthCalendar extends StatefulWidget {
   const _NotesMonthCalendar({
     required this.month,
     required this.writtenDates,
@@ -219,103 +219,130 @@ class _NotesMonthCalendar extends StatelessWidget {
   final ValueChanged<DateTime> onSelect;
 
   @override
+  State<_NotesMonthCalendar> createState() => _NotesMonthCalendarState();
+}
+
+class _NotesMonthCalendarState extends State<_NotesMonthCalendar> {
+  double _swipeDistance = 0;
+
+  DateTime get month => widget.month;
+  Set<DateTime> get writtenDates => widget.writtenDates;
+  DateTime get selectedDate => widget.selectedDate;
+  VoidCallback get onPrevious => widget.onPrevious;
+  VoidCallback get onNext => widget.onNext;
+  VoidCallback get onChooseMonth => widget.onChooseMonth;
+  ValueChanged<DateTime> get onSelect => widget.onSelect;
+
+  @override
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month);
     final dayCount = DateTime(month.year, month.month + 1, 0).day;
     final leadingEmptyCells = first.weekday % DateTime.daysPerWeek;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  key: const Key('previous-devotion-note-month'),
-                  tooltip: '上个月',
-                  onPressed: onPrevious,
-                  icon: const Icon(Icons.chevron_left_rounded),
-                ),
-                Expanded(
-                  child: TextButton(
-                    key: const Key('choose-devotion-note-month'),
-                    onPressed: onChooseMonth,
-                    child: Text('${month.year}年${month.month}月'),
+    return GestureDetector(
+      key: const Key('devotion-calendar-swipe'),
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) => _swipeDistance = 0,
+      onHorizontalDragUpdate: (details) => _swipeDistance += details.delta.dx,
+      onHorizontalDragEnd: (_) {
+        if (_swipeDistance <= -48) onNext();
+        if (_swipeDistance >= 48) onPrevious();
+      },
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    key: const Key('previous-devotion-note-month'),
+                    tooltip: '上个月',
+                    onPressed: onPrevious,
+                    icon: const Icon(Icons.chevron_left_rounded),
                   ),
-                ),
-                IconButton(
-                  key: const Key('next-devotion-note-month'),
-                  tooltip: '下个月',
-                  onPressed: onNext,
-                  icon: const Icon(Icons.chevron_right_rounded),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                for (final weekday in ['日', '一', '二', '三', '四', '五', '六'])
-                  Expanded(child: Center(child: Text(weekday))),
-              ],
-            ),
-            const SizedBox(height: 6),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: leadingEmptyCells + dayCount,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                childAspectRatio: 0.9,
-              ),
-              itemBuilder: (context, index) {
-                if (index < leadingEmptyCells) return const SizedBox.shrink();
-                final date = DateTime(
-                  month.year,
-                  month.month,
-                  index - leadingEmptyCells + 1,
-                );
-                final written = writtenDates.contains(date);
-                final selected = selectedDate == date;
-                return Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Material(
-                    color: selected
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      key: Key('devotion-note-day-${devotionDateLabel(date)}'),
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () => onSelect(date),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('${date.day}'),
-                          SizedBox(
-                            height: 7,
-                            child: written
-                                ? Container(
-                                    key: Key(
-                                      'devotion-note-dot-${devotionDateLabel(date)}',
-                                    ),
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ],
-                      ),
+                  Expanded(
+                    child: TextButton(
+                      key: const Key('choose-devotion-note-month'),
+                      onPressed: onChooseMonth,
+                      child: Text('${month.year}年${month.month}月'),
                     ),
                   ),
-                );
-              },
-            ),
-          ],
+                  IconButton(
+                    key: const Key('next-devotion-note-month'),
+                    tooltip: '下个月',
+                    onPressed: onNext,
+                    icon: const Icon(Icons.chevron_right_rounded),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  for (final weekday in ['日', '一', '二', '三', '四', '五', '六'])
+                    Expanded(child: Center(child: Text(weekday))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: leadingEmptyCells + dayCount,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  childAspectRatio: 0.9,
+                ),
+                itemBuilder: (context, index) {
+                  if (index < leadingEmptyCells) return const SizedBox.shrink();
+                  final date = DateTime(
+                    month.year,
+                    month.month,
+                    index - leadingEmptyCells + 1,
+                  );
+                  final written = writtenDates.contains(date);
+                  final selected = selectedDate == date;
+                  return Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Material(
+                      color: selected
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        key: Key(
+                          'devotion-note-day-${devotionDateLabel(date)}',
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => onSelect(date),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('${date.day}'),
+                            SizedBox(
+                              height: 7,
+                              child: written
+                                  ? Container(
+                                      key: Key(
+                                        'devotion-note-dot-${devotionDateLabel(date)}',
+                                      ),
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

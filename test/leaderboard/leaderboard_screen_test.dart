@@ -66,6 +66,55 @@ void main() {
   }
 
   testWidgets(
+    'swiping metrics reveals the complete selected chip on narrow screens',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pump(tester);
+      Future<void> swipe(double dx) async {
+        await tester.dragFrom(const Offset(195, 450), Offset(dx, 0));
+        await tester.pumpAndSettle();
+      }
+
+      await swipe(160);
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.byKey(const Key('leaderboard-metric-totalSessions')),
+            )
+            .selected,
+        isTrue,
+      );
+      for (final metric in LeaderboardMetric.values.skip(1)) {
+        await swipe(-160);
+        final chip = find.byKey(Key('leaderboard-metric-${metric.name}'));
+        expect(tester.widget<ChoiceChip>(chip).selected, isTrue);
+        final rect = tester.getRect(chip);
+        expect(rect.left, greaterThanOrEqualTo(16));
+        expect(rect.right, lessThanOrEqualTo(374));
+      }
+      await swipe(-160);
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.byKey(const Key('leaderboard-metric-quizAccuracy')),
+            )
+            .selected,
+        isTrue,
+      );
+      await swipe(160);
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.byKey(const Key('leaderboard-metric-badgeAwards')),
+            )
+            .selected,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
     'eleven ordered metrics distinguish recitation and devotion streaks',
     (tester) async {
       await pump(tester);

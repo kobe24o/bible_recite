@@ -38,6 +38,41 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   LeaderboardViewData? _data;
   bool _loading = true;
   int _request = 0;
+  double _swipeDistance = 0;
+  final _metricKeys = {
+    for (final metric in LeaderboardMetric.values) metric: GlobalKey(),
+  };
+
+  void _selectMetric(LeaderboardMetric metric) {
+    if (metric == _metric) return;
+    setState(() {
+      _metric = metric;
+      _data = null;
+      _loading = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final chipContext = _metricKeys[metric]?.currentContext;
+      if (chipContext != null) {
+        Scrollable.ensureVisible(
+          chipContext,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+    _load();
+  }
+
+  void _finishSwipe(DragEndDetails details) {
+    if (_swipeDistance.abs() < 48) return;
+    final index = _metric.index + (_swipeDistance < 0 ? 1 : -1);
+    if (index >= 0 && index < LeaderboardMetric.values.length) {
+      _selectMetric(LeaderboardMetric.values[index]);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -100,76 +135,83 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _load(force: true),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              key: const Key('leaderboard-local-summary'),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: GestureDetector(
+        key: const Key('leaderboard-swipe'),
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => _swipeDistance = 0,
+        onHorizontalDragUpdate: (details) => _swipeDistance += details.delta.dx,
+        onHorizontalDragEnd: _finishSwipe,
+        child: RefreshIndicator(
+          onRefresh: () => _load(force: true),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                key: const Key('leaderboard-local-summary'),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('我的本地数据'),
+                      Text(
+                        local == null
+                            ? '读取中…'
+                            : '${_metric.label}：${_metric == LeaderboardMetric.quizAccuracy && !local.hasQuizAccuracy ? '暂无答题记录，暂不参与排名' : _metric.format(local.valueFor(_metric))}',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    const Text('我的本地数据'),
-                    Text(
-                      local == null
-                          ? '读取中…'
-                          : '${_metric.label}：${_metric == LeaderboardMetric.quizAccuracy && !local.hasQuizAccuracy ? '暂无答题记录，暂不参与排名' : _metric.format(local.valueFor(_metric))}',
-                    ),
+                    for (final metric in LeaderboardMetric.values)
+                      Padding(
+                        key: _metricKeys[metric],
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          key: Key('leaderboard-metric-${metric.name}'),
+                          label: Text(metric.label),
+                          selected: metric == _metric,
+                          onSelected: (selected) {
+                            if (!selected) return;
+                            _selectMetric(metric);
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final metric in LeaderboardMetric.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        key: Key('leaderboard-metric-${metric.name}'),
-                        label: Text(metric.label),
-                        selected: metric == _metric,
-                        onSelected: (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _metric = metric;
-                            _data = null;
-                            _loading = true;
-                          });
-                          _load();
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (_loading) const LinearProgressIndicator(),
-            if (data?.isUnavailable == true)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('暂无法更新，仍可查看本地数据与缓存榜单'),
-              ),
-            if (data != null &&
-                (data.entries.isNotEmpty || !data.isUnavailable))
-              Text(
-                '${data.isFromCache ? '缓存 · ' : ''}更新时间：${data.updatedAt.toLocal().toString().split('.').first}',
-              ),
-            if (!_loading && (data?.entries.isEmpty ?? true))
-              const Padding(padding: EdgeInsets.all(24), child: Text('暂无排名数据')),
-            for (final entry in data?.entries ?? <LeaderboardEntry>[])
-              _row(entry),
-            if (caller != null &&
-                !(data?.entries.any((row) => row.isCurrentUser) ?? false)) ...[
-              const Divider(),
-              const Text('我的排名'),
-              _row(caller),
+              if (_loading) const LinearProgressIndicator(),
+              if (data?.isUnavailable == true)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('暂无法更新，仍可查看本地数据与缓存榜单'),
+                ),
+              if (data != null &&
+                  (data.entries.isNotEmpty || !data.isUnavailable))
+                Text(
+                  '${data.isFromCache ? '缓存 · ' : ''}更新时间：${data.updatedAt.toLocal().toString().split('.').first}',
+                ),
+              if (!_loading && (data?.entries.isEmpty ?? true))
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('暂无排名数据'),
+                ),
+              for (final entry in data?.entries ?? <LeaderboardEntry>[])
+                _row(entry),
+              if (caller != null &&
+                  !(data?.entries.any((row) => row.isCurrentUser) ??
+                      false)) ...[
+                const Divider(),
+                const Text('我的排名'),
+                _row(caller),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

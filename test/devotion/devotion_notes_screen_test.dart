@@ -46,6 +46,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final calendar = find.byKey(const Key('devotion-calendar-swipe'));
+    await tester.drag(calendar, const Offset(-180, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('2026年10月'), findsOneWidget);
+    await tester.drag(calendar, const Offset(180, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('2026年9月'), findsOneWidget);
+    for (var i = 0; i < 4; i++) {
+      await tester.drag(calendar, const Offset(-180, 0));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('2027年1月'), findsOneWidget);
+    for (var i = 0; i < 4; i++) {
+      await tester.drag(calendar, const Offset(180, 0));
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('灵修笔记'), findsOneWidget);
     expect(find.text('2026年9月'), findsOneWidget);
     expect(find.text('当天还没有灵修笔记'), findsOneWidget);
