@@ -109,7 +109,8 @@ jobs:
           identity="$(security find-identity -v -p basic | awk -F '\"' '/3rd Party Mac Developer Installer/ { print $2; exit }')"
           test -n "$identity" || { echo 'Missing Mac Installer Distribution identity' >&2; exit 1; }
           mkdir -p dist
-          productbuild --component "$app" /Applications --sign "$identity" dist/BibleRecite-Mac-App-Store.pkg
+          productbuild --component "$app" /Applications "$RUNNER_TEMP/BibleRecite-unsigned.pkg"
+          productsign --sign "$identity" "$RUNNER_TEMP/BibleRecite-unsigned.pkg" dist/BibleRecite-Mac-App-Store.pkg
           pkgutil --check-signature dist/BibleRecite-Mac-App-Store.pkg
       - name: Validate and upload macOS build to App Store Connect
         run: app-store-connect publish --path dist/BibleRecite-Mac-App-Store.pkg --enable-package-validation
