@@ -3,6 +3,11 @@ name: App releases
 on:
   workflow_dispatch:
     inputs:
+      apple_destination:
+        description: Apple signing/store operation (none runs normal app release)
+        type: choice
+        options: [none, inspect, app-store, direct, all]
+        default: none
       desktop_only:
         description: Build and publish only desktop preview installers
         type: boolean
@@ -20,7 +25,7 @@ concurrency:
 
 jobs:
   android:
-    if: ${{ !inputs.desktop_only }}
+    if: ${{ !inputs.desktop_only && (!inputs.apple_destination || inputs.apple_destination == 'none') }}
     name: Build signed Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -158,7 +163,7 @@ jobs:
           retention-days: 30
 
   ios:
-    if: ${{ !inputs.desktop_only }}
+    if: ${{ !inputs.desktop_only && (!inputs.apple_destination || inputs.apple_destination == 'none') }}
     name: Build iOS simulator app
     runs-on: macos-latest
     timeout-minutes: 45
@@ -260,6 +265,7 @@ jobs:
           retention-days: 30
 
   windows:
+    if: ${{ !inputs.apple_destination || inputs.apple_destination == 'none' }}
     name: Test and build Windows x64 installer
     runs-on: windows-latest
     timeout-minutes: 60
@@ -370,6 +376,7 @@ jobs:
           retention-days: 30
 
   macos:
+    if: ${{ !inputs.apple_destination || inputs.apple_destination == 'none' }}
     name: Test and build macOS universal DMG
     runs-on: macos-latest
     timeout-minutes: 60
@@ -455,7 +462,7 @@ jobs:
           retention-days: 30
 
   release:
-    if: ${{ !inputs.desktop_only }}
+    if: ${{ !inputs.desktop_only && (!inputs.apple_destination || inputs.apple_destination == 'none') }}
     name: Publish validated app release
     needs:
       - android
@@ -552,7 +559,7 @@ jobs:
 
   desktop-preview-release:
     name: Publish desktop preview installers
-    if: ${{ inputs.desktop_only }}
+    if: ${{ inputs.desktop_only && (!inputs.apple_destination || inputs.apple_destination == 'none') }}
     needs: [windows, macos]
     runs-on: ubuntu-latest
     permissions:
@@ -576,3 +583,11 @@ jobs:
             --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "BibleRecite ${version} desktop preview" \
             --notes "Windows x64 安装程序和 macOS 15.5+ 通用 DMG 测试包。包含离线语音识别和桌面提醒。安装包未经发布证书签名/公证，系统可能提示未知发布者。Windows/macOS 单元测试、原生集成测试及打包校验通过后发布；不更新 Android APK 或正式版更新源。"
+
+  apple-distribution:
+    name: Apple signing and App Store distribution
+    if: ${{ inputs.apple_destination && inputs.apple_destination != 'none' }}
+    uses: ./.github/workflows/apple-distribution.yml
+    with:
+      destination: ${{ inputs.apple_destination }}
+    secrets: inherit
