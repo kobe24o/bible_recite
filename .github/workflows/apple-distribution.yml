@@ -98,7 +98,7 @@ jobs:
         run: flutter test
       - name: Build Mac App Store app
         run: |
-          flutter build macos --release --build-number="$((1000 + GITHUB_RUN_NUMBER))" \
+          flutter build macos --release --build-number="$(date -u +%Y%m%d%H%M%S)" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - name: Package signed Mac App Store installer
