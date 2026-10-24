@@ -1,0 +1,30 @@
+name: Apple desktop distribution
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: Apple distribution operation
+        type: choice
+        options: [inspect, app-store, direct, all]
+        default: inspect
+permissions:
+  contents: read
+concurrency:
+  group: apple-desktop-distribution
+  cancel-in-progress: false
+jobs:
+  inspect:
+    name: Check Apple distribution access
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      MACOS_BUNDLE_ID: app.biblerecite
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test Apple release automation
+        run: node --test scripts/apple-distribution.test.mjs
+      - name: Inspect existing app, platforms and certificates
+        run: node scripts/apple-distribution.mjs inspect
