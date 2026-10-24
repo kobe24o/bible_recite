@@ -1,3 +1,4 @@
+import '../support/native_reminder_override.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -915,6 +916,7 @@ Future<void> _pumpScreen(
         testFlightLinkProvider.overrideWithValue(testFlightLink),
         if (backupFiles != null)
           userDataBackupFilesProvider.overrideWithValue(backupFiles),
+        if (reminderScheduler == null) noNativeReminders,
         if (reminderScheduler != null)
           dailyTaskReminderSchedulerProvider.overrideWithValue(
             reminderScheduler,

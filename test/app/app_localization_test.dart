@@ -1,3 +1,4 @@
+import '../support/native_reminder_override.dart';
 import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/features/plans/application/plan_providers.dart';
 import 'package:bible_recite/src/features/plans/data/sqlite_plan_repository.dart';
@@ -18,6 +19,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
         ],
         child: const BibleReciteApp(locale: Locale('en')),

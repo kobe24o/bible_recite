@@ -24,6 +24,16 @@ InitializationSettings dailyTaskReminderInitializationSettings(
       requestSoundPermission: true,
     ),
   ),
+  AppRuntimePlatform.macos => const InitializationSettings(
+    macOS: DarwinInitializationSettings(),
+  ),
+  AppRuntimePlatform.windows => const InitializationSettings(
+    windows: WindowsInitializationSettings(
+      appName: '背诵助手',
+      appUserModelId: 'app.biblerecite.desktop',
+      guid: '8b5d6f41-29e8-48a5-98fc-370518db714d',
+    ),
+  ),
   AppRuntimePlatform.other => const InitializationSettings(),
 };
 
@@ -158,6 +168,17 @@ final class DailyTaskReminderScheduler {
         presentBanner: true,
         presentList: true,
       ),
+    ),
+    AppRuntimePlatform.macos => const NotificationDetails(
+      macOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        presentBanner: true,
+        presentList: true,
+      ),
+    ),
+    AppRuntimePlatform.windows => const NotificationDetails(
+      windows: WindowsNotificationDetails(),
     ),
     AppRuntimePlatform.other => const NotificationDetails(),
   };

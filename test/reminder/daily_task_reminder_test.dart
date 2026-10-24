@@ -20,6 +20,21 @@ void main() {
     expect(settings.android, isNull);
   });
 
+  test('initializes native notifications on macOS and Windows', () {
+    final mac = dailyTaskReminderInitializationSettings(
+      AppRuntimePlatform.macos,
+    );
+    expect(mac.macOS, isA<DarwinInitializationSettings>());
+    expect(mac.iOS, isNull);
+    expect(mac.macOS!.requestAlertPermission, isTrue);
+    final windows = dailyTaskReminderInitializationSettings(
+      AppRuntimePlatform.windows,
+    );
+    expect(windows.windows!.appName, '背诵助手');
+    expect(windows.windows!.appUserModelId, 'app.biblerecite.desktop');
+    expect(windows.windows!.guid, matches(RegExp(r'^[0-9a-f-]{36}$')));
+  });
+
   test('moves the next reminder to tomorrow after today window has ended', () {
     final settings = DailyTaskReminderSettings(
       enabled: true,

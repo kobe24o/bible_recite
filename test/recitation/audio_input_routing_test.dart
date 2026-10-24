@@ -31,4 +31,31 @@ void main() {
     expect(config.androidConfig.audioSource, AndroidAudioSource.mic);
     expect(config.androidConfig.audioManagerMode, AudioManagerMode.modeNormal);
   });
+  test(
+    'desktop recording follows the system input instead of forcing the built-in mic',
+    () {
+      const builtIn = InputDevice(
+        id: '1',
+        label: 'Built in',
+        type: InputDeviceType.builtIn,
+      );
+      final config = AudioInputRouting.recordConfig(
+        [builtIn],
+        sampleRate: 16000,
+        desktop: true,
+      );
+      expect(config.device, isNull);
+      expect(config.encoder, AudioEncoder.pcm16bits);
+      expect(config.numChannels, 1);
+      expect(config.sampleRate, 16000);
+      expect(
+        AudioInputRouting.recordConfig(
+          [builtIn],
+          sampleRate: 16000,
+          desktop: false,
+        ).device,
+        builtIn,
+      );
+    },
+  );
 }

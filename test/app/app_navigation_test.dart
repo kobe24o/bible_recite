@@ -1,3 +1,4 @@
+import '../support/native_reminder_override.dart';
 import 'package:bible_recite/src/app/app.dart';
 import 'package:bible_recite/src/features/devotion/data/devotion_feed_client.dart';
 import 'package:bible_recite/src/app/router.dart';
@@ -22,6 +23,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
           devotionFeedClientProvider.overrideWithValue(
             DevotionFeedClient(loader: (_) async => complete2026Json),
@@ -48,7 +50,12 @@ void main() {
     tester,
   ) async {
     appRouter.go('/');
-    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [noNativeReminders],
+        child: const BibleReciteApp(),
+      ),
+    );
     await tester.pump();
 
     UpdateAvailableNotification.openUpdatePage();
@@ -61,7 +68,12 @@ void main() {
     tester,
   ) async {
     appRouter.go('/');
-    await tester.pumpWidget(const ProviderScope(child: BibleReciteApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [noNativeReminders],
+        child: const BibleReciteApp(),
+      ),
+    );
     await tester.pump();
 
     UpdateAvailableNotification.handlePayload('open-update-about');
@@ -100,6 +112,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
         ],
         child: const BibleReciteApp(locale: Locale('zh')),
@@ -132,6 +145,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
           devotionClockProvider.overrideWithValue(() => DateTime(2026, 1, 1)),
         ],
@@ -168,6 +182,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            noNativeReminders,
             planRepositoryProvider.overrideWith((ref) async => repository),
             devotionClockProvider.overrideWithValue(() => now),
           ],
@@ -226,6 +241,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
           aboutUpdateActionsProvider.overrideWith((ref) => actions),
         ],
@@ -257,6 +273,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noNativeReminders,
           planRepositoryProvider.overrideWith((ref) async => repository),
           aboutUpdateActionsProvider.overrideWith((ref) => actions),
           bundledCloudPlanManifestProvider.overrideWith(

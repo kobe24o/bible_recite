@@ -1,6 +1,14 @@
 # 背诵助手
 
-一款离线圣经背诵应用。目前支持 Android；iOS 版本正在准备 TestFlight 测试；Windows、macOS 和鸿蒙暂未支持。经文浏览、计划、背诵检查、统计和艾宾浩斯复习均保存在本机；语音识别使用本地 sherpa-onnx 模型。
+一款离线圣经背诵应用。目前支持 Android；iOS 版本正在准备 TestFlight 测试；Windows 和 macOS 正在提供桌面测试版；Linux、鸿蒙暂未支持。经文浏览、计划、背诵检查、统计和艾宾浩斯复习均保存在本机；语音识别使用本地 sherpa-onnx 模型。
+
+## 桌面测试版
+
+Windows 10 2004+/11 x64、macOS 15.5+（Apple Silicon / Intel）安装包在 GitHub Releases 下载。Windows 为 `*-x64-setup.exe`，macOS 为 `*-universal.dmg`。桌面版本共用经文、计划、离线背诵评分、统计及 JSON 备份；录音跟随系统默认输入设备。
+
+每次主分支发布前，GitHub 的 Windows 和 macOS runner 分别执行单元/组件测试、原生模型与数据库启动测试、Release 构建和打包验证，全部通过后才发布。手动运行 `App releases` 并勾选 `desktop_only` 可只发布桌面预览版，不改动 Android 的正式更新源。
+
+桌面包目前未配置 Windows 发布证书、Apple Developer ID 签名及公证，系统可能显示未知发布者提示。安装与构建详情见 [桌面版说明](docs/DESKTOP.md)。
 
 ## 更新日志
 
