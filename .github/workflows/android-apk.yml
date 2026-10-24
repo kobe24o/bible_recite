@@ -6,7 +6,7 @@ on:
       apple_destination:
         description: Apple signing/store operation (none runs normal app release)
         type: choice
-        options: [none, inspect, app-store, direct, all]
+        options: [none, inspect, app-store]
         default: none
       desktop_only:
         description: Build and publish only desktop preview installers
@@ -590,4 +590,7 @@ jobs:
     uses: ./.github/workflows/apple-distribution.yml
     with:
       destination: ${{ inputs.apple_destination }}
-    secrets: inherit
+    secrets:
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      MACOS_CERTIFICATE_PRIVATE_KEY: ${{ secrets.MACOS_CERTIFICATE_PRIVATE_KEY }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
