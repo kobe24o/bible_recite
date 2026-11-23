@@ -590,6 +590,12 @@ class _RecitationPracticeScreenState
             ],
             FilledButton.icon(
               key: const Key('record-button'),
+              style: _recording
+                  ? FilledButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    )
+                  : null,
               onPressed: _preparing ? null : _toggleRecording,
               icon: _preparing
                   ? const SizedBox.square(

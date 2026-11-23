@@ -11,9 +11,11 @@ import 'leaderboard_sync_controller_test.dart'
     show MemoryGateway, snapshot, identity;
 
 class ScreenGateway extends MemoryGateway {
+  LeaderboardViewData? response;
   @override
   Future<LeaderboardViewData> loadLeaderboard(LeaderboardMetric metric) async {
     if (this.fail) throw StateError('offline');
+    if (response != null) return response!;
     return LeaderboardViewData(
       metric: metric,
       entries: const [
@@ -64,6 +66,40 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('shows own global rank and ellipses between ranking windows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 6000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final entries = [
+      for (var rank = 1; rank <= 100; rank++)
+        LeaderboardEntry(
+          rank: rank,
+          displayName: 'User $rank',
+          value: 100 - rank,
+          isCurrentUser: rank == 50,
+        ),
+    ];
+    gateway.response = LeaderboardViewData(
+      metric: LeaderboardMetric.totalSessions,
+      entries: entries,
+      currentUser: entries[49],
+      updatedAt: DateTime(2026),
+    );
+    await pump(tester);
+    expect(find.text('User 1'), findsOneWidget);
+    expect(find.text('User 10'), findsOneWidget);
+    expect(find.text('User 40'), findsOneWidget);
+    expect(find.text('User 50'), findsOneWidget);
+    expect(find.text('User 60'), findsOneWidget);
+    expect(find.text('User 91'), findsOneWidget);
+    expect(find.text('User 100'), findsOneWidget);
+    expect(find.text('User 11'), findsNothing);
+    expect(find.text('User 61'), findsNothing);
+    expect(find.text('…'), findsNWidgets(2));
+    expect(find.byKey(const Key('leaderboard-current-user')), findsOneWidget);
+  });
 
   testWidgets(
     'swiping metrics reveals the complete selected chip on narrow screens',

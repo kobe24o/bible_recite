@@ -109,11 +109,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 widget.view == StatisticsScreenView.learningData;
             final achievements =
                 widget.view == StatisticsScreenView.achievements;
-            final earnedBadgeCount = data.achievements.fold<int>(
-              0,
-              (sum, item) =>
-                  sum + (item.unlockedAt == null ? 0 : item.awardCount),
-            );
+            final earnedBadgeCount = data.totalBadgeAwards;
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -585,6 +581,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         ...await repository.listAchievementProgress(),
         ...coverage.progress,
       ],
+      totalBadgeAwards: await repository.getLeaderboardAwardCount(),
       settings: await repository.getEbbinghausSettings(),
       ignoreFinalNasal:
           await repository.getSetting('ignore_final_nasal', 'true') == 'true',
@@ -1627,6 +1624,7 @@ final class _StatisticsData {
     required this.devotion,
     required this.results,
     required this.achievements,
+    required this.totalBadgeAwards,
     required this.settings,
     required this.ignoreFinalNasal,
     required this.showRecitationScripture,
@@ -1638,6 +1636,7 @@ final class _StatisticsData {
   final DevotionStats devotion;
   final List<RecitationResult> results;
   final List<AchievementProgress> achievements;
+  final int totalBadgeAwards;
   final EbbinghausSettings settings;
   final bool ignoreFinalNasal;
   final bool showRecitationScripture;

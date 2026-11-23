@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/leaderboard_providers.dart';
 import '../domain/leaderboard_models.dart';
+import '../domain/leaderboard_visible_entries.dart';
 
 extension LeaderboardMetricLabel on LeaderboardMetric {
   String get label => switch (this) {
@@ -122,7 +123,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   Widget build(BuildContext context) {
     final local = ref.watch(leaderboardSnapshotProvider).asData?.value;
     final data = _data;
-    final caller = data?.currentUser;
+    final entries = visibleLeaderboardEntries(
+      data?.entries ?? const [],
+      currentUser: data?.currentUser,
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('排行榜'),
@@ -201,14 +205,21 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                   padding: EdgeInsets.all(24),
                   child: Text('暂无排名数据'),
                 ),
-              for (final entry in data?.entries ?? <LeaderboardEntry>[])
-                _row(entry),
-              if (caller != null &&
-                  !(data?.entries.any((row) => row.isCurrentUser) ??
-                      false)) ...[
-                const Divider(),
-                const Text('我的排名'),
-                _row(caller),
+              for (var index = 0; index < entries.length; index++) ...[
+                if (index > 0 &&
+                    entries[index].rank > entries[index - 1].rank + 1)
+                  Padding(
+                    key: Key(
+                      'leaderboard-gap-${entries[index - 1].rank}-${entries[index].rank}',
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Semantics(
+                      label:
+                          '省略第 ${entries[index - 1].rank + 1} 至 ${entries[index].rank - 1} 名',
+                      child: const Center(child: Text('…')),
+                    ),
+                  ),
+                _row(entries[index]),
               ],
             ],
           ),

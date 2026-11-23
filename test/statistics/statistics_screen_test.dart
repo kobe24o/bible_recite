@@ -738,6 +738,25 @@ void main() {
     },
   );
 
+  testWidgets('badge total includes awards from plans no longer loaded', (
+    tester,
+  ) async {
+    final database = sqlite3.openInMemory();
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+    database.execute(
+      'INSERT INTO achievement_unlock (achievement_id, unlocked_at, source, award_count) VALUES (?, ?, ?, ?)',
+      ['preset_plan_removed', '2026-10-01T00:00:00Z', 'backfill', 3],
+    );
+    await _pumpScreen(
+      tester,
+      repository,
+      view: StatisticsScreenView.achievements,
+    );
+    expect(find.text('您已获得 3 枚勋章'), findsOneWidget);
+    expect(await repository.getLeaderboardAwardCount(), 3);
+  });
+
   testWidgets('shows the total number of earned badges at the top', (
     tester,
   ) async {

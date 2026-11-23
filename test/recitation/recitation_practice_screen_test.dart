@@ -60,6 +60,11 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('record-button')));
     await tester.tap(find.byKey(const Key('record-button')));
     await tester.pumpAndSettle();
+    final recordingButton = tester.widget<FilledButton>(
+      find.byKey(const Key('record-button')),
+    );
+    expect(recordingButton.style?.backgroundColor?.resolve({}), Colors.red);
+    expect(recordingButton.style?.foregroundColor?.resolve({}), Colors.white);
     recognizer.emit(const RecognitionPartial('神爱'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('alignment-output')), findsOneWidget);
