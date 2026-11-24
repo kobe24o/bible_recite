@@ -20,7 +20,8 @@ export async function submitStoreBuild(api, { appId, platform, version, buildNum
       item.attributes.processingState === 'VALID' && !item.attributes.expired;
   });
   if (!build) throw new Error('No valid ' + platform + ' ' + version + ' build ' + buildNumber + '; refusing to attach a different platform or version');
-  await api('/v1/builds/' + build.id, { method: 'PATCH', body: { data: { type: 'builds', id: build.id, attributes: { usesNonExemptEncryption: false } } } });
+  if (build.attributes.usesNonExemptEncryption === true) throw new Error('Build declares non-exempt encryption; review its export compliance before submission');
+  if (build.attributes.usesNonExemptEncryption !== false) await api('/v1/builds/' + build.id, { method: 'PATCH', body: { data: { type: 'builds', id: build.id, attributes: { usesNonExemptEncryption: false } } } });
   await api('/v1/appStoreVersions/' + target.id, { method: 'PATCH', body: { data: {
     type: 'appStoreVersions', id: target.id, attributes: { releaseType: 'AFTER_APPROVAL' },
     relationships: { build: { data: { type: 'builds', id: build.id } } },
