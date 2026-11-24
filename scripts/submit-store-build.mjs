@@ -31,7 +31,7 @@ export async function submitStoreBuild(api, { appId, platform, version, buildNum
   }));
   let submission;
   for (const candidate of submissions.data.filter(s => s.attributes.state === 'READY_FOR_REVIEW')) {
-    const items = await api('/v1/reviewSubmissions/' + candidate.id + '/items?limit=200');
+    const items = await api('/v1/reviewSubmissions/' + candidate.id + '/items?limit=200&include=appStoreVersion');
     if (items.data.length === 0 || items.data.every(item => item.relationships?.appStoreVersion?.data?.id === target.id)) {
       submission = candidate;
       if (items.data.length) submission.hasVersion = true;

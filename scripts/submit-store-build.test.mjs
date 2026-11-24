@@ -57,3 +57,21 @@ test('does not override a non-exempt-encryption declaration', async () => {
   await assert.rejects(submitStoreBuild(api, { appId: 'app', platform: 'IOS', version: '1.2.52', buildNumber: '123' }), /non-exempt encryption/);
   assert.equal(f.calls.some(c => c.options?.method), false);
 });
+
+test('reuses an existing prepared submission with its explicitly included version', async () => {
+  const f = fixture('IOS');
+  const api = async (path, options) => {
+    if (path.includes('/reviewSubmissions?')) return { data: [{ id: 'prepared', attributes: { state: 'READY_FOR_REVIEW' } }] };
+    if (path.startsWith('/v1/reviewSubmissions/prepared/items')) {
+      assert.equal(new URLSearchParams(path.split('?')[1]).get('include'), 'appStoreVersion');
+      return { data: [{ id: 'item', relationships: { appStoreVersion: { data: { id: 'ios-version' } } } }] };
+    }
+    if (path === '/v1/reviewSubmissions/prepared') {
+      assert.equal(options.body.data.attributes.submitted, true);
+      return { data: { attributes: { state: 'WAITING_FOR_REVIEW' } } };
+    }
+    return f.api(path, options);
+  };
+  await submitStoreBuild(api, { appId: 'app', platform: 'IOS', version: '1.2.52', buildNumber: '123' });
+  assert.equal(f.calls.some(c => c.path === '/v1/reviewSubmissions' || c.path === '/v1/reviewSubmissionItems'), false);
+});
