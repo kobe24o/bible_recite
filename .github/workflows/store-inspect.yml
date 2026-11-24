@@ -1,0 +1,17 @@
+name: Inspect Apple store distribution
+on:
+  push:
+    branches: [release/macos-store-0.1.52]
+    paths: [.github/workflows/store-inspect.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    uses: ./.github/workflows/apple-distribution.yml
+    with:
+      destination: inspect
+    secrets:
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      MACOS_CERTIFICATE_PRIVATE_KEY: ${{ secrets.MACOS_CERTIFICATE_PRIVATE_KEY }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
