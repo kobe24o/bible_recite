@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(22);
+select extensions.plan(24);
 insert into auth.users (id) values ('00000000-0000-0000-0000-000000000001'), ('00000000-0000-0000-0000-000000000002');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
@@ -8,7 +8,9 @@ select extensions.lives_ok($$select public.submit_leaderboard_snapshot('A','ABCD
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',9,10,5,2,600,5,10,8)$$, '22023', 'cumulative values cannot decrease', 'total sessions cannot regress');
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,9,5,2,600,5,10,8)$$, '22023', 'cumulative values cannot decrease', 'unique verses cannot regress');
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,4,2,600,5,10,8)$$, '22023', 'cumulative values cannot decrease', 'max streak cannot regress');
-select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,1,600,5,10,8)$$, '22023', 'cumulative values cannot decrease', 'badge awards cannot regress');
+select extensions.lives_ok($select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,1,600,5,10,8)$, 'displayed badge count can be corrected downward');
+select extensions.is((select badge_awards::integer from public.leaderboard_score where user_id='00000000-0000-0000-0000-000000000001'),1,'corrected displayed badge total is stored');
+select extensions.throws_ok($select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,-1,600,5,10,8)$, '22023', 'invalid snapshot', 'negative badge totals remain forbidden');
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,2,599,5,10,8)$$, '22023', 'cumulative values cannot decrease', 'duration cannot regress');
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,2,600,5,10,8,4,120,3,2)$$, '22023', 'cumulative values cannot decrease', 'devotion days cannot regress');
 select extensions.throws_ok($$select public.submit_leaderboard_snapshot('A','ABCDEF',10,10,5,2,600,5,10,8,5,119,3,2)$$, '22023', 'cumulative values cannot decrease', 'devotion duration cannot regress');

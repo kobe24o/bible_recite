@@ -1,0 +1,40 @@
+name: Verify app UI regressions
+on:
+  pull_request:
+  push:
+    branches: [fix/visible-badges-recording-pinned-metrics]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ui-regression-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+      - name: Load bundled offline models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/models" assets/models
+          gh release download offline-models-v1 --repo "$GITHUB_REPOSITORY" \
+            --pattern sherpa-models.zip --dir "$RUNNER_TEMP/models"
+          unzip -oq "$RUNNER_TEMP/models/sherpa-models.zip" -d assets/models || {
+            status=$?
+            test "$status" -eq 1 || exit "$status"
+          }
+      - run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run complete test suite
+        env:
+          TZ: UTC
+        run: flutter test

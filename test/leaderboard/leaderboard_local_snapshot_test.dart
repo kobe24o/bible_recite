@@ -6,7 +6,36 @@ import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test(
-    'snapshot includes repeated external awards even when definition is no longer loaded',
+    'snapshot includes repeated awards in the displayed collection',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final displayed = await repository.syncExternalAchievements(
+        [
+          const AchievementDefinition(
+            id: 'visible',
+            title: 'test',
+            description: '',
+            metric: AchievementMetric.sessions,
+            target: 1,
+            repeatable: true,
+          ),
+        ],
+        {'visible'},
+        {'visible': 3},
+      );
+      expect(
+        (await loadLeaderboardSnapshot(
+          repository,
+          displayedAchievements: displayed,
+        )).badgeAwards,
+        3,
+      );
+    },
+  );
+
+  test(
+    'snapshot excludes awards whose definition is no longer displayed',
     () async {
       final repository = SqlitePlanRepository(sqlite3.openInMemory());
       addTearDown(repository.close);
@@ -24,7 +53,7 @@ void main() {
         {'external'},
         {'external': 3},
       );
-      expect((await loadLeaderboardSnapshot(repository)).badgeAwards, 3);
+      expect((await loadLeaderboardSnapshot(repository)).badgeAwards, 0);
       expect(
         await repository.getSetting('leaderboard_dirty_since', ''),
         isNotEmpty,

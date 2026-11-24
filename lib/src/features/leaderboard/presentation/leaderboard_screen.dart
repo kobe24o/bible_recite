@@ -145,30 +145,13 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         onHorizontalDragStart: (_) => _swipeDistance = 0,
         onHorizontalDragUpdate: (details) => _swipeDistance += details.delta.dx,
         onHorizontalDragEnd: _finishSwipe,
-        child: RefreshIndicator(
-          onRefresh: () => _load(force: true),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                key: const Key('leaderboard-local-summary'),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('我的本地数据'),
-                      Text(
-                        local == null
-                            ? '读取中…'
-                            : '${_metric.label}：${_metric == LeaderboardMetric.quizAccuracy && !local.hasQuizAccuracy ? '暂无答题记录，暂不参与排名' : _metric.format(local.valueFor(_metric))}',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              key: const Key('leaderboard-metric-header'),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
@@ -189,40 +172,68 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                   ],
                 ),
               ),
-              if (_loading) const LinearProgressIndicator(),
-              if (data?.isUnavailable == true)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('暂无法更新，仍可查看本地数据与缓存榜单'),
-                ),
-              if (data != null &&
-                  (data.entries.isNotEmpty || !data.isUnavailable))
-                Text(
-                  '${data.isFromCache ? '缓存 · ' : ''}更新时间：${data.updatedAt.toLocal().toString().split('.').first}',
-                ),
-              if (!_loading && (data?.entries.isEmpty ?? true))
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('暂无排名数据'),
-                ),
-              for (var index = 0; index < entries.length; index++) ...[
-                if (index > 0 &&
-                    entries[index].rank > entries[index - 1].rank + 1)
-                  Padding(
-                    key: Key(
-                      'leaderboard-gap-${entries[index - 1].rank}-${entries[index].rank}',
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _load(force: true),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Card(
+                      key: const Key('leaderboard-local-summary'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('我的本地数据'),
+                            Text(
+                              local == null
+                                  ? '读取中…'
+                                  : '${_metric.label}：${_metric == LeaderboardMetric.quizAccuracy && !local.hasQuizAccuracy ? '暂无答题记录，暂不参与排名' : _metric.format(local.valueFor(_metric))}',
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Semantics(
-                      label:
-                          '省略第 ${entries[index - 1].rank + 1} 至 ${entries[index].rank - 1} 名',
-                      child: const Center(child: Text('…')),
-                    ),
-                  ),
-                _row(entries[index]),
-              ],
-            ],
-          ),
+                    if (_loading) const LinearProgressIndicator(),
+                    if (data?.isUnavailable == true)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text('暂无法更新，仍可查看本地数据与缓存榜单'),
+                      ),
+                    if (data != null &&
+                        (data.entries.isNotEmpty || !data.isUnavailable))
+                      Text(
+                        '${data.isFromCache ? '缓存 · ' : ''}更新时间：${data.updatedAt.toLocal().toString().split('.').first}',
+                      ),
+                    if (!_loading && (data?.entries.isEmpty ?? true))
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('暂无排名数据'),
+                      ),
+                    for (var index = 0; index < entries.length; index++) ...[
+                      if (index > 0 &&
+                          entries[index].rank > entries[index - 1].rank + 1)
+                        Padding(
+                          key: Key(
+                            'leaderboard-gap-${entries[index - 1].rank}-${entries[index].rank}',
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Semantics(
+                            label:
+                                '省略第 ${entries[index - 1].rank + 1} 至 ${entries[index].rank - 1} 名',
+                            child: const Center(child: Text('…')),
+                          ),
+                        ),
+                      _row(entries[index]),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

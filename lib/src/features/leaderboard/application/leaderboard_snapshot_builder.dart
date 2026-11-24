@@ -10,18 +10,12 @@ LeaderboardSnapshot buildLeaderboardSnapshot({
   required DevotionStats devotion,
   required QuizSummary quiz,
   required Iterable<AchievementProgress> achievements,
-  int? totalBadgeAwards,
 }) {
-  final badgeAwards = achievements.fold<int>(
-    0,
-    (sum, achievement) =>
-        sum + (achievement.unlockedAt == null ? 0 : achievement.awardCount),
-  );
   return LeaderboardSnapshot(
     totalSessions: recitation.totalSessions,
     uniqueVerses: recitation.totalVerses,
     maxDayStreak: learning.maxDayStreak,
-    badgeAwards: totalBadgeAwards ?? badgeAwards,
+    badgeAwards: countDisplayedBadgeAwards(achievements),
     totalRecitationSeconds: recitation.totalSeconds,
     currentDayStreak: learning.currentDayStreak,
     devotionDays: devotion.devotionDays,
