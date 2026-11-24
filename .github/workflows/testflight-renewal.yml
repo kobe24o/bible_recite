@@ -20,7 +20,7 @@ concurrency:
 jobs:
   upload:
     name: Build and upload iOS beta
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       IOS_BUNDLE_ID: app.biblerecite
@@ -38,6 +38,21 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v5
+
+      - name: Verify required iOS SDK
+        id: apple-sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "Building with iOS SDK $sdk"
+          major="${sdk%%.*}"
+          if [[ ! "$major" =~ ^[0-9]+$ ]] || (( major < 27 )); then
+            echo "App Store uploads require iOS SDK 27 or newer." >&2
+            exit 1
+          fi
+          echo "ios_sdk=$sdk" >> "$GITHUB_OUTPUT"
 
       - name: Test TestFlight processing handoff
         run: node --test scripts/assign-testflight-group.test.mjs
@@ -172,6 +187,14 @@ jobs:
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
             --export-options-plist=ios/ExportOptions.plist
           test -s build/ios/ipa/bible_recite.ipa
+          built_sdk="$(plutil -extract DTSDKName raw -o - build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Info.plist)"
+          echo "Archived app SDK: $built_sdk"
+          if [[ "$built_sdk" =~ ^iphoneos([0-9]+)\. ]] && (( BASH_REMATCH[1] >= 27 )); then
+            echo "Archived app satisfies the iOS 27 SDK requirement."
+          else
+            echo "Archived app uses an unsupported SDK: $built_sdk" >&2
+            exit 1
+          fi
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
       - name: Upload build to TestFlight
@@ -197,6 +220,7 @@ jobs:
         run: |
           {
             echo "## TestFlight build uploaded"
+            echo "- iOS SDK: \`${{ steps.apple-sdk.outputs.ios_sdk }}\`"
             echo
             echo "- App: \`$IOS_BUNDLE_ID\`"
             echo "- Build number: \`${{ steps.build.outputs.build_number }}\`"
