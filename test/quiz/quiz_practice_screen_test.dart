@@ -19,27 +19,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  testWidgets('both answer recording controls turn red only while recording', (tester) async {
+  testWidgets('both answer recording controls turn red only while recording', (
+    tester,
+  ) async {
     final recognizer = FakeQuizRecognizer();
     final repository = SqlitePlanRepository(sqlite3.openInMemory());
     addTearDown(repository.close);
     await tester.pumpWidget(_app(repository, recognizer));
     await tester.pumpAndSettle();
     final button = find.byKey(const Key('quiz-record-button'));
-    expect(tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}), isNot(Colors.red));
+    expect(
+      tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}),
+      isNot(Colors.red),
+    );
     await tester.tap(button);
     await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}), Colors.red);
-    expect(tester.widget<FilledButton>(button).style?.foregroundColor?.resolve({}), Colors.white);
+    expect(
+      tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}),
+      Colors.red,
+    );
+    expect(
+      tester.widget<FilledButton>(button).style?.foregroundColor?.resolve({}),
+      Colors.white,
+    );
     final inline = find.byKey(const Key('quiz-mic-inline'));
-    final icon = tester.widget<Icon>(find.descendant(of: inline, matching: find.byType(Icon)));
+    final icon = tester.widget<Icon>(
+      find.descendant(of: inline, matching: find.byType(Icon)),
+    );
     expect(icon.color, Colors.red);
     expect(icon.icon, Icons.stop_rounded);
     recognizer.emit(const RecognitionFinal('世人'));
     await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}), isNot(Colors.red));
+    expect(
+      tester.widget<FilledButton>(button).style?.backgroundColor?.resolve({}),
+      isNot(Colors.red),
+    );
   });
 
   testWidgets('records one word and shows the correct original word', (

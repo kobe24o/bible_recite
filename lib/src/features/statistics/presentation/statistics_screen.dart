@@ -567,7 +567,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   }
 
   Future<_StatisticsData> _load(SqlitePlanRepository repository) async {
-    final achievements = await ref.read(displayedAchievementsLoaderProvider)(repository);
+    final achievements = await ref.read(displayedAchievementsLoaderProvider)(
+      repository,
+    );
     return _StatisticsData(
       summary: await repository.getRecitationSummary(),
       quiz: await repository.getQuizSummary(),

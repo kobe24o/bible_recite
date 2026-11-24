@@ -5,15 +5,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  test('snapshot includes repeated awards in the displayed collection', () async {
-    final repository = SqlitePlanRepository(sqlite3.openInMemory());
-    addTearDown(repository.close);
-    final displayed = await repository.syncExternalAchievements([
-      const AchievementDefinition(id: 'visible', title: 'test', description: '',
-        metric: AchievementMetric.sessions, target: 1, repeatable: true),
-    ], {'visible'}, {'visible': 3});
-    expect((await loadLeaderboardSnapshot(repository, displayedAchievements: displayed)).badgeAwards, 3);
-  });
+  test(
+    'snapshot includes repeated awards in the displayed collection',
+    () async {
+      final repository = SqlitePlanRepository(sqlite3.openInMemory());
+      addTearDown(repository.close);
+      final displayed = await repository.syncExternalAchievements(
+        [
+          const AchievementDefinition(
+            id: 'visible',
+            title: 'test',
+            description: '',
+            metric: AchievementMetric.sessions,
+            target: 1,
+            repeatable: true,
+          ),
+        ],
+        {'visible'},
+        {'visible': 3},
+      );
+      expect(
+        (await loadLeaderboardSnapshot(
+          repository,
+          displayedAchievements: displayed,
+        )).badgeAwards,
+        3,
+      );
+    },
+  );
 
   test(
     'snapshot excludes awards whose definition is no longer displayed',

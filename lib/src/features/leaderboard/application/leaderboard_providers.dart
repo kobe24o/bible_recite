@@ -43,7 +43,8 @@ Future<LeaderboardSnapshot> loadLeaderboardSnapshot(
     learning: await repository.getLearningStats(),
     devotion: await repository.getDevotionStats(DateTime.now()),
     quiz: await repository.getQuizSummary(),
-    achievements: displayedAchievements ?? await repository.listAchievementProgress(),
+    achievements:
+        displayedAchievements ?? await repository.listAchievementProgress(),
   );
 }
 
@@ -56,7 +57,9 @@ final leaderboardSnapshotProvider = FutureProvider<LeaderboardSnapshot>((
   final repository = await ref.watch(planRepositoryProvider.future);
   return loadLeaderboardSnapshot(
     repository,
-    displayedAchievements: await ref.read(displayedAchievementsLoaderProvider)(repository),
+    displayedAchievements: await ref.read(displayedAchievementsLoaderProvider)(
+      repository,
+    ),
   );
 });
 final leaderboardSyncControllerProvider =
@@ -74,7 +77,9 @@ final leaderboardSyncControllerProvider =
         gateway: gateway,
         snapshotLoader: () async => loadLeaderboardSnapshot(
           repository,
-          displayedAchievements: await ref.read(displayedAchievementsLoaderProvider)(repository),
+          displayedAchievements: await ref.read(
+            displayedAchievementsLoaderProvider,
+          )(repository),
         ),
         identityLoader: () async {
           final fallback = await source.loadOrCreate(repository);

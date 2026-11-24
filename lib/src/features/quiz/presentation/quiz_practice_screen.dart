@@ -561,13 +561,17 @@ class _QuestionPage extends ConsumerWidget {
                       ),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: recording ? Colors.red : Theme.of(context).primaryColor,
+                          color: recording
+                              ? Colors.red
+                              : Theme.of(context).primaryColor,
                         ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         recording ? Icons.stop_rounded : Icons.mic_rounded,
-                        color: recording ? Colors.red : Theme.of(context).primaryColor,
+                        color: recording
+                            ? Colors.red
+                            : Theme.of(context).primaryColor,
                         semanticLabel: recording
                             ? (chinese ? '结束答题录音' : 'Stop recording')
                             : (chinese ? '开始答题录音' : 'Record answer'),
