@@ -1,0 +1,23 @@
+name: Submit iOS 1.2.52 App Review
+on:
+  push:
+    branches: [release/apple-1.2.52]
+    paths: [.github/workflows/ios-store-1.2.52.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      STORE_PLATFORM: IOS
+      STORE_VERSION: 1.2.52
+      STORE_BUILD_NUMBER: '20261124140419'
+    steps:
+      - uses: actions/checkout@v5
+      - run: node --test scripts/apple-distribution.test.mjs scripts/submit-store-build.test.mjs
+      - run: node scripts/submit-store-build.mjs

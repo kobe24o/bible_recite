@@ -1,5 +1,10 @@
-name: Apple desktop distribution
+name: macOS TestFlight and App Store
 on:
+  push:
+    branches: [master]
+    paths: ['pubspec.yaml', 'lib/**', 'macos/**', 'scripts/*apple*', 'scripts/*testflight*', '.github/workflows/apple-distribution.yml']
+  schedule:
+    - cron: '37 2 1 */2 *'
   workflow_call:
     secrets:
       APPSTORE_API_PRIVATE_KEY:
@@ -12,13 +17,20 @@ on:
       destination:
         required: true
         type: string
+      submit_review:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       destination:
         description: Apple distribution operation
         type: choice
         options: [inspect, app-store]
-        default: inspect
+        default: app-store
+      submit_review:
+        description: Submit the macOS version to App Review and release after approval
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -37,20 +49,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Test Apple release automation
-        run: node --test scripts/apple-distribution.test.mjs
+        run: node --test scripts/apple-distribution.test.mjs scripts/assign-testflight-group.test.mjs scripts/submit-store-build.test.mjs
       - name: Inspect existing app, platforms and certificates
         run: node scripts/apple-distribution.mjs inspect
 
   app-store:
     name: Sign and upload macOS App Store build
-    if: ${{ inputs.destination == 'app-store' }}
+    if: ${{ inputs.destination != 'inspect' }}
     needs: inspect
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
       MACOS_BUNDLE_ID: app.biblerecite
+      IOS_BUNDLE_ID: app.biblerecite
+      TESTFLIGHT_GROUP_NAME: outer
+      AUTO_SUBMIT_BETA_REVIEW: 'true'
       APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
       APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
       APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
@@ -97,16 +112,22 @@ jobs:
           TZ: UTC
         run: flutter test
       - name: Build Mac App Store app
+        id: build
         run: |
-          flutter build macos --release --build-number="$(date -u +%Y%m%d%H%M%S)" \
+          set -euo pipefail
+          build_number="$(date -u +%Y%m%d%H%M%S)"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
+          flutter build macos --release --build-number="$build_number" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
       - name: Package signed Mac App Store installer
         run: |
           set -euo pipefail
           app="build/macos/Build/Products/Release/bible_recite.app"
           codesign --verify --deep --strict "$app"
-          identity="$(security find-identity -v -p basic | awk -F '\"' '/3rd Party Mac Developer Installer/ { print $2; exit }')"
+          identity="$(security find-identity -v -p basic | awk -F '\"' '/3rd Party Mac Developer Installer|Mac Installer Distribution/ { print $2; exit }')"
           test -n "$identity" || { echo 'Missing Mac Installer Distribution identity' >&2; exit 1; }
           mkdir -p dist
           productbuild --component "$app" /Applications "$RUNNER_TEMP/BibleRecite-unsigned.pkg"
@@ -114,6 +135,18 @@ jobs:
           pkgutil --check-signature dist/BibleRecite-Mac-App-Store.pkg
       - name: Validate and upload macOS build to App Store Connect
         run: app-store-connect publish --path dist/BibleRecite-Mac-App-Store.pkg --enable-package-validation
+      - name: Add macOS build to external TestFlight and submit beta review
+        env:
+          TESTFLIGHT_BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+        run: node scripts/assign-testflight-group.mjs
+      - name: Submit macOS version to App Review
+        if: ${{ inputs.submit_review }}
+        env:
+          STORE_PLATFORM: MAC_OS
+          STORE_BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+        run: |
+          export STORE_VERSION="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          node scripts/submit-store-build.mjs
       - name: Save signed App Store package
         uses: actions/upload-artifact@v6
         with:

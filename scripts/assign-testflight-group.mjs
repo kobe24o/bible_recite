@@ -178,7 +178,9 @@ async function main() {
     const builds = await api(buildsPath);
     return builds.data[0];
   });
-  await recordExemptEncryptionUse(api, build.id);
+  if (build.attributes.usesNonExemptEncryption !== false) {
+    await recordExemptEncryptionUse(api, build.id);
+  }
 
   const currentBuilds = await api(`/v1/betaGroups/${targetGroup.id}/relationships/builds?limit=200`);
   if (currentBuilds.data.some((candidate) => candidate.id === build.id)) {

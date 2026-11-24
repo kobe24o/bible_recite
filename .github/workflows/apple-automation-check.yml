@@ -1,0 +1,15 @@
+name: Check Apple release automation
+on:
+  push:
+    branches: [release/apple-1.2.52]
+    paths: ['scripts/submit-store-build.test.mjs', '.github/workflows/apple-automation-check.yml']
+  pull_request:
+    paths: ['scripts/*store*', 'scripts/*apple*', 'scripts/*testflight*', '.github/workflows/apple-distribution.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: node --test scripts/apple-distribution.test.mjs scripts/assign-testflight-group.test.mjs scripts/submit-store-build.test.mjs
