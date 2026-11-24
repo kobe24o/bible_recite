@@ -1,0 +1,30 @@
+name: Distribute Apple 1.2.52
+on:
+  push:
+    branches: [release/apple-1.2.52]
+    paths: [.github/workflows/apple-1.2.52.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    uses: ./.github/workflows/apple-distribution.yml
+    with:
+      destination: app-store
+      submit_review: true
+    secrets: inherit
+  ios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      STORE_PLATFORM: IOS
+      STORE_VERSION: 1.2.52
+      STORE_BUILD_NUMBER: '20261124140419'
+    steps:
+      - uses: actions/checkout@v5
+      - run: node --test scripts/apple-distribution.test.mjs scripts/submit-store-build.test.mjs
+      - name: Submit uploaded iOS 1.2.52 to App Review
+        run: node scripts/submit-store-build.mjs
