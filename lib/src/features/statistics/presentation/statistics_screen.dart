@@ -18,9 +18,7 @@ import '../../backup/presentation/user_data_backup_card.dart';
 import '../../distribution/application/distribution_providers.dart';
 import '../../devotion/domain/devotion_activity.dart';
 import '../../plans/application/plan_providers.dart';
-import '../../plans/application/preset_plan_sync.dart';
 import '../../plans/data/sqlite_plan_repository.dart';
-import '../../plans/domain/plan_models.dart';
 import '../../quiz/domain/quiz_result.dart';
 import '../../quiz/domain/quiz_bank_exchange.dart';
 import '../../quiz/domain/quiz_scope.dart';
@@ -41,7 +39,7 @@ import '../../scripture/application/scripture_providers.dart';
 import '../../scripture/domain/scripture_models.dart';
 import '../../scripture/domain/scripture_repository.dart';
 import '../domain/achievement.dart';
-import '../application/achievement_coverage.dart';
+import '../application/displayed_achievements.dart';
 import '../domain/recitation_result.dart';
 import 'achievement_unlock_dialog.dart';
 
@@ -569,19 +567,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   }
 
   Future<_StatisticsData> _load(SqlitePlanRepository repository) async {
-    await repository.evaluateAndUnlockAchievements(source: 'backfill');
-    final coverage = await _coverageAchievements(repository);
+    final achievements = await ref.read(displayedAchievementsLoaderProvider)(repository);
     return _StatisticsData(
       summary: await repository.getRecitationSummary(),
       quiz: await repository.getQuizSummary(),
       learning: await repository.getLearningStats(),
       devotion: await repository.getDevotionStats(DateTime.now()),
       results: await repository.listRecitationResults(),
-      achievements: [
-        ...await repository.listAchievementProgress(),
-        ...coverage.progress,
-      ],
-      totalBadgeAwards: await repository.getLeaderboardAwardCount(),
+      achievements: achievements,
+      totalBadgeAwards: countDisplayedBadgeAwards(achievements),
       settings: await repository.getEbbinghausSettings(),
       ignoreFinalNasal:
           await repository.getSetting('ignore_final_nasal', 'true') == 'true',
@@ -589,99 +583,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           await repository.getSetting('show_recitation_scripture', 'true') ==
           'true',
       firstOpenedAt: await repository.getFirstOpenedAt(),
-    );
-  }
-
-  Future<ExternalAchievementSyncResult> _coverageAchievements(
-    SqlitePlanRepository repository,
-  ) async {
-    final metrics = await repository.listRecitationVerseMetrics();
-    final definitions = <AchievementDefinition>[];
-    final satisfied = <String>{};
-    final currentValues = <String, double>{};
-    final plans = await repository.listPlans();
-    final presetPlans = plans
-        .where(
-          (plan) =>
-              plan.sourceKind == PlanSourceKind.preset ||
-              plan.sourceKind == PlanSourceKind.cloud,
-        )
-        .toList();
-    final savedByExternalId = {
-      for (final plan in presetPlans)
-        if (plan.externalId != null) plan.externalId!: plan,
-    };
-    final cachedManifest = await loadCachedPresetPlanManifest(repository);
-    final manifest =
-        cachedManifest ??
-        (await ref.read(bundledCloudPlanManifestProvider.future))!;
-    final knownExternalIds = <String>{};
-    for (final template in manifest.plans) {
-      final id = 'preset_plan_${template.id}';
-      final saved = savedByExternalId[template.id];
-      definitions.add(
-        AchievementDefinition(
-          id: id,
-          title: '${template.title}勋章',
-          description: '完成预置计划《${template.title}》',
-          metric: AchievementMetric.sessions,
-          target: 1,
-          repeatable: true,
-        ),
-      );
-      if (saved != null &&
-          saved.totalTasks > 0 &&
-          saved.completedTasks == saved.totalTasks) {
-        satisfied.add(id);
-      }
-      currentValues[id] = saved == null || saved.totalTasks == 0
-          ? 0
-          : saved.completedTasks / saved.totalTasks;
-      knownExternalIds.add(template.id);
-    }
-    for (final plan in presetPlans.where(
-      (plan) =>
-          plan.externalId == null ||
-          !knownExternalIds.contains(plan.externalId),
-    )) {
-      final id = 'preset_plan_${plan.externalId ?? plan.id}';
-      definitions.add(
-        AchievementDefinition(
-          id: id,
-          title: '${plan.title}勋章',
-          description: '完成预置计划《${plan.title}》',
-          metric: AchievementMetric.sessions,
-          target: 1,
-          repeatable: true,
-        ),
-      );
-      if (plan.totalTasks > 0 && plan.completedTasks == plan.totalTasks) {
-        satisfied.add(id);
-      }
-      currentValues[id] = plan.totalTasks == 0
-          ? 0
-          : plan.completedTasks / plan.totalTasks;
-    }
-    if (metrics.isEmpty) {
-      return repository.syncExternalAchievementsWithUnlocks(
-        definitions,
-        satisfied,
-        currentValues,
-      );
-    }
-    final presetCoverage = await repository.syncExternalAchievementsWithUnlocks(
-      definitions,
-      satisfied,
-      currentValues,
-    );
-    final scriptureCoverage = await syncScriptureCoverageAchievements(
-      repository: repository,
-      scripture: await ref.read(scriptureRepositoryProvider.future),
-      names: ref.read(bookNameCatalogProvider),
-    );
-    return ExternalAchievementSyncResult(
-      progress: [...presetCoverage.progress, ...scriptureCoverage.progress],
-      unlocked: [...presetCoverage.unlocked, ...scriptureCoverage.unlocked],
     );
   }
 

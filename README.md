@@ -12,6 +12,12 @@ Windows 10 2004+/11 x64、macOS 15.5+（Apple Silicon / Intel）安装包在 Git
 
 ## 更新日志
 
+### 2026-11-24 · 1.2.52 build 116
+
+- 答题底部录音按钮及题目内麦克风在录音时同步变红，结束后恢复。
+- 勋章数量以页面实际展示为准，包含重复获得次数；排行榜使用同一份展示列表，不额外计入未展示的历史记录。
+- 排行榜指标栏固定在顶部，下方榜单独立滚动，保留左右切换指标和下拉刷新。
+
 ### 2026-11-23 · 1.2.51 build 115
 
 - 所有参与者按完整数据排名，显示前 10 名、本人前后各 10 人及最后 10 名，其余区间显示省略号。
@@ -544,7 +550,7 @@ SQLite 是数据源。保存背诵、答题、计划完成、获得勋章和修�
 ### 接入 Supabase（由项目管理员执行，仓库不含任何密钥）
 
 1. 准备项目 URL 和 **publishable key**（或兼容的 anon key）。在 Auth 设置中启用 **Anonymous Sign-ins**，检查匿名登录速率限制。若启用 CAPTCHA，需先为客户端接入验证码 token 获取；当前无验证码 token 的匿名请求将失败并保留离线体验。
-2. 审阅 `supabase/migrations/*_leaderboard.sql` 后，通过管理员自己的受控部署流程应用 migration。公开 Data API 只暴露 `public`，**不要暴露 `leaderboard_private`**。两张表仅允许认证用户读取自己的行，禁止直接写入；公开 RPC 包装器调用私有、验证 `auth.uid()` 的权限函数，保护累计值不可回退。
+2. 审阅 `supabase/migrations/*_leaderboard.sql` 后，通过管理员自己的受控部署流程应用 migration。公开 Data API 只暴露 `public`，**不要暴露 `leaderboard_private`**。两张表仅允许认证用户读取自己的行，禁止直接写入；公开 RPC 包装器调用私有、验证 `auth.uid()` 的权限函数，保护背诵次数、时长等累计值不可回退；勋章总数按展示列表计算，允许纠正减少。
 3. 在管理员的测试环境运行 `supabase test db --local` 和 `supabase db advisors`，检查 RLS、RPC 权限与安全建议；无需给移动端 service-role/secret key。
 4. 在自己的构建环境注入配置（下面只列占位符）：
 

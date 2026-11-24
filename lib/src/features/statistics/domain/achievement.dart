@@ -255,3 +255,8 @@ final class ExternalAchievementSyncResult {
   final List<AchievementProgress> progress;
   final List<AchievementUnlock> unlocked;
 }
+
+/// Count awards of the badge types actually displayed, including repeats.
+int countDisplayedBadgeAwards(Iterable<AchievementProgress> achievements) =>
+    achievements.fold(0, (sum, badge) =>
+        sum + (badge.unlockedAt == null ? 0 : badge.awardCount));

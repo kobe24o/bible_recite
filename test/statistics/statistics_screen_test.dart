@@ -6,6 +6,7 @@ import 'package:bible_recite/l10n/generated/app_localizations.dart';
 import 'package:bible_recite/src/features/backup/domain/user_data_backup.dart';
 import 'package:bible_recite/src/features/backup/presentation/user_data_backup_card.dart';
 import 'package:bible_recite/src/features/devotion/application/devotion_providers.dart';
+import 'package:bible_recite/src/features/leaderboard/application/leaderboard_providers.dart';
 import 'package:bible_recite/src/features/quiz/application/quiz_providers.dart';
 import 'package:bible_recite/src/app/runtime_platform.dart';
 import 'package:bible_recite/src/features/distribution/application/distribution_providers.dart';
@@ -738,7 +739,7 @@ void main() {
     },
   );
 
-  testWidgets('badge total includes awards from plans no longer loaded', (
+  testWidgets('badge total excludes records not displayed in the badge gallery', (
     tester,
   ) async {
     final database = sqlite3.openInMemory();
@@ -753,8 +754,25 @@ void main() {
       repository,
       view: StatisticsScreenView.achievements,
     );
-    expect(find.text('您已获得 3 枚勋章'), findsOneWidget);
-    expect(await repository.getLeaderboardAwardCount(), 3);
+    expect(find.text('您已获得 0 枚勋章'), findsOneWidget);
+    final container = ProviderScope.containerOf(tester.element(find.byType(StatisticsScreen)));
+    expect((await container.read(leaderboardSnapshotProvider.future)).badgeAwards, 0);
+  });
+
+  testWidgets('gallery and leaderboard count 35 visible awards rather than 36 historical awards', (tester) async {
+    final database = sqlite3.openInMemory();
+    final repository = SqlitePlanRepository(database);
+    addTearDown(repository.close);
+    for (final row in [('preset_plan_classic-passages', 35), ('preset_plan_removed', 1)]) {
+      database.execute(
+        'INSERT INTO achievement_unlock (achievement_id, unlocked_at, source, award_count) VALUES (?, ?, ?, ?)',
+        [row.$1, '2026-10-01T00:00:00Z', 'backfill', row.$2],
+      );
+    }
+    await _pumpScreen(tester, repository, view: StatisticsScreenView.achievements);
+    expect(find.text('您已获得 35 枚勋章'), findsOneWidget);
+    final container = ProviderScope.containerOf(tester.element(find.byType(StatisticsScreen)));
+    expect((await container.read(leaderboardSnapshotProvider.future)).badgeAwards, 35);
   });
 
   testWidgets('shows the total number of earned badges at the top', (

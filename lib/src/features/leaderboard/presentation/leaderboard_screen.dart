@@ -145,7 +145,36 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         onHorizontalDragStart: (_) => _swipeDistance = 0,
         onHorizontalDragUpdate: (details) => _swipeDistance += details.delta.dx,
         onHorizontalDragEnd: _finishSwipe,
-        child: RefreshIndicator(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              key: const Key('leaderboard-metric-header'),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final metric in LeaderboardMetric.values)
+                      Padding(
+                        key: _metricKeys[metric],
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          key: Key('leaderboard-metric-${metric.name}'),
+                          label: Text(metric.label),
+                          selected: metric == _metric,
+                          onSelected: (selected) {
+                            if (!selected) return;
+                            _selectMetric(metric);
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
           onRefresh: () => _load(force: true),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -166,27 +195,6 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                       ),
                     ],
                   ),
-                ),
-              ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final metric in LeaderboardMetric.values)
-                      Padding(
-                        key: _metricKeys[metric],
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          key: Key('leaderboard-metric-${metric.name}'),
-                          label: Text(metric.label),
-                          selected: metric == _metric,
-                          onSelected: (selected) {
-                            if (!selected) return;
-                            _selectMetric(metric);
-                          },
-                        ),
-                      ),
-                  ],
                 ),
               ),
               if (_loading) const LinearProgressIndicator(),
@@ -223,6 +231,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
               ],
             ],
           ),
+        ),
+            ),
+          ],
         ),
       ),
     );

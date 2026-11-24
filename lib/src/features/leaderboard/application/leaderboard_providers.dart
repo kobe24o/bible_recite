@@ -9,6 +9,8 @@ import '../data/offline_leaderboard_gateway.dart';
 import '../data/supabase_leaderboard_gateway.dart';
 import '../domain/leaderboard_gateway.dart';
 import '../domain/leaderboard_models.dart';
+import '../../statistics/domain/achievement.dart';
+import '../../statistics/application/displayed_achievements.dart';
 import 'leaderboard_snapshot_builder.dart';
 import 'leaderboard_sync_controller.dart';
 
@@ -30,16 +32,18 @@ final leaderboardGatewayProvider = FutureProvider<LeaderboardGateway>((
   );
 });
 Future<LeaderboardSnapshot> loadLeaderboardSnapshot(
-  SqlitePlanRepository repository,
-) async {
-  await repository.evaluateAndUnlockAchievements(source: 'backfill');
+  SqlitePlanRepository repository, {
+  Iterable<AchievementProgress>? displayedAchievements,
+}) async {
+  if (displayedAchievements == null) {
+    await repository.evaluateAndUnlockAchievements(source: 'backfill');
+  }
   return buildLeaderboardSnapshot(
     recitation: await repository.getRecitationSummary(),
     learning: await repository.getLearningStats(),
     devotion: await repository.getDevotionStats(DateTime.now()),
     quiz: await repository.getQuizSummary(),
-    achievements: await repository.listAchievementProgress(),
-    totalBadgeAwards: await repository.getLeaderboardAwardCount(),
+    achievements: displayedAchievements ?? await repository.listAchievementProgress(),
   );
 }
 
@@ -49,8 +53,10 @@ final leaderboardSnapshotProvider = FutureProvider<LeaderboardSnapshot>((
   ref.watch(recitationDataRevisionProvider);
   ref.watch(presetPlanRevisionProvider);
   ref.watch(devotionRevisionProvider);
+  final repository = await ref.watch(planRepositoryProvider.future);
   return loadLeaderboardSnapshot(
-    await ref.watch(planRepositoryProvider.future),
+    repository,
+    displayedAchievements: await ref.read(displayedAchievementsLoaderProvider)(repository),
   );
 });
 final leaderboardSyncControllerProvider =
@@ -66,7 +72,10 @@ final leaderboardSyncControllerProvider =
       return LeaderboardSyncController(
         repository: repository,
         gateway: gateway,
-        snapshotLoader: () => loadLeaderboardSnapshot(repository),
+        snapshotLoader: () async => loadLeaderboardSnapshot(
+          repository,
+          displayedAchievements: await ref.read(displayedAchievementsLoaderProvider)(repository),
+        ),
         identityLoader: () async {
           final fallback = await source.loadOrCreate(repository);
           final name = (await repository.getSetting('profile_name', '')).trim();

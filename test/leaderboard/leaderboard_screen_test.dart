@@ -67,6 +67,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('metric header stays visible while the board scrolls', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final entries = [for (var rank = 1; rank <= 1000; rank++)
+      LeaderboardEntry(rank: rank, displayName: 'User $rank', value: 1000-rank, isCurrentUser: rank==500)];
+    gateway.response = LeaderboardViewData(metric: LeaderboardMetric.totalSessions,
+      entries: entries, currentUser: entries[499], updatedAt: DateTime(2026));
+    await pump(tester);
+    final selected = find.byKey(const Key('leaderboard-metric-totalSessions'));
+    final before = tester.getRect(selected);
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    expect(selected.hitTestable(), findsOneWidget);
+    expect(tester.getRect(selected), before);
+    await tester.tap(find.byKey(const Key('leaderboard-metric-uniqueVerses')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('leaderboard-metric-uniqueVerses')).hitTestable(), findsOneWidget);
+  });
+
   testWidgets('shows own global rank and ellipses between ranking windows', (
     tester,
   ) async {
