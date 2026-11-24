@@ -36,3 +36,24 @@ test('does not resubmit a version already in review', async () => {
   await submitStoreBuild(api, { appId: 'app', platform: 'IOS', version: '1.2.52', buildNumber: '123' });
   assert.equal(calls, 1);
 });
+
+test('preserves an existing exempt-encryption declaration', async () => {
+  const f = fixture('IOS');
+  const api = async (path, options) => {
+    const result = await f.api(path, options);
+    if (path.startsWith('/v1/builds?')) result.data[0].attributes.usesNonExemptEncryption = false;
+    return result;
+  };
+  await submitStoreBuild(api, { appId: 'app', platform: 'IOS', version: '1.2.52', buildNumber: '123' });
+  assert.equal(f.calls.some(c => c.path === '/v1/builds/build' && c.options?.method === 'PATCH'), false);
+});
+test('does not override a non-exempt-encryption declaration', async () => {
+  const f = fixture('IOS');
+  const api = async (path, options) => {
+    const result = await f.api(path, options);
+    if (path.startsWith('/v1/builds?')) result.data[0].attributes.usesNonExemptEncryption = true;
+    return result;
+  };
+  await assert.rejects(submitStoreBuild(api, { appId: 'app', platform: 'IOS', version: '1.2.52', buildNumber: '123' }), /non-exempt encryption/);
+  assert.equal(f.calls.some(c => c.options?.method), false);
+});
